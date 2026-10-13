@@ -336,6 +336,8 @@ public final class Main {
 			if (atalhoDaCabeca) {
 				frente.adiantar(sessao, bloco.cabecalho());
 			}
+			// Atualiza o parentHash para o próximo lance 48club (RawBid.parentHash = hash do bloco atual).
+			disparo.aoAplicarCabecalho(bloco.cabecalho());
 			// A margem de chegada dos swaps (quanto antes do bloco nós os vimos), para o N+1.
 			mempool.blocoAnunciado(bloco);
 		});

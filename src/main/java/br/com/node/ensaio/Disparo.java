@@ -23,9 +23,11 @@ import br.com.node.catalogo.Catalogo;
 import br.com.node.catalogo.Impostos;
 import br.com.node.catalogo.Quarentena;
 import br.com.node.catalogo.Tarifario;
+import br.com.node.rlp.Rlp;
 import br.com.node.util.Keccak;
 import br.com.node.util.Keystore;
 import br.com.node.util.Secp256k1;
+import br.com.node.vo.Cabecalho;
 
 // Envia a arbitragem de verdade — o único ponto do sistema que gasta dinheiro. Por isso é
 // DESARMADO por padrão e cercado de travas; nada sai sem uma decisão explícita.
@@ -188,6 +190,10 @@ public final class Disparo implements Closeable {
 	private final Optional<BigInteger> privada;
 	private final String endereco;
 	private final boolean armado;
+
+	// O cabeçalho do bloco mais recente recebido — o hash dele é o `parentHash` que o 48club builder-relay
+	// exige no RawBid. Atualizado via `aoAplicarCabecalho` a cada NewBlock.
+	private volatile Cabecalho cabecalhoAtual;
 
 	// O nonce do operador, em cache — atualizado FORA do caminho quente (thread
 	// agendada), nunca
@@ -447,16 +453,53 @@ public final class Disparo implements Closeable {
 		String nossoHash = "0x" + HexFormat.of().formatHex(Keccak.hash(raw));
 		String nossoRaw = HexFormat.of().formatHex(raw);
 
-		// A tx do pagamento: BNB puro ao builder, nonce seguinte, mesmo preço de gás — uma por builder, cada
-		// uma ao endereço dele (só o bloco de um deles inclui, então só uma sai).
+		// A tx do pagamento: BNB puro ao builder, nonce seguinte, mesmo preço de gás.
+		// 48club recebe a tx separada em `payBidTx`; BlockRazor recebe dentro do bundle via `montar`.
 		boolean paga = pagamentoBnb.signum() > 0;
 		boolean aceito;
 		long milisAteAceiteRelay = 0;
 		Map<String, Object> respostasRelay = new LinkedHashMap<>();
 
 		if (relay.ativo()) {
-			// Bundle `[alvo, nossa, pagamento]` mira o PRÓXIMO bloco: a nossa roda no estado que o swap alvo
-			// abriu. Sem alvo (caminho confirmado), vai a nossa, ainda privada.
+			// Bundle do 48club: [alvo?, nossa] — sem pagamento (vai em payBidTx separado).
+			// Bundle do BlockRazor: [alvo?, nossa, pagamento] — pagamento dentro do bundle.
+			List<byte[]> bundleTxsBytes = new java.util.ArrayList<>();
+			if (cruaPendente != null) {
+				bundleTxsBytes.add(cruaPendente);
+			}
+			bundleTxsBytes.add(raw);
+
+			long alturaDoProximoBloco = achado.altura() + 1;
+			Cabecalho cab = cabecalhoAtual;
+			byte[] parentHashDoBid = (cab != null && cab.numero() == achado.altura())
+					? cab.hash() : new byte[32];
+
+			BigInteger gasFee = gasDaCauda.multiply(precoDoGas);
+			byte[] payBidTxBytes = paga
+					? AssinadorDeTransacao.assinar(nonceOperadorUsado + 1, custoDeGas.prioridade(), maxTaxa,
+							GAS_DO_PAGAMENTO, RelayPrivado.PAGAMENTO_48CLUB, pagamentoBnb, new byte[0], privada.get())
+					: new byte[0];
+
+			// Hash do RawBid para assinar: keccak256(rlp([blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee, builderFee]))
+			var txsRlp = bundleTxsBytes.stream().map(Rlp::bytes).toList();
+			var unrevRlp = bundleTxsBytes.stream().map(tx -> Rlp.bytes(Keccak.hash(tx))).toList();
+			byte[] rawBidEncoded = Rlp.codificar(Rlp.lista(
+					Rlp.inteiro(alturaDoProximoBloco),
+					Rlp.bytes(parentHashDoBid),
+					Rlp.lista(txsRlp),
+					Rlp.lista(unrevRlp),
+					Rlp.inteiro(gasDaCauda),
+					Rlp.inteiro(gasFee),
+					Rlp.inteiro(pagamentoBnb)));
+			byte[] rawBidHash = Keccak.hash(rawBidEncoded);
+			byte[] idPublico = Secp256k1.id(privada.get());
+			byte[] assinatura48Club = Secp256k1.assinar(rawBidHash, privada.get(), idPublico);
+
+			RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(alturaDoProximoBloco, parentHashDoBid,
+					bundleTxsBytes, gasDaCauda.longValueExact(), gasFee, pagamentoBnb,
+					assinatura48Club, payBidTxBytes, pagamentoBnb);
+
+			// Para a BlockRazor (eth_sendBundle): o pagamento ainda vai dentro do bundle.
 			java.util.function.Function<byte[], List<String>> montar = destino -> {
 				List<String> bundle = new java.util.ArrayList<>();
 				if (cruaPendente != null) {
@@ -471,7 +514,7 @@ public final class Disparo implements Closeable {
 				return bundle;
 			};
 			long antesDeAguardarRelay = (System.nanoTime() - inicio) / 1_000_000;
-			RelayPrivado.Envio envio = relay.enviar(montar);
+			RelayPrivado.Envio envio = relay.enviar(bid, montar);
 			aceito = envio.aceito();
 			milisAteAceiteRelay = antesDeAguardarRelay + envio.latenciaAtePrimeiraAceitacaoMs();
 			envio.porBuilder().forEach((nome, resposta) -> {
@@ -926,6 +969,11 @@ public final class Disparo implements Closeable {
 	public void medirCom(
 			java.util.function.LongFunction<java.util.Optional<br.com.node.sincronizacao.Cabeca.Momentos>> momentos) {
 		this.momentos = momentos;
+	}
+
+	// Atualiza o hash do bloco atual: vira `parentHash` no RawBid do próximo lance ao 48club.
+	public void aoAplicarCabecalho(Cabecalho cabecalho) {
+		this.cabecalhoAtual = cabecalho;
 	}
 
 	private static Map<String, Object> detalhesEnvio(Achado achado, RotaDoModelo.Chamada chamada, List<Salto> rota,

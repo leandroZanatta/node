@@ -83,22 +83,25 @@ class RelayPrivadoTest {
 		assertTrue(antiga.has("acceptReverting") && !antiga.has("revertingTxHashes"));
 	}
 
-	// Cada builder recebe o bundle com o pagamento ao SEU endereço — o resto do bundle é igual.
+	// Builders eth_sendBundle recebem o pagamento via `montar(destino)` — um por builder, cada um ao seu endereço.
 	@Test
-	void cadaBuilderRecebeOSeuPagamento() {
+	void cadaBuilderEthSendBundleRecebeOSeuPagamento() {
+		// Dois builders com eth_sendBundle (mevSendBid=false): pagamento vai dentro do bundle.
 		RelayPrivado relay = new RelayPrivado(List.of(
 				new RelayPrivado.Builder("a", "http://127.0.0.1:1/", "eth_sendBundle", java.util.Optional.empty(),
-						RelayPrivado.PAGAMENTO_48CLUB),
+						RelayPrivado.PAGAMENTO_48CLUB, false),
 				new RelayPrivado.Builder("b", "http://127.0.0.1:1/", "eth_sendBundle", java.util.Optional.empty(),
-						RelayPrivado.PAGAMENTO_BLOCKRAZOR)));
+						RelayPrivado.PAGAMENTO_BLOCKRAZOR, false)));
 		java.util.List<String> destinos = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
-		RelayPrivado.Envio envio = relay.enviar(destino -> {
+		// bid=null: sem builders mevSendBid, o parâmetro é ignorado.
+		RelayPrivado.Envio envio = relay.enviar(null, destino -> {
 			destinos.add(java.util.HexFormat.of().formatHex(destino));
 			return List.of("0xaa");
 		});
 
-		assertEquals(List.of("4848489f0b2bedd788c696e2d79b6b69d7484848", "1266c6be60392a8ff346e8d5eccd3e69dd9c5f20"), destinos);
+		assertEquals(List.of(HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB),
+				"1266c6be60392a8ff346e8d5eccd3e69dd9c5f20"), destinos);
 		assertEquals(List.of("a", "b"), List.copyOf(envio.porBuilder().keySet()));
 		assertTrue(envio.porBuilder().values().stream().allMatch(r -> !r.aceito() && r.motivo().startsWith("transporte")),
 				"porta fechada: recusa por transporte em cada um, sem derrubar o envio");
@@ -106,6 +109,34 @@ class RelayPrivadoTest {
 				br.com.node.util.Keccak.hash(HexFormat.of().parseHex("aa")));
 		assertTrue(envio.porBuilder().values().stream().allMatch(r -> r.hashesTransacoes().equals(List.of(hash))),
 				"até a falha de transporte conserva os hashes calculados para o bundle tentado");
+	}
+
+	// Builder mevSendBid=true usa mev_sendBid com BidArgsUpgrade; mevSendBid=false usa eth_sendBundle.
+	@Test
+	void builderMevSendBidUsaProtocolo48Club() {
+		java.math.BigInteger zero = java.math.BigInteger.ZERO;
+		byte[] tx = HexFormat.of().parseHex("abcd");
+		RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(100L, new byte[32], List.of(tx),
+				21_000L, zero, zero, new byte[65], new byte[0], zero);
+
+		// Valida a estrutura JSON do corpo do mev_sendBid.
+		com.google.gson.JsonObject corpo = RelayPrivado.corpo48Club(bid, "mev_sendBid");
+		assertEquals("mev_sendBid", corpo.get("method").getAsString());
+		com.google.gson.JsonObject args = corpo.getAsJsonArray("params").get(0).getAsJsonObject();
+		com.google.gson.JsonObject rawBid = args.getAsJsonObject("RawBid");
+		assertEquals(100L, rawBid.get("blockNumber").getAsLong());
+		assertEquals("0x" + "00".repeat(32), rawBid.get("parentHash").getAsString());
+		assertEquals("0xabcd", rawBid.getAsJsonArray("txs").get(0).getAsString());
+		assertEquals(1, rawBid.getAsJsonArray("unRevertible").size());
+		assertEquals("0x" + HexFormat.of().formatHex(br.com.node.util.Keccak.hash(tx)),
+				rawBid.getAsJsonArray("unRevertible").get(0).getAsString());
+		assertEquals(21_000L, rawBid.get("gasUsed").getAsLong());
+		assertEquals("0", rawBid.get("gasFee").getAsString());
+		assertEquals("0", rawBid.get("builderFee").getAsString());
+		assertTrue(args.has("signature"));
+		assertEquals("0x", args.get("payBidTx").getAsString());
+		assertEquals(0L, args.get("payBidTxGasUsed").getAsLong());
+		assertEquals("0", args.get("nontaxableFee").getAsString());
 	}
 
 	@Test

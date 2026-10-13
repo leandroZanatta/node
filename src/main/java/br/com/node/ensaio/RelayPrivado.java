@@ -18,9 +18,12 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
+import java.math.BigInteger;
+import java.util.HexFormat;
+
 import br.com.node.util.Keccak;
 
-// Envia um BUNDLE a um relay privado da BSC (48club Puissant, bloXroute, …), fora da mempool pública.
+// Envia um BUNDLE a um relay privado da BSC (48club builder-relay, BlockRazor, …), fora da mempool pública.
 //
 // É o que conserta o NaoPagou da primeira execução real: um backrun avulso na mempool pública não tem
 // como executar logo APÓS o swap alvo, então a fenda não está lá na inclusão e a conta fica curta. Um
@@ -64,12 +67,27 @@ public final class RelayPrivado {
 	private static final int LIMITE_RESPOSTA = 8_192;
 	private static final Pattern HASH_TRANSACAO = Pattern.compile("0x[0-9a-fA-F]{64}");
 
-	public static final byte[] PAGAMENTO_48CLUB = java.util.HexFormat.of().parseHex("4848489f0b2bedd788c696e2d79b6b69d7484848");
+	// Endereço colateral do 48club para o mev_sendBid: o BNB enviado aqui é o `directTransferBNB` do
+	// leilão (bidReward = sumTxGasFee × 0,9 + directTransferBNB) e é isento de queima BEP95.
+	public static final byte[] PAGAMENTO_48CLUB = HexFormat.of().parseHex("1f732d6ea3bd247f0a400dbbeb479ada6d9bda8c");
 	// https://docs.blockrazor.io/transaction-submission/block-builder/send-bundle.md
 	public static final byte[] PAGAMENTO_BLOCKRAZOR = java.util.HexFormat.of().parseHex("1266c6be60392a8ff346e8d5eccd3e69dd9c5f20");
 
 	// Um builder: onde se entrega o bundle e a quem se paga o lance.
-	public record Builder(String nome, String url, String metodo, Optional<String> auth, byte[] pagamento) {
+	// `mevSendBid` = true → protocolo mev_sendBid do 48club; false → eth_sendBundle (BlockRazor, etc.).
+	public record Builder(String nome, String url, String metodo, Optional<String> auth, byte[] pagamento,
+			boolean mevSendBid) {
+	}
+
+	// Tudo o que o 48club builder precisa para montar o `mev_sendBid`: o RawBid assinado mais a tx de
+	// pagamento separada. O `payBidTx` vai no campo `payBidTx` do BidArgsUpgrade (fora do bundle — não
+	// reverte junto com a arb) e `nontaxableFee` é o mesmo valor, isento da queima BEP95.
+	public record BidArgs(long blockNumber, byte[] parentHash, List<byte[]> txs, long gasUsed,
+			BigInteger gasFee, BigInteger builderFee, byte[] signature, byte[] payBidTx,
+			BigInteger nontaxableFee) {
+		public BidArgs {
+			txs = List.copyOf(txs);
+		}
 	}
 
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
@@ -91,16 +109,17 @@ public final class RelayPrivado {
 		List<Builder> lista = new java.util.ArrayList<>();
 
 		Optional.ofNullable(System.getenv("RELAY_URL")).map(String::trim)
-				.or(() -> Optional.of("https://puissant-builder.48.club/")).filter(u -> !u.isBlank())
+				.or(() -> Optional.of("https://builder-relay.48.club")).filter(u -> !u.isBlank())
 				.ifPresent(url -> lista.add(new Builder("48club", url,
-						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("eth_sendBundle"),
-						Optional.ofNullable(System.getenv("RELAY_AUTH")).filter(a -> !a.isBlank()), PAGAMENTO_48CLUB)));
+						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("mev_sendBid"),
+						Optional.ofNullable(System.getenv("RELAY_AUTH")).filter(a -> !a.isBlank()), PAGAMENTO_48CLUB,
+						true)));
 
 		Optional.ofNullable(System.getenv("BLOCKRAZOR_TOKEN")).map(String::trim).filter(t -> !t.isBlank())
 				.ifPresent(token -> lista.add(new Builder("blockrazor",
 						Optional.ofNullable(System.getenv("BLOCKRAZOR_URL")).map(String::trim).filter(u -> !u.isBlank())
 								.orElse("https://virginia.builder.blockrazor.io"),
-						"eth_sendBundle", Optional.of(token), PAGAMENTO_BLOCKRAZOR)));
+						"eth_sendBundle", Optional.of(token), PAGAMENTO_BLOCKRAZOR, false)));
 
 		return lista;
 	}
@@ -152,27 +171,91 @@ public final class RelayPrivado {
 		}
 	}
 
-	// Entrega o bundle a cada builder em PARALELO. `montar` recebe o endereço de pagamento do builder e
-	// devolve as txs cruas daquele bundle (a de pagamento muda de destino; o resto é igual). Espera todos:
-	// o mais lento custa o mesmo que um envio só, porque correm juntos.
-	public Envio enviar(java.util.function.Function<byte[], List<String>> montar) {
+	// Entrega o bundle a cada builder em PARALELO.
+	//
+	// `bid` — campos para o `mev_sendBid` do 48club: o RawBid assinado, a tx de pagamento separada, etc.
+	//         Pode ser null quando não há nenhum builder `mevSendBid=true` na lista.
+	// `montar` — para builders `eth_sendBundle` (BlockRazor): recebe o endereço de pagamento e devolve
+	//            as txs cruas do bundle (a de pagamento muda de destino; o resto é igual).
+	//
+	// Espera todos: o mais lento custa o mesmo que um envio só, porque correm juntos.
+	public Envio enviar(BidArgs bid, java.util.function.Function<byte[], List<String>> montar) {
 
 		long maxTimestamp = System.currentTimeMillis() / 1000 + VALIDADE_SEGUNDOS;
 		Map<String, java.util.concurrent.CompletableFuture<Resposta>> emVoo = new java.util.LinkedHashMap<>();
 
 		for (Builder builder : builders) {
-			// `positionFirst` vai aos DOIS: a BlockRazor documenta o mesmo campo (send-bundle), e sem ele o bundle tardio
-			// ia ao final do bloco dela e revertia — o "non-reverting tx in bundle failed" de 27/09.
-			List<String> transacoes = montar.apply(builder.pagamento());
-			List<String> hashes = transacoes.stream().map(RelayPrivado::hashTransacao).toList();
-			emVoo.put(builder.nome(), enviarA(builder,
-					corpo(builder.metodo(), transacoes, maxTimestamp, POSICAO_POR_PRIORIDADE), hashes));
+			if (builder.mevSendBid()) {
+				if (bid == null) {
+					continue;
+				}
+				List<String> hashes = hashesDosBid(bid);
+				emVoo.put(builder.nome(), enviarA(builder, corpo48Club(bid, builder.metodo()), hashes));
+			} else {
+				// `positionFirst` vai à BlockRazor também: sem ele, o bundle tardio ia ao final do bloco e
+				// revertia — o "non-reverting tx in bundle failed" de 27/09.
+				List<String> transacoes = montar.apply(builder.pagamento());
+				List<String> hashes = transacoes.stream().map(RelayPrivado::hashTransacao).toList();
+				emVoo.put(builder.nome(),
+						enviarA(builder, corpo(builder.metodo(), transacoes, maxTimestamp, POSICAO_POR_PRIORIDADE), hashes));
+			}
 		}
 
 		Map<String, Resposta> respostas = new java.util.LinkedHashMap<>();
 		emVoo.forEach((nome, futuro) -> respostas.put(nome, futuro.join()));
 
 		return new Envio(respostas);
+	}
+
+	// Monta o JSON-RPC `mev_sendBid` com o `BidArgsUpgrade` do 48club builder-relay:
+	//   RawBid  = {blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee, builderFee}
+	//   payBidTx = tx de pagamento ao colateral (separada do bundle — não reverte junto)
+	//   nontaxableFee = valor em BNB, isento da queima BEP95
+	static JsonObject corpo48Club(BidArgs bid, String metodo) {
+
+		JsonArray txsJson = new JsonArray();
+		bid.txs().forEach(tx -> txsJson.add("0x" + HexFormat.of().formatHex(tx)));
+
+		JsonArray unRevertibleJson = new JsonArray();
+		bid.txs().forEach(tx -> unRevertibleJson.add("0x" + HexFormat.of().formatHex(Keccak.hash(tx))));
+
+		JsonObject rawBid = new JsonObject();
+		rawBid.addProperty("blockNumber", bid.blockNumber());
+		rawBid.addProperty("parentHash", "0x" + HexFormat.of().formatHex(bid.parentHash()));
+		rawBid.add("txs", txsJson);
+		rawBid.add("unRevertible", unRevertibleJson);
+		rawBid.addProperty("gasUsed", bid.gasUsed());
+		rawBid.addProperty("gasFee", bid.gasFee().toString());
+		rawBid.addProperty("builderFee", bid.builderFee().toString());
+
+		boolean temPagamento = bid.payBidTx() != null && bid.payBidTx().length > 0;
+
+		JsonObject args = new JsonObject();
+		args.add("RawBid", rawBid);
+		args.addProperty("signature", "0x" + HexFormat.of().formatHex(bid.signature()));
+		args.addProperty("payBidTx", temPagamento ? "0x" + HexFormat.of().formatHex(bid.payBidTx()) : "0x");
+		args.addProperty("payBidTxGasUsed", temPagamento ? 21_000L : 0L);
+		args.addProperty("nontaxableFee", bid.nontaxableFee().toString());
+
+		JsonArray lista = new JsonArray();
+		lista.add(args);
+
+		JsonObject corpo = new JsonObject();
+		corpo.addProperty("jsonrpc", "2.0");
+		corpo.addProperty("id", 1);
+		corpo.addProperty("method", metodo);
+		corpo.add("params", lista);
+
+		return corpo;
+	}
+
+	private static List<String> hashesDosBid(BidArgs bid) {
+		List<String> hashes = new java.util.ArrayList<>();
+		bid.txs().forEach(tx -> hashes.add("0x" + HexFormat.of().formatHex(Keccak.hash(tx))));
+		if (bid.payBidTx() != null && bid.payBidTx().length > 0) {
+			hashes.add("0x" + HexFormat.of().formatHex(Keccak.hash(bid.payBidTx())));
+		}
+		return List.copyOf(hashes);
 	}
 
 	static String normalizar(String mensagem) {
