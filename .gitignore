@@ -1,0 +1,46 @@
+# build
+/target/
+*.class
+*.jar
+
+# SEGREDOS — nunca versionar.
+#
+# CICATRIZ: `*.key` cobria a identidade do node e NÃO cobria `operador.chave`,
+# que é a chave do operador de arbitragem — a que assina transação e move
+# dinheiro. Ela estava não-rastreada e não-ignorada, isto é, entraria no primeiro
+# `git add .` que alguém desse. Extensão diferente, mesma consequência.
+node.key
+operador.chave
+*.key
+*.chave
+*.pem
+*.p12
+chaves.txt
+
+# a senha do banco vem de PGPASSWORD ou -Dpostgres.senha: se um dia virar arquivo,
+# ele não entra
+.env
+.env.*
+*senha*
+*secret*
+
+# IDE / SO
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# logs
+*.log
+
+Derivar.class
+perfil.jfr
+*.jfr
+
+# worktrees que agentes criam para trabalhar isolados: são repositórios git registrados,
+# e entrar no commit seria embutir um repositório dentro de outro
+.claude/worktrees/
+
+# Segredos de operação: senha do servidor 155 e endpoint com chave do RPC de logs.
+serverpass
+rpclogs

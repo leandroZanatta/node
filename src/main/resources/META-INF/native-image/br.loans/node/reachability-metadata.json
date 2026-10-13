@@ -1,0 +1,42 @@
+{
+  "comment": [
+    "Os recursos que o binário nativo precisa carregar em tempo de execução.",
+    "",
+    "CICATRIZ: na JVM `getResourceAsStream` acha tudo o que está em",
+    "src/main/resources; no native-image, NADA entra na imagem sem ser declarado.",
+    "O binário subia e morria em `SondaDeImposto.<clinit>` com 'sonda não",
+    "encontrada em /sonda.hex' — e atrás dela havia mais tres esperando: o",
+    "esquema.sql que a migração aplica, o painel.html que a tela serve, e o",
+    "peers.json da semeadura. Nenhuma aparece em compilação nem em teste na JVM;",
+    "todas aparecem no primeiro segundo do binário, uma de cada vez.",
+    "",
+    "Vive aqui, e não em <buildArgs> do pom, para ficar ao lado dos arquivos que",
+    "declara: quem acrescentar um recurso passa por este diretório.",
+    "",
+    "sonda.sol.txt fica de FORA de propósito: é o fonte legível da sonda, para",
+    "ser lido ao lado do .hex por quem revisa, e nunca é aberto em execução."
+  ],
+  "resources": [
+    {
+      "glob": "esquema.sql"
+    },
+    {
+      "glob": "logging.properties"
+    },
+    {
+      "glob": "painel.html"
+    },
+    {
+      "glob": "peers.json"
+    },
+    {
+      "glob": "sonda.hex"
+    },
+    {
+      "glob": "sonda-runtime.hex"
+    },
+    {
+      "glob": "autopsia-runtime.hex"
+    }
+  ]
+}
