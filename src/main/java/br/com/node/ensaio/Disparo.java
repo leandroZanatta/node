@@ -461,8 +461,8 @@ public final class Disparo implements Closeable {
 		Map<String, Object> respostasRelay = new LinkedHashMap<>();
 
 		if (relay.ativo()) {
-			// Bundle do 48club: [alvo?, nossa] — sem pagamento (vai em payBidTx separado).
-			// Bundle do BlockRazor: [alvo?, nossa, pagamento] — pagamento dentro do bundle.
+			// Bundle eth_sendBundle (48club + BlockRazor): [alvo?, nossa, pagamento] — pagamento dentro do bundle.
+			// payBidTxBytes fica em BidArgs para quando builder-relay.48.club (mev_sendBid) entrar no ar.
 			List<byte[]> bundleTxsBytes = new java.util.ArrayList<>();
 			if (cruaPendente != null) {
 				bundleTxsBytes.add(cruaPendente);
