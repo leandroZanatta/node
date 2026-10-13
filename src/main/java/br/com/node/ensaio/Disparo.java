@@ -477,7 +477,7 @@ public final class Disparo implements Closeable {
 			BigInteger gasFee = gasDaCauda.multiply(precoDoGas);
 			byte[] payBidTxBytes = paga
 					? AssinadorDeTransacao.assinar(nonceOperadorUsado + 1, custoDeGas.prioridade(), maxTaxa,
-							GAS_DO_PAGAMENTO, RelayPrivado.PAGAMENTO_48CLUB, pagamentoBnb, new byte[0], privada.get())
+							GAS_DO_PAGAMENTO, RelayPrivado.COLATERAL_48CLUB_BID, pagamentoBnb, new byte[0], privada.get())
 					: new byte[0];
 
 			// Hash do RawBid para assinar: keccak256(rlp([blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee, builderFee]))

@@ -67,9 +67,11 @@ public final class RelayPrivado {
 	private static final int LIMITE_RESPOSTA = 8_192;
 	private static final Pattern HASH_TRANSACAO = Pattern.compile("0x[0-9a-fA-F]{64}");
 
-	// Endereço colateral do 48club para o mev_sendBid: o BNB enviado aqui é o `directTransferBNB` do
-	// leilão (bidReward = sumTxGasFee × 0,9 + directTransferBNB) e é isento de queima BEP95.
-	public static final byte[] PAGAMENTO_48CLUB = HexFormat.of().parseHex("1f732d6ea3bd247f0a400dbbeb479ada6d9bda8c");
+	// Builder Control EOA do 48club para eth_sendBundle v2: BNB enviado aqui soma ao lance do bundle
+	// (bidReward = sumTxGasFee × 0,9 + BNB enviado aqui). https://docs.48.club/puissant-builder/send-bundle
+	public static final byte[] PAGAMENTO_48CLUB = HexFormat.of().parseHex("4848489f0b2bedd788c696e2d79b6b69d7484848");
+	// Colateral para o protocolo mev_sendBid (builder-relay.48.club, ainda não no ar): usado em payBidTx.
+	public static final byte[] COLATERAL_48CLUB_BID = HexFormat.of().parseHex("1f732d6ea3bd247f0a400dbbeb479ada6d9bda8c");
 	// https://docs.blockrazor.io/transaction-submission/block-builder/send-bundle.md
 	public static final byte[] PAGAMENTO_BLOCKRAZOR = java.util.HexFormat.of().parseHex("1266c6be60392a8ff346e8d5eccd3e69dd9c5f20");
 
