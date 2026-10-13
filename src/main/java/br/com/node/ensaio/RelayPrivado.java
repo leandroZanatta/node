@@ -109,11 +109,11 @@ public final class RelayPrivado {
 		List<Builder> lista = new java.util.ArrayList<>();
 
 		Optional.ofNullable(System.getenv("RELAY_URL")).map(String::trim)
-				.or(() -> Optional.of("https://builder-relay.48.club")).filter(u -> !u.isBlank())
+				.or(() -> Optional.of("https://puissant-builder.48.club")).filter(u -> !u.isBlank())
 				.ifPresent(url -> lista.add(new Builder("48club", url,
-						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("mev_sendBid"),
+						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("eth_sendBundle"),
 						Optional.ofNullable(System.getenv("RELAY_AUTH")).filter(a -> !a.isBlank()), PAGAMENTO_48CLUB,
-						true)));
+						false)));
 
 		Optional.ofNullable(System.getenv("BLOCKRAZOR_TOKEN")).map(String::trim).filter(t -> !t.isBlank())
 				.ifPresent(token -> lista.add(new Builder("blockrazor",
