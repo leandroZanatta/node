@@ -170,9 +170,9 @@ public final class Main {
 		// O desfecho de cada envio (e a folga até o bloco seguinte), e o lance que aprende com ele.
 		br.com.node.ensaio.Desfechos desfechos = new br.com.node.ensaio.Desfechos(br.com.node.ensaio.Disparo.executor(),
 				cabeca::momentos, null);
+		Path arquivoPagamentos = Path.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
 		br.com.node.ensaio.PagamentosDeBloco pagamentos = new br.com.node.ensaio.PagamentosDeBloco(rpcEnsaio,
-				Path.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl")),
-				br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
+				arquivoPagamentos, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 		br.com.node.ensaio.Lances lances = new br.com.node.ensaio.Lances(Path.of("lances.json"),
 				br.com.node.ensaio.Lances.inicialDoAmbiente());
 		disparo.lancesDe(lances);
@@ -375,7 +375,7 @@ public final class Main {
 		Path arquivoDespachos = Path.of("target", "ensaio.jsonl");
 		br.com.node.api.HttpApi httpApi;
 		try {
-			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, () -> {
+			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, () -> {
 					Map<String, Object> p = new LinkedHashMap<>();
 					p.put("v2", catalogo.poolsV2());
 					p.put("v3", catalogo.poolsV3());
