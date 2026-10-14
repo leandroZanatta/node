@@ -189,6 +189,9 @@ public final class Gatilhos implements Closeable {
 
 			if (etapaDoGatilho.equals("corpo sem swap")) {
 				naoDecodificados.computeIfAbsent(assinatura(gatilho), k -> new AtomicLong()).incrementAndGet();
+				// Uma amostra do começo do calldata por seletor: sem ela não dá para saber que função é, e o
+				// nome do seletor sozinho não diz. Os primeiros 4 bytes e os 2 primeiros argumentos (68 bytes).
+				amostraDoCalldata.putIfAbsent(assinatura(gatilho), amostraDe(gatilho));
 				if (emBnb != null) {
 					naoDecodificadosPorValor.merge(assinatura(gatilho), emBnb, java.math.BigInteger::add);
 				}
@@ -266,6 +269,13 @@ public final class Gatilhos implements Closeable {
 	}
 
 	// seletor@contrato, como o `SeletoresVistos` — para cruzar os dois placares.
+	private final Map<String, String> amostraDoCalldata = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static String amostraDe(JsonObject tx) {
+		String input = semPrefixo(texto(tx, "input"));
+		return input.substring(0, Math.min(input.length(), 8 + 64 * 2));
+	}
+
 	private static String assinatura(JsonObject tx) {
 		String input = semPrefixo(texto(tx, "input"));
 		String para = semPrefixo(texto(tx, "to"));
@@ -302,6 +312,9 @@ public final class Gatilhos implements Closeable {
 		naoDecodificados.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue().get(), a.getValue().get()))
 				.limit(15).forEach(e -> topo.put(e.getKey(), e.getValue().get()));
 		resumo.put("gatilhos_nao_decodificados", topo);
+		Map<String, String> amostras = new LinkedHashMap<>();
+		topo.keySet().forEach(k -> amostras.put(k, amostraDoCalldata.getOrDefault(k, "")));
+		resumo.put("gatilhos_nao_decodificados_calldata", amostras);
 
 		resumo.put("gorda_a_partir_de_bnb", GORDA_BNB.toString());
 		Map<String, String> valor = new LinkedHashMap<>();

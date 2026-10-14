@@ -150,7 +150,9 @@ public final class Lotacao implements Closeable {
 
 		try {
 
-			trocarOMaisLento(Instant.now());
+			Instant agora = Instant.now();
+			trocarOMaisLento(agora);
+			trocarOMenosAdiantado(agora);
 
 			int faltam = ALVO - (int) ativas() - tentando.size();
 
@@ -174,12 +176,53 @@ public final class Lotacao implements Closeable {
 		// PERTO PRIMEIRO. Antes era a ordem em que o node conheceu o nó — um peer do outro lado do mundo
 		// entrava tão cedo quanto um vizinho. A ordem agora é a latência já medida desse peer (conversas
 		// anteriores); sem ela, o ping UDP da descoberta; sem nenhum dos dois, por último.
+		// QUEM ENTREGA PRIMEIRO antes de tudo: o pendente que um par traz cedo é o que nos põe na frente do bloco.
+		// Empate (quem nunca entregou primeiro, o que é a maioria) cai na distância, como antes.
 		return sessoes.todas().stream().filter(sessao -> !sessao.ativa())
 				.filter(sessao -> !tentando.contains(sessao.no().idHex()))
 				.filter(sessao -> livreDePenalidade(sessao, agora)).filter(Sessao::pronta)
 				.filter(this::naoDescartadoPeloEnr).filter(sessao -> sessao.no().portaTcp() > 0)
-				.sorted(java.util.Comparator.comparingDouble(Sessao::distancia)).toList();
+				.sorted(java.util.Comparator.comparingDouble(Sessao::primeirosEntregues).reversed()
+						.thenComparingDouble(Sessao::distancia))
+				.toList();
 	}
+
+	// RODÍZIO DOS QUE NÃO ENTREGAM PRIMEIRO. Mesma cadência do rodízio dos lentos (um por TROCA_A_CADA). Troca o
+	// ATIVO com menos entregas primeiro — e que já tem tempo de casa, para não derrubar quem acabou de entrar —
+	// por um candidato que entrega CLARAMENTE mais: mais que o dobro, mais um ponto. Sem essa folga, dois
+	// pares quase iguais trocariam de lugar a cada rodada.
+	private static final long TEMPO_DE_CASA_MS = 10 * 60_000L;
+	private static final double GANHO_MINIMO_PRIMEIROS = 1.0;
+
+	private boolean trocarOMenosAdiantado(Instant agora) {
+
+		if (ativas() < ALVO || ultimaTroca.plus(TROCA_A_CADA).isAfter(agora)) {
+			return false;
+		}
+
+		Sessao pior = sessoes.todas().stream().filter(Sessao::ativa).filter(s -> s.ativaHaMs() >= TEMPO_DE_CASA_MS)
+				.min(java.util.Comparator.comparingDouble(Sessao::primeirosEntregues)).orElse(null);
+
+		if (pior == null) {
+			return false;
+		}
+
+		Sessao melhor = candidatos().stream().findFirst().orElse(null);
+
+		if (melhor == null || melhor.primeirosEntregues() <= 2 * pior.primeirosEntregues() + GANHO_MINIMO_PRIMEIROS) {
+			return false;
+		}
+
+		ultimaTroca = agora;
+		trocadosPorPrimeiro.incrementAndGet();
+		penalizados.put(pior.no().idHex(), agora.plus(PENALIDADE_DE_LENTO));
+		LOG.info(() -> String.format("lotação: troco o peer que menos entrega primeiro (%.2f) por um que entrega mais (%.2f): %s",
+				pior.primeirosEntregues(), melhor.primeirosEntregues(), pior.no()));
+		pior.desativar();
+		return true;
+	}
+
+	private final java.util.concurrent.atomic.AtomicLong trocadosPorPrimeiro = new java.util.concurrent.atomic.AtomicLong();
 
 	// RODÍZIO DOS LENTOS. Com as vagas cheias, um peer lento ocupava a vaga para sempre (só saía caindo).
 	// A cada TROCA_A_CADA, se o ativo mais lento está acima de LENTO_X da mediana dos ativos E acima de
@@ -237,6 +280,9 @@ public final class Lotacao implements Closeable {
 		resumo.put("ping_udp_mediana_ms", udp.isEmpty() ? null : udp.get(udp.size() / 2));
 		resumo.put("ping_udp_p10_ms", udp.isEmpty() ? null : udp.get(udp.size() / 10));
 		resumo.put("trocados_por_lentidao", trocadosPorLentidao.get());
+		resumo.put("trocados_por_primeiro_a_entregar", trocadosPorPrimeiro.get());
+		resumo.put("ativos_que_entregaram_primeiro", sessoes.todas().stream().filter(Sessao::ativa)
+				.filter(s -> s.primeirosEntregues() >= 0.5).count());
 		return resumo;
 	}
 

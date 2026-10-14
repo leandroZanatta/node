@@ -158,6 +158,22 @@ public final class Disparo implements Closeable {
 	// piso (o piso é o gás com margem — pagar além dele deixaria a arb no prejuízo) nem que o teto.
 	// O pagamento que leva o lance ao ALVO em wei por gás, no token da raiz: o necessário, mas nunca mais que o
 	// excedente sobre o piso (pagar além dele deixaria a arb no prejuízo) nem que o teto.
+	// MARGEM DE ESTADO (milésimos do excedente, lucro − piso): a parte que NÃO vai ao builder e fica como folga
+	// contra o estado mudar entre a simulação e a inclusão. Com 0 (padrão), o contrato exige o lucro inteiro e
+	// qualquer desvio reverte o bundle — medido: nas reversões sem motivo, o `lucro_minimo` ficava a 10 wei do
+	// lucro previsto. Subir a margem troca reversões por lances menores: é um A/B a fazer no servidor.
+	static final int MARGEM_DE_ESTADO_MILESIMOS = Optional.ofNullable(System.getenv("MARGEM_DE_ESTADO_MILESIMOS"))
+			.map(String::trim).filter(v -> !v.isBlank()).map(Integer::parseInt).orElse(0);
+
+	// O lucro que o LANCE enxerga: o excedente sobre o piso, menos a margem de estado. Com margem 0, é o próprio lucro.
+	static BigInteger lucroParaLance(BigInteger lucro, BigInteger piso, int margemMilesimos) {
+		if (margemMilesimos < 0 || margemMilesimos > 900) {
+			throw new IllegalStateException("MARGEM_DE_ESTADO_MILESIMOS fora de [0; 900]: " + margemMilesimos);
+		}
+		BigInteger excedente = lucro.subtract(piso).max(BigInteger.ZERO);
+		return piso.add(excedente.multiply(BigInteger.valueOf(1000 - margemMilesimos)).divide(BigInteger.valueOf(1000)));
+	}
+
 	static BigInteger pagamentoAoBuilder(BigInteger necessario, BigInteger lucro, BigInteger piso, BigInteger teto) {
 
 		BigInteger excedente = lucro.subtract(piso);
@@ -350,13 +366,14 @@ public final class Disparo implements Closeable {
 		}
 
 		BigInteger necessarioRaiz = custoDeGas.deBnb(raiz, necessarioBnb).orElseThrow(() -> semCambio(raiz));
-		BigInteger excedenteLucro = achado.oportunidade().lucro().subtract(piso.get()).max(BigInteger.ZERO);
+		BigInteger lucroParaLance = lucroParaLance(achado.oportunidade().lucro(), piso.get(), MARGEM_DE_ESTADO_MILESIMOS);
+		BigInteger excedenteLucro = lucroParaLance.subtract(piso.get()).max(BigInteger.ZERO);
 		BigInteger tetoPagamentoRaiz = custoDeGas.deBnb(raiz, TETO_PAGAMENTO).orElseThrow(() -> semCambio(raiz));
 		boolean solicitadoAoBuilder = relay.ativo() && armado;
 		boolean limitadoPorLucro = solicitadoAoBuilder && necessarioRaiz.compareTo(excedenteLucro) > 0;
 		boolean limitadoPeloTeto = solicitadoAoBuilder && necessarioRaiz.compareTo(tetoPagamentoRaiz) > 0;
 		BigInteger pagamentoRaiz = relay.ativo() && armado
-				? pagamentoAoBuilder(necessarioRaiz, achado.oportunidade().lucro(), piso.get(), tetoPagamentoRaiz)
+				? pagamentoAoBuilder(necessarioRaiz, lucroParaLance, piso.get(), tetoPagamentoRaiz)
 				: BigInteger.ZERO;
 		if (limitadoPorLucro) {
 			lanceLimitadoPeloLucro.incrementAndGet();
@@ -615,6 +632,8 @@ public final class Disparo implements Closeable {
 					cruaPendente == null ? "cauda" : "n+1", rotaDoLance, fracaoMilha, ofertadoWeiPorGas,
 					lucroOportunidadeBnb, gasParaOLance, detalhesEnvio));
 		} else {
+			// Recusada também carrega o lucro em BNB: sem ele, a recusa não se compara com as aceitas.
+			detalhesEnvio.put("lucro_previsto_bnb_wei", lucroOportunidadeBnb.toString());
 			aoRecusarTentativa.accept(nossoHash, detalhesEnvio);
 		}
 

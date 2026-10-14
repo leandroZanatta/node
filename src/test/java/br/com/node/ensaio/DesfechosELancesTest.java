@@ -91,13 +91,12 @@ class DesfechosELancesTest {
 
 		Lances lances = new Lances(pasta.resolve("lances.json"), FRACAO);
 		Desfechos desfechos = desfechos();
-		desfechos.aoDecidir(lances::aprender);
+		// O pagamento que o rival fez ao builder, em BNB (lido on-chain no bloco dele): 4,6e14 wei.
+		// rivalFracao = 4.6e14 × 1000 / 1e18 = 460 (46%); novaFracao = min(950, 460 + 50) = 510.
+		BigInteger pagoPeloRival = new BigInteger("460000000000000");
+		desfechos.aoDecidir(d -> lances.aprender(d, pagoPeloRival));
 
 		desfechos.registrar(envio("0x05", 100, 1_000));
-		// bloco N+1: posição 1 = rival a 1 gwei; lucro = 1 BNB, gas = 460k
-		// rivalPago = 1e9 wei/gas × 460k gas = 4.6e14 wei
-		// rivalFracao = 4.6e14 × 1000 / 1e18 = 460 (46%)
-		// novaFracao = min(950, 460 + 50) = 510
 		desfechos.precos(101, List.of(BigInteger.ZERO, BigInteger.valueOf(1_000_000_000L)));
 		desfechos.arbitragem(arbitragem(RIVAL), 101, 1);
 		desfechos.blocoFechado(108);
