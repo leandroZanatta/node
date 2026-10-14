@@ -493,7 +493,8 @@ public final class CustoDeGas {
 			return Optional.empty();
 		}
 
-		if (!Arrays.equals(tokenRaiz, WBNB) && !Arrays.equals(tokenRaiz, USDT) && !Arrays.equals(tokenRaiz, U)) {
+		if (!Arrays.equals(tokenRaiz, WBNB) && !Arrays.equals(tokenRaiz, USDT) && !Arrays.equals(tokenRaiz, U)
+				&& !Arrays.equals(tokenRaiz, BUSD) && !Arrays.equals(tokenRaiz, USDC)) {
 			return Optional.empty();
 		}
 
@@ -515,7 +516,9 @@ public final class CustoDeGas {
 	public Optional<BigInteger> deBnb(byte[] tokenRaiz, BigInteger bnb) {
 
 		if (Arrays.equals(tokenRaiz, WBNB)) return Optional.of(bnb);
-		if (Arrays.equals(tokenRaiz, USDT)) return Optional.of(emUsdt(bnb));
+		if (Arrays.equals(tokenRaiz, USDT) || Arrays.equals(tokenRaiz, BUSD) || Arrays.equals(tokenRaiz, USDC)) {
+			return Optional.of(emUsdt(bnb));
+		}
 		if (Arrays.equals(tokenRaiz, U))    return Optional.of(emU(bnb));
 		return Optional.empty();
 	}
