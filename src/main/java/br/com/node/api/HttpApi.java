@@ -6,17 +6,21 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import br.com.node.RelatorioExecucao;
 import br.com.node.ensaio.AutopsiaDoMercado;
+import br.com.node.ensaio.Disputa;
 
 public final class HttpApi {
 
@@ -27,7 +31,7 @@ public final class HttpApi {
 
 	@SuppressWarnings("unchecked")
 	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado,
-			Path arquivoDespachos, Supplier<Map<String, Object>> pools) throws IOException {
+			Path arquivoDespachos, Path arquivoPagamentos, Supplier<Map<String, Object>> pools) throws IOException {
 		servidor = HttpServer.create(new InetSocketAddress(porta), 0);
 		servidor.createContext("/status", troca -> responder(troca, () -> resumo(relatorio)));
 		servidor.createContext("/relatorio", troca -> responder(troca, relatorio::snapshot));
@@ -45,6 +49,13 @@ public final class HttpApi {
 				throw new RuntimeException(e);
 			}
 		});
+		servidor.createContext("/disputa", troca -> responder(troca, () -> {
+			try {
+				return disputa(arquivoDespachos, arquivoPagamentos, troca.getRequestURI().getQuery());
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}));
 		servidor.createContext("/pools", troca -> responder(troca, (Supplier<Object>) (Supplier<?>) pools));
 		servidor.setExecutor(null);
 	}
@@ -125,5 +136,59 @@ public final class HttpApi {
 				.map(l -> (Map<String, Object>) GSON.fromJson(l, Map.class))
 				.toList();
 		return Map.of("total", linhas.size(), "entradas", entradas);
+	}
+
+	// A pergunta de cada tentativa: se não levamos, foi por quanto, e quem levou pagou quanto. Cruza o despacho
+	// com os pagamentos medidos no bloco do vencedor (ver `Disputa`).
+	private static Object disputa(Path despachos, Path pagamentos, String query) throws IOException {
+		int n = 200;
+		if (query != null) {
+			for (String par : query.split("&")) {
+				String[] kv = par.split("=", 2);
+				if (kv.length == 2 && "n".equals(kv[0])) n = Integer.parseInt(kv[1]);
+			}
+		}
+		if (!Files.exists(despachos)) {
+			return Map.of("total", 0, "entradas", List.of());
+		}
+		List<String> linhas = Files.readAllLines(despachos);
+		List<JsonObject> tentativas = linhas.stream().skip(Math.max(0, linhas.size() - n))
+				.map(l -> JsonParser.parseString(l).getAsJsonObject()).toList();
+
+		// Só os blocos que interessam: o do vencedor de cada tentativa (N+1, ou N+2 para `rival_n2`).
+		java.util.Set<Long> alturas = new java.util.HashSet<>();
+		for (JsonObject t : tentativas) {
+			long altura = t.getAsJsonObject("envio").get("altura").getAsBigDecimal().longValue();
+			boolean n2 = t.getAsJsonObject("desfecho").get("classe").getAsString().endsWith("n2");
+			alturas.add(altura + 1);
+			if (n2) alturas.add(altura + 2);
+		}
+		Map<Long, List<JsonObject>> pagamentosPorAltura = new java.util.HashMap<>();
+		if (Files.exists(pagamentos)) {
+			for (String linha : Files.readAllLines(pagamentos)) {
+				if (linha.isBlank()) continue;
+				JsonObject p = JsonParser.parseString(linha).getAsJsonObject();
+				long altura = p.get("altura").getAsLong();
+				if (alturas.contains(altura)) {
+					pagamentosPorAltura.computeIfAbsent(altura, k -> new ArrayList<>()).add(p);
+				}
+			}
+		}
+
+		List<Map<String, Object>> analises = new ArrayList<>();
+		for (JsonObject t : tentativas) {
+			long altura = t.getAsJsonObject("envio").get("altura").getAsBigDecimal().longValue();
+			boolean n2 = t.getAsJsonObject("desfecho").get("classe").getAsString().endsWith("n2");
+			List<JsonObject> doVencedor = new ArrayList<>(pagamentosPorAltura.getOrDefault(altura + 1, List.of()));
+			if (n2) doVencedor.addAll(pagamentosPorAltura.getOrDefault(altura + 2, List.of()));
+			analises.add(Disputa.analisar(t, doVencedor));
+		}
+
+		Map<String, Object> r = new java.util.LinkedHashMap<>();
+		r.put("total_tentativas", linhas.size());
+		r.put("analisadas", analises.size());
+		r.put("resumo", Disputa.resumir(analises));
+		r.put("entradas", analises);
+		return r;
 	}
 }
