@@ -111,11 +111,8 @@ public final class Impostos {
 
 		Long fraco = maiorRetido.get(HexFormat.of().formatHex(token));
 
-		// Token já visto com imposto e ainda não medido NESTA pool: cobra-se o maior visto (conservador). Excluir
-		// a pool tirava rota viável do grafo; o preço mais alto deixa a simulação do relay decidir.
 		if (fraco != null && fraco > 0) {
-			vendaConservadora.incrementAndGet();
-			return java.util.OptionalInt.of(Math.toIntExact(fraco));
+			return java.util.OptionalInt.empty();
 		}
 
 		// ASSUMIDO, não medido: zero é o que se aposta até a sonda ou a autópsia medirem, e a simulação do relay é
@@ -125,14 +122,11 @@ public final class Impostos {
 	}
 
 	private final java.util.concurrent.atomic.AtomicLong vendaAssumida = new java.util.concurrent.atomic.AtomicLong();
-	private final java.util.concurrent.atomic.AtomicLong vendaConservadora = new java.util.concurrent.atomic.AtomicLong();
-	private final java.util.concurrent.atomic.AtomicLong compraConservadora = new java.util.concurrent.atomic.AtomicLong();
 	private final java.util.concurrent.atomic.AtomicLong compraAssumida = new java.util.concurrent.atomic.AtomicLong();
 
 	// Quantas consultas de imposto responderam com zero ASSUMIDO (sem medida nem evidência), por direção.
 	public Map<String, Long> assumidos() {
-		return Map.of("venda_assumida_zero", vendaAssumida.get(), "compra_assumida_zero", compraAssumida.get(),
-				"venda_pelo_maior_visto", vendaConservadora.get(), "compra_pelo_maior_visto", compraConservadora.get());
+		return Map.of("venda_assumida_zero", vendaAssumida.get(), "compra_assumida_zero", compraAssumida.get());
 	}
 
 	// O imposto de COMPRA de `token` ao sair de `pool`, em bps, ou vazio se o token é honeypot/suspeito por esta
@@ -166,8 +160,7 @@ public final class Impostos {
 		// barrava — o grafo foi de ~7,6 mil para ~13,8 mil pools e a busca de 39 para 158 ms (mediana) numa noite,
 		// para quase nada de valor pela cauda. A sonda mede com o grafo DELA, então isto não a impede de medir.
 		if (fraco != null && fraco > 0) {
-			compraConservadora.incrementAndGet();
-			return java.util.OptionalInt.of(Math.toIntExact(fraco));
+			return java.util.OptionalInt.empty();
 		}
 
 		compraAssumida.incrementAndGet();
