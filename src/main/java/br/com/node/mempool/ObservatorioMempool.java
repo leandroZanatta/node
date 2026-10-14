@@ -554,8 +554,14 @@ public final class ObservatorioMempool implements Closeable {
 		return visao == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(visao.ms());
 	}
 
+	// Quem traz o hash ANTES dos outros recebe o crédito de "entregou primeiro": é o sinal que a lotação usa para
+	// preferir peers que veem o pendente cedo. Só conta a primeira visão de cada hash.
 	private void primeiraVisao(String hash, long ms, String via, Sessao sessao) {
-		visoes.putIfAbsent(hash, new Visao(ms, via, sessao == null ? "?" : sessao.no().idHex().substring(0, 16)));
+		Visao antes = visoes.putIfAbsent(hash,
+				new Visao(ms, via, sessao == null ? "?" : sessao.no().idHex().substring(0, 16)));
+		if (antes == null && sessao != null) {
+			sessao.anotarPrimeiroEntregue();
+		}
 	}
 
 	// O bloco anunciado inteiro (`NewBlock`): as margens dos swaps que já tínhamos visto. Fora da leitora.

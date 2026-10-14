@@ -176,6 +176,7 @@ public final class Sessao {
 		nova.enviar(new UpgradeStatus(false));
 
 		ultimaEntrada = Instant.now();
+		ativadaEmMs = System.currentTimeMillis();
 		tcp = nova;
 	}
 
@@ -281,6 +282,25 @@ public final class Sessao {
 	}
 
 	public static final int AMOSTRAS_PARA_JULGAR = 20;
+
+	// Meia-vida do "quem entrega primeiro" (ver `PlacarDePrimeiros`): 10 min.
+	private static final long MEIA_VIDA_PRIMEIROS_MS = 10 * 60_000L;
+	private final PlacarDePrimeiros primeiros = new PlacarDePrimeiros(MEIA_VIDA_PRIMEIROS_MS);
+	private volatile long ativadaEmMs;
+
+	// Chamado pelo observatório quando este par é o primeiro dos nossos a trazer um hash pendente.
+	public void anotarPrimeiroEntregue() {
+		primeiros.anotar(System.currentTimeMillis());
+	}
+
+	public double primeirosEntregues() {
+		return primeiros.valor(System.currentTimeMillis());
+	}
+
+	// Há quanto tempo a conversa está aberta (0 se não está). Troca só derruba quem já se provou.
+	public long ativaHaMs() {
+		return ativa() && ativadaEmMs > 0 ? System.currentTimeMillis() - ativadaEmMs : 0;
+	}
 
 	// A melhor estimativa de distância a este peer, em ms: a latência dos nossos pedidos (mede o que
 	// usamos — respostas eth) quando já há amostras; senão o ping UDP da descoberta; senão, a pior.

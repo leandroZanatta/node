@@ -469,13 +469,9 @@ public final class Main {
 		String hashArb = txArb.get("hash").getAsString();
 		return rpc.recibo(hashArb)
 				.filter(r -> r.sucesso())
-				.map(r -> {
-					BigInteger gasUsado = r.gasUsado();
-					if (gasUsado.signum() <= 0) return null;
-					String gpHex = txArb.get("gasPrice").getAsString();
-					BigInteger gasPrice = new BigInteger(gpHex.startsWith("0x") ? gpHex.substring(2) : gpHex, 16);
-					return gasPrice.multiply(BigInteger.valueOf(9)).divide(BigInteger.TEN).add(bnbFinal.divide(gasUsado));
-				});
+				// O total que o rival pagou ao builder, em BNB. Não se converte para "por gás" aqui: quem precisa do
+				// total (o aprendiz de lances) multiplica de volta por um gás que não é o dele — o erro antigo.
+				.map(r -> r.sucesso() ? bnbFinal : null);
 	}
 
 	private static void descarregar(ProvasDeTaxaRepository provas, ImpostosRepository impostosProvados) {

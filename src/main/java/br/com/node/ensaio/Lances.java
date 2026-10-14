@@ -83,11 +83,15 @@ public final class Lances {
 		return estado == null ? inicial : estado.fracaoMilha();
 	}
 
+	// Sem o pagamento do rival medido: `naFrente` é PREÇO DE GÁS da tx dele, não o que ele pagou ao builder, então
+	// não serve de lance. Quem não mediu passa só a derrota, e a fração dobra (ver `aprender`).
 	public void aprender(Desfechos.Desfecho desfecho) {
-		aprender(desfecho, desfecho.naFrente());
+		aprender(desfecho, null);
 	}
 
-	public void aprender(Desfechos.Desfecho desfecho, BigInteger naFrenteEfetiva) {
+	// `pagamentoDoRivalBnb`: o total em BNB (wei) que o rival enviou ao builder, lido on-chain no bloco dele
+	// (`PagamentosDeBloco`). Nulo quando não se mediu.
+	public void aprender(Desfechos.Desfecho desfecho, BigInteger pagamentoDoRivalBnb) {
 
 		Desfechos.Envio envio = desfecho.envio();
 		String rota = envio.rota();
@@ -103,11 +107,10 @@ public final class Lances {
 
 		} else if (perdeuNoN1 && folga != null && folga > 0) {
 			int nova;
-			if (naFrenteEfetiva != null) {
-				// Bid real do rival (wei/gas × gasLimit): converte para fração do lucro e mira 5% acima.
-				bidRivalMwei.anotar(naFrenteEfetiva.divide(MWEI).longValue());
-				BigInteger rivalPago = naFrenteEfetiva.multiply(envio.gasParaOLance());
-				int rivalFracao = rivalPago.multiply(BigInteger.valueOf(1000))
+			if (pagamentoDoRivalBnb != null && envio.lucroBnb().signum() > 0) {
+				// Pagamento real do rival (BNB total): a fração do lucro dele, e mira 5% acima.
+				bidRivalMwei.anotar(pagamentoDoRivalBnb.divide(MWEI).longValue());
+				int rivalFracao = pagamentoDoRivalBnb.multiply(BigInteger.valueOf(1000))
 						.divide(envio.lucroBnb())
 						.min(BigInteger.valueOf(2000))
 						.intValue();
