@@ -364,6 +364,8 @@ public final class AutopsiaDoMercado implements Closeable {
 		Optional<List<Travessia>> travessias = cotador.travessias(new Ciclo(doCiclo), overlay);
 
 		if (travessias.isEmpty()) {
+			detalhes.put("motivo_por_perna", pernas.stream()
+					.map(p -> hex(p.pool()) + "=" + cotador.motivoDeFora(p.pool())).toList());
 			return new Resultado("nao_cota", pernas, null, null, detalhes);
 		}
 
