@@ -170,6 +170,9 @@ public final class Main {
 		// O desfecho de cada envio (e a folga até o bloco seguinte), e o lance que aprende com ele.
 		br.com.node.ensaio.Desfechos desfechos = new br.com.node.ensaio.Desfechos(br.com.node.ensaio.Disparo.executor(),
 				cabeca::momentos, null);
+		br.com.node.ensaio.PagamentosDeBloco pagamentos = new br.com.node.ensaio.PagamentosDeBloco(rpcEnsaio,
+				Path.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl")),
+				br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 		br.com.node.ensaio.Lances lances = new br.com.node.ensaio.Lances(Path.of("lances.json"),
 				br.com.node.ensaio.Lances.inicialDoAmbiente());
 		disparo.lancesDe(lances);
@@ -280,6 +283,7 @@ public final class Main {
 				cauda.aoBloco(altura);
 			}
 			naBorda("desfechos: bloco fechado", () -> desfechos.blocoFechado(altura));
+			naBorda("pagamentos: bloco fechado", () -> pagamentos.aoFecharBloco(altura));
 		});
 		cursor.antesDaTransacao((logs, altura) -> naBorda("mercado: antes", () -> mercado.antes(logs, altura)));
 
@@ -313,6 +317,7 @@ public final class Main {
 			backrun.close();
 			disparo.close();
 			desfechos.close();
+			pagamentos.close();
 			diarioDeEnsaio.close();
 			quentes.salvar();
 			sondagem.close();
@@ -454,27 +459,9 @@ public final class Main {
 		if (posArb < 0 || posArb >= txs.size()) return java.util.Optional.empty();
 
 		com.google.gson.JsonObject txArb = txs.get(posArb).getAsJsonObject();
-		String fromArb = txArb.get("from").getAsString().toLowerCase(java.util.Locale.ROOT);
-		if (fromArb.startsWith("0x")) fromArb = fromArb.substring(2);
 
-		// Busca tx de pagamento BNB do mesmo remetente: posArb+1, posArb-1, posArb+2, posArb-2, posArb+3.
-		// Aceita qualquer value>0 — inclusive tx com seletor curto (builder contracts com `pay()`). Arbs de
-		// flash loan têm value=0, então colisão com outra arb do rival é improvável.
-		BigInteger bnbPagamento = BigInteger.ZERO;
-		for (int delta : new int[]{1, -1, 2, -2, 3}) {
-			int pos = posArb + delta;
-			if (pos < 0 || pos >= txs.size()) continue;
-			com.google.gson.JsonObject txCand = txs.get(pos).getAsJsonObject();
-			if (!txCand.has("from")) continue;
-			String fromCand = txCand.get("from").getAsString().toLowerCase(java.util.Locale.ROOT);
-			if (fromCand.startsWith("0x")) fromCand = fromCand.substring(2);
-			if (!fromArb.equals(fromCand)) continue;
-			String valHex = txCand.has("value") ? txCand.get("value").getAsString() : "0x0";
-			BigInteger val = new BigInteger(valHex.startsWith("0x") ? valHex.substring(2) : valHex, 16);
-			if (val.signum() <= 0) continue;
-			bnbPagamento = val;
-			break;
-		}
+		BigInteger bnbPagamento = br.com.node.ensaio.PagamentosDeBloco.pagamentoAoBuilder(bloco, posArb,
+				br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao()).orElse(BigInteger.ZERO);
 
 		if (bnbPagamento.signum() <= 0) return java.util.Optional.empty();
 
