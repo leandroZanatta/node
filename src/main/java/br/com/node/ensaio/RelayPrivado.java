@@ -1,25 +1,24 @@
 package br.com.node.ensaio;
 
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.logging.Logger;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
-
-import java.math.BigInteger;
-import java.util.HexFormat;
 
 import br.com.node.util.Keccak;
 
@@ -62,29 +61,40 @@ public final class RelayPrivado {
 
 	private static final Logger LOG = Logger.getLogger(RelayPrivado.class.getName());
 
-	// Puissant: maxTimestamp vale no máximo 2 min à frente; 90s dá folga sem passar do teto.
+	// Puissant: maxTimestamp vale no máximo 2 min à frente; 90s dá folga sem passar
+	// do teto.
 	private static final long VALIDADE_SEGUNDOS = 90;
 	private static final int LIMITE_RESPOSTA = 8_192;
 	private static final Pattern HASH_TRANSACAO = Pattern.compile("0x[0-9a-fA-F]{64}");
 
-	// Endereço colateral do 48club para o mev_sendBid: o BNB enviado aqui é o `directTransferBNB` do
-	// leilão (bidReward = sumTxGasFee × 0,9 + directTransferBNB) e é isento de queima BEP95.
-	public static final byte[] PAGAMENTO_48CLUB = HexFormat.of().parseHex("1f732d6ea3bd247f0a400dbbeb479ada6d9bda8c");
+	// Builder Control EOA do 48club para eth_sendBundle v2: BNB enviado aqui soma
+	// ao lance do bundle
+	// (bidReward = sumTxGasFee × 0,9 + BNB enviado aqui).
+	// https://docs.48.club/puissant-builder/send-bundle
+	public static final byte[] PAGAMENTO_48CLUB = HexFormat.of().parseHex("4848489f0b2bedd788c696e2d79b6b69d7484848");
+	// Colateral para o protocolo mev_sendBid (builder-relay.48.club, ainda não no
+	// ar): usado em payBidTx.
+	public static final byte[] COLATERAL_48CLUB_BID = HexFormat.of()
+			.parseHex("1f732d6ea3bd247f0a400dbbeb479ada6d9bda8c");
 	// https://docs.blockrazor.io/transaction-submission/block-builder/send-bundle.md
-	public static final byte[] PAGAMENTO_BLOCKRAZOR = java.util.HexFormat.of().parseHex("1266c6be60392a8ff346e8d5eccd3e69dd9c5f20");
+	public static final byte[] PAGAMENTO_BLOCKRAZOR = java.util.HexFormat.of()
+			.parseHex("1266c6be60392a8ff346e8d5eccd3e69dd9c5f20");
 
 	// Um builder: onde se entrega o bundle e a quem se paga o lance.
-	// `mevSendBid` = true → protocolo mev_sendBid do 48club; false → eth_sendBundle (BlockRazor, etc.).
+	// `mevSendBid` = true → protocolo mev_sendBid do 48club; false → eth_sendBundle
+	// (BlockRazor, etc.).
 	public record Builder(String nome, String url, String metodo, Optional<String> auth, byte[] pagamento,
 			boolean mevSendBid) {
 	}
 
-	// Tudo o que o 48club builder precisa para montar o `mev_sendBid`: o RawBid assinado mais a tx de
-	// pagamento separada. O `payBidTx` vai no campo `payBidTx` do BidArgsUpgrade (fora do bundle — não
-	// reverte junto com a arb) e `nontaxableFee` é o mesmo valor, isento da queima BEP95.
-	public record BidArgs(long blockNumber, byte[] parentHash, List<byte[]> txs, long gasUsed,
-			BigInteger gasFee, BigInteger builderFee, byte[] signature, byte[] payBidTx,
-			BigInteger nontaxableFee) {
+	// Tudo o que o 48club builder precisa para montar o `mev_sendBid`: o RawBid
+	// assinado mais a tx de
+	// pagamento separada. O `payBidTx` vai no campo `payBidTx` do BidArgsUpgrade
+	// (fora do bundle — não
+	// reverte junto com a arb) e `nontaxableFee` é o mesmo valor, isento da queima
+	// BEP95.
+	public record BidArgs(long blockNumber, byte[] parentHash, List<byte[]> txs, long gasUsed, BigInteger gasFee,
+			BigInteger builderFee, byte[] signature, byte[] payBidTx, BigInteger nontaxableFee) {
 		public BidArgs {
 			txs = List.copyOf(txs);
 		}
@@ -101,7 +111,8 @@ public final class RelayPrivado {
 	RelayPrivado(List<Builder> builders) {
 		this.builders = List.copyOf(builders);
 		LOG.info(() -> "relay privado: " + (builders.isEmpty() ? "desligado (RELAY_URL vazio) — envio cai no público"
-				: "ativo em " + String.join(", ", builders.stream().map(b -> b.nome() + " (" + b.metodo() + ")").toList())));
+				: "ativo em "
+						+ String.join(", ", builders.stream().map(b -> b.nome() + " (" + b.metodo() + ")").toList())));
 	}
 
 	static List<Builder> configurados() {
@@ -109,11 +120,12 @@ public final class RelayPrivado {
 		List<Builder> lista = new java.util.ArrayList<>();
 
 		Optional.ofNullable(System.getenv("RELAY_URL")).map(String::trim)
-				.or(() -> Optional.of("https://builder-relay.48.club")).filter(u -> !u.isBlank())
+				.or(() -> Optional.of("https://puissant-builder.48.club")).filter(u -> !u.isBlank())
 				.ifPresent(url -> lista.add(new Builder("48club", url,
-						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("mev_sendBid"),
+						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank())
+								.orElse("eth_sendBundle"),
 						Optional.ofNullable(System.getenv("RELAY_AUTH")).filter(a -> !a.isBlank()), PAGAMENTO_48CLUB,
-						true)));
+						false)));
 
 		Optional.ofNullable(System.getenv("BLOCKRAZOR_TOKEN")).map(String::trim).filter(t -> !t.isBlank())
 				.ifPresent(token -> lista.add(new Builder("blockrazor",
@@ -132,8 +144,10 @@ public final class RelayPrivado {
 		return !builders.isEmpty();
 	}
 
-	// Preserva o motivo normalizado para contagem e os campos originais para diagnosticar cada tentativa.
-	// `bundle` é o hash que o relay devolve ao aceitar — a chave da consulta de status
+	// Preserva o motivo normalizado para contagem e os campos originais para
+	// diagnosticar cada tentativa.
+	// `bundle` é o hash que o relay devolve ao aceitar — a chave da consulta de
+	// status
 	// (https://explore.48.club/v2/bundle?hash=…, guardada por 7 dias).
 	public record Resposta(boolean aceito, String motivo, String bundle, long latenciaMs, Integer statusHttp,
 			String codigoErro, String mensagemErro, String dadosErro, String respostaBruta, boolean respostaTruncada,
@@ -173,12 +187,15 @@ public final class RelayPrivado {
 
 	// Entrega o bundle a cada builder em PARALELO.
 	//
-	// `bid` — campos para o `mev_sendBid` do 48club: o RawBid assinado, a tx de pagamento separada, etc.
-	//         Pode ser null quando não há nenhum builder `mevSendBid=true` na lista.
-	// `montar` — para builders `eth_sendBundle` (BlockRazor): recebe o endereço de pagamento e devolve
-	//            as txs cruas do bundle (a de pagamento muda de destino; o resto é igual).
+	// `bid` — campos para o `mev_sendBid` do 48club: o RawBid assinado, a tx de
+	// pagamento separada, etc.
+	// Pode ser null quando não há nenhum builder `mevSendBid=true` na lista.
+	// `montar` — para builders `eth_sendBundle` (BlockRazor): recebe o endereço de
+	// pagamento e devolve
+	// as txs cruas do bundle (a de pagamento muda de destino; o resto é igual).
 	//
-	// Espera todos: o mais lento custa o mesmo que um envio só, porque correm juntos.
+	// Espera todos: o mais lento custa o mesmo que um envio só, porque correm
+	// juntos.
 	public Envio enviar(BidArgs bid, java.util.function.Function<byte[], List<String>> montar) {
 
 		long maxTimestamp = System.currentTimeMillis() / 1000 + VALIDADE_SEGUNDOS;
@@ -192,12 +209,13 @@ public final class RelayPrivado {
 				List<String> hashes = hashesDosBid(bid);
 				emVoo.put(builder.nome(), enviarA(builder, corpo48Club(bid, builder.metodo()), hashes));
 			} else {
-				// `positionFirst` vai à BlockRazor também: sem ele, o bundle tardio ia ao final do bloco e
+				// `positionFirst` vai à BlockRazor também: sem ele, o bundle tardio ia ao final
+				// do bloco e
 				// revertia — o "non-reverting tx in bundle failed" de 27/09.
 				List<String> transacoes = montar.apply(builder.pagamento());
 				List<String> hashes = transacoes.stream().map(RelayPrivado::hashTransacao).toList();
-				emVoo.put(builder.nome(),
-						enviarA(builder, corpo(builder.metodo(), transacoes, maxTimestamp, POSICAO_POR_PRIORIDADE), hashes));
+				emVoo.put(builder.nome(), enviarA(builder,
+						corpo(builder.metodo(), transacoes, maxTimestamp, POSICAO_POR_PRIORIDADE), hashes));
 			}
 		}
 
@@ -207,10 +225,13 @@ public final class RelayPrivado {
 		return new Envio(respostas);
 	}
 
-	// Monta o JSON-RPC `mev_sendBid` com o `BidArgsUpgrade` do 48club builder-relay:
-	//   RawBid  = {blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee, builderFee}
-	//   payBidTx = tx de pagamento ao colateral (separada do bundle — não reverte junto)
-	//   nontaxableFee = valor em BNB, isento da queima BEP95
+	// Monta o JSON-RPC `mev_sendBid` com o `BidArgsUpgrade` do 48club
+	// builder-relay:
+	// RawBid = {blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee,
+	// builderFee}
+	// payBidTx = tx de pagamento ao colateral (separada do bundle — não reverte
+	// junto)
+	// nontaxableFee = valor em BNB, isento da queima BEP95
 	static JsonObject corpo48Club(BidArgs bid, String metodo) {
 
 		JsonArray txsJson = new JsonArray();
@@ -260,22 +281,27 @@ public final class RelayPrivado {
 
 	static String normalizar(String mensagem) {
 		String amostra = mensagem.length() <= 1_024 ? mensagem : mensagem.substring(0, 1_024);
-		String normalizada = amostra.replaceAll("\\[0x[0-9a-fA-F.]+\\]\\s*", "")
-				.replaceAll("0x[0-9a-fA-F]{6,}", "…").replaceAll("\\d+", "N").trim();
+		String normalizada = amostra.replaceAll("\\[0x[0-9a-fA-F.]+\\]\\s*", "").replaceAll("0x[0-9a-fA-F]{6,}", "…")
+				.replaceAll("\\d+", "N").trim();
 		return normalizada.length() <= 240 ? normalizada : normalizada.substring(0, 240);
 	}
 
-	// Mantém a conexão HTTP/2 com o relay VIVA. MEDIDO em 23/09: conexão nova custa 530–720 ms (TCP
-	// 150–280 + TLS) e reaproveitada, 170 ms. Os bundles saem com minutos de intervalo, então sem isto
-	// cada envio pagava o handshake inteiro — no caminho em que o alvo vive um bloco (~450 ms). O relay
-	// não tem método de ping: `eth_chainId` volta erro com HTTP 200, o que basta para a conexão.
+	// Mantém a conexão HTTP/2 com o relay VIVA. MEDIDO em 23/09: conexão nova custa
+	// 530–720 ms (TCP
+	// 150–280 + TLS) e reaproveitada, 170 ms. Os bundles saem com minutos de
+	// intervalo, então sem isto
+	// cada envio pagava o handshake inteiro — no caminho em que o alvo vive um
+	// bloco (~450 ms). O relay
+	// não tem método de ping: `eth_chainId` volta erro com HTTP 200, o que basta
+	// para a conexão.
 	public void aquecer() {
 
 		for (Builder builder : builders) {
 			try {
-				HttpRequest.Builder pedido = HttpRequest.newBuilder(URI.create(builder.url())).timeout(Duration.ofSeconds(5))
-						.header("Content-Type", "application/json")
-						.POST(HttpRequest.BodyPublishers.ofString("{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"eth_chainId\",\"params\":[]}"));
+				HttpRequest.Builder pedido = HttpRequest.newBuilder(URI.create(builder.url()))
+						.timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
+						.POST(HttpRequest.BodyPublishers
+								.ofString("{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"eth_chainId\",\"params\":[]}"));
 				builder.auth().ifPresent(a -> pedido.header("Authorization", a));
 				http.send(pedido.build(), HttpResponse.BodyHandlers.discarding());
 			} catch (Exception e) {
@@ -284,20 +310,30 @@ public final class RelayPrivado {
 		}
 	}
 
-	// Submete o bundle (txs cruas EM ORDEM, hex com 0x): `[tx alvo, nossa tx]`. Devolve vazio se o
-	// relay recusou ou está desligado; o id/hash do bundle quando aceito. O corpo de erro vai ao log.
-	// O corpo JSON-RPC do bundle. A lista de revert vazia tem nome diferente em cada geração da API.
+	// Submete o bundle (txs cruas EM ORDEM, hex com 0x): `[tx alvo, nossa tx]`.
+	// Devolve vazio se o
+	// relay recusou ou está desligado; o id/hash do bundle quando aceito. O corpo
+	// de erro vai ao log.
+	// O corpo JSON-RPC do bundle. A lista de revert vazia tem nome diferente em
+	// cada geração da API.
 	static JsonObject corpo(String metodo, List<String> txsHex, long maxTimestamp) {
 		return corpo(metodo, txsHex, maxTimestamp, false);
 	}
 
-	// POSIÇÃO PELA PRIORIDADE (`positionFirst`, na 48club e na BlockRazor). Pela documentação das duas: desligada (o padrão), "bundles
-	// que chegam tarde podem ser anexados ao final para garantir que entrem no bloco atual". No final, a pool da fenda
-	// já foi mexida por quem ficou no topo, a nossa tx reverte e o bundle cai — medido em 27/09: 73 de 73 fendas reais
-	// perdidas com a pool mexida nas posições 1–4, e a BlockRazor confirmando "non-reverting tx in bundle failed:
-	// execution reverted" em bundles que ela RECEBEU. Ligada, a posição é estritamente pelo lance: se pagamos mais que
-	// quem está no topo e o builder ainda remonta o bloco, entramos na frente; se não, não entramos. É o teste que
-	// separa lance de tempo. `POSICAO_POR_PRIORIDADE=0` volta ao padrão, para o A/B.
+	// POSIÇÃO PELA PRIORIDADE (`positionFirst`, na 48club e na BlockRazor). Pela
+	// documentação das duas: desligada (o padrão), "bundles
+	// que chegam tarde podem ser anexados ao final para garantir que entrem no
+	// bloco atual". No final, a pool da fenda
+	// já foi mexida por quem ficou no topo, a nossa tx reverte e o bundle cai —
+	// medido em 27/09: 73 de 73 fendas reais
+	// perdidas com a pool mexida nas posições 1–4, e a BlockRazor confirmando
+	// "non-reverting tx in bundle failed:
+	// execution reverted" em bundles que ela RECEBEU. Ligada, a posição é
+	// estritamente pelo lance: se pagamos mais que
+	// quem está no topo e o builder ainda remonta o bloco, entramos na frente; se
+	// não, não entramos. É o teste que
+	// separa lance de tempo. `POSICAO_POR_PRIORIDADE=0` volta ao padrão, para o
+	// A/B.
 	static final boolean POSICAO_POR_PRIORIDADE = !"0".equals(System.getenv("POSICAO_POR_PRIORIDADE"));
 
 	static JsonObject corpo(String metodo, List<String> txsHex, long maxTimestamp, boolean posicaoPorPrioridade) {
@@ -326,7 +362,8 @@ public final class RelayPrivado {
 		return corpo;
 	}
 
-	// Um builder: aceito com o hash do bundle, ou recusado com o motivo normalizado (para ser CONTADO).
+	// Um builder: aceito com o hash do bundle, ou recusado com o motivo normalizado
+	// (para ser CONTADO).
 	private java.util.concurrent.CompletableFuture<Resposta> enviarA(Builder builder, JsonObject corpo,
 			List<String> hashesTransacoes) {
 
@@ -361,21 +398,20 @@ public final class RelayPrivado {
 			json = elemento.getAsJsonObject();
 		} catch (JsonParseException e) {
 			String motivo = "HTTP " + statusHttp + ": " + normalizar(respostaBruta);
-			return new Resposta(false, motivo, null, latenciaMs, statusHttp, null, null, null, respostaBruta,
-					truncada, null, null, null, null, hashesTransacoes);
+			return new Resposta(false, motivo, null, latenciaMs, statusHttp, null, null, null, respostaBruta, truncada,
+					null, null, null, null, hashesTransacoes);
 		}
 
 		if (statusHttp / 100 == 2 && json.has("result") && !json.get("result").isJsonNull()) {
 			String bundle = json.get("result").isJsonPrimitive() ? json.get("result").getAsString()
 					: json.get("result").toString();
-			return new Resposta(true, null, bundle, latenciaMs, statusHttp, null, null, null, respostaBruta,
-					truncada, null, null, null, null, hashesTransacoes);
+			return new Resposta(true, null, bundle, latenciaMs, statusHttp, null, null, null, respostaBruta, truncada,
+					null, null, null, null, hashesTransacoes);
 		}
 
-		JsonObject erro = json.has("error") && json.get("error").isJsonObject()
-				? json.getAsJsonObject("error") : null;
-		String codigoErro = erro == null || !erro.has("code") || erro.get("code").isJsonNull()
-				? null : textoErro(erro, "code");
+		JsonObject erro = json.has("error") && json.get("error").isJsonObject() ? json.getAsJsonObject("error") : null;
+		String codigoErro = erro == null || !erro.has("code") || erro.get("code").isJsonNull() ? null
+				: textoErro(erro, "code");
 		String mensagemErro = textoErro(erro, "message");
 		String dadosErro = erro == null ? null : textoErro(erro, "data");
 		dadosErro = limitar(dadosErro, LIMITE_RESPOSTA);
@@ -413,8 +449,8 @@ public final class RelayPrivado {
 			return null;
 		}
 		JsonElement valor = erro.get(campo);
-		return valor.isJsonPrimitive() && valor.getAsJsonPrimitive().isString()
-				? valor.getAsString() : valor.toString();
+		return valor.isJsonPrimitive() && valor.getAsJsonPrimitive().isString() ? valor.getAsString()
+				: valor.toString();
 	}
 
 	private static String hashDeFalha(String mensagem) {

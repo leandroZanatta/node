@@ -55,21 +55,24 @@ public final class Disparo implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(Disparo.class.getName());
 
-	// O Executor. Configurável por `EXECUTOR` (com ou sem 0x) para trocar de contrato sem recompilar — o
-	// deploy do Executor com fallback de callbacks (24/09) cria um endereço novo. Sem a variável, o atual.
-	// Definida e mal escrita ESTOURA: antes caía calada no Executor antigo, e o node chamaria outro contrato.
-	private static final String CONTRATO = java.util.Optional.ofNullable(System.getenv("EXECUTOR"))
-			.map(String::trim).map(e -> {
+	// O Executor. Configurável por `EXECUTOR` (com ou sem 0x) para trocar de
+	// contrato sem recompilar — o
+	// deploy do Executor com fallback de callbacks (24/09) cria um endereço novo.
+	// Sem a variável, o atual.
+	// Definida e mal escrita ESTOURA: antes caía calada no Executor antigo, e o
+	// node chamaria outro contrato.
+	private static final String CONTRATO = java.util.Optional.ofNullable(System.getenv("EXECUTOR")).map(String::trim)
+			.map(e -> {
 				if (!e.matches("(0x)?[0-9a-fA-F]{40}")) {
 					throw new IllegalStateException("EXECUTOR ilegível: " + e);
 				}
 				return e.replaceFirst("^0x", "").toLowerCase(java.util.Locale.ROOT);
-			})
-			.orElse("b0599744c5858f9082c4ca9d92fc314476307496");
+			}).orElse("b0599744c5858f9082c4ca9d92fc314476307496");
 
 	public static byte[] executor() {
 		return HexFormat.of().parseHex(CONTRATO);
 	}
+
 	private static final Path KEYSTORE = Path.of("operador.keystore");
 	private static final Path KILL = Path.of("PARAR");
 
@@ -85,30 +88,44 @@ public final class Disparo implements Closeable {
 
 	private static final BigInteger TETO_GAS_TX = BigInteger.valueOf(2_000_000_000_000_000L); // 0,002 BNB
 
-	// PAGAMENTO AO BUILDER (25/09). No puissant-builder v2 o lance do bundle é `(gás × 0,9) + BNB enviado ao
-	// Builder Control EOA`, e o BNB tem prioridade. Medido no bloco 123894823 (o da fenda de 5,03 USDT que
-	// perdemos): três bots arbitraram a MESMA pool e cada um mandou ~0,017 BNB a este endereço numa tx
-	// separada, dentro do bundle; o nosso lance era o gás de 0,05 gwei, ~0,0000185 BNB. O pagamento é uma
-	// tx SIMPLES de BNB (o que a documentação descreve e o que vimos funcionar), assinada com o nonce
-	// seguinte ao da arb: o bundle é atômico e não aceita revert, então se a arb não entra, ele não paga.
-	//   PAGAMENTO_BUILDER_BPS — o lance INICIAL de cada rota (padrão 3000 = 30%); dali em diante quem decide é
-	//                           o `Lances`, que aprende com o desfecho de cada envio e guarda em `lances.json`
-	//   PAGAMENTO_TETO_BNB    — teto por bundle, em BNB (padrão 0.05)
-	// WBNB: o token de partida da maioria das rotas. O Executor pode ter WBNB depositado para rodar
-	// `executar` (sem flash loan) — mais simples, sem callback, e desbloqueia V3/gerente na ponta 0.
+	// PAGAMENTO AO BUILDER (25/09). No puissant-builder v2 o lance do bundle é
+	// `(gás × 0,9) + BNB enviado ao
+	// Builder Control EOA`, e o BNB tem prioridade. Medido no bloco 123894823 (o da
+	// fenda de 5,03 USDT que
+	// perdemos): três bots arbitraram a MESMA pool e cada um mandou ~0,017 BNB a
+	// este endereço numa tx
+	// separada, dentro do bundle; o nosso lance era o gás de 0,05 gwei, ~0,0000185
+	// BNB. O pagamento é uma
+	// tx SIMPLES de BNB (o que a documentação descreve e o que vimos funcionar),
+	// assinada com o nonce
+	// seguinte ao da arb: o bundle é atômico e não aceita revert, então se a arb
+	// não entra, ele não paga.
+	// PAGAMENTO_BUILDER_BPS — o lance INICIAL de cada rota (padrão 3000 = 30%);
+	// dali em diante quem decide é
+	// o `Lances`, que aprende com o desfecho de cada envio e guarda em
+	// `lances.json`
+	// PAGAMENTO_TETO_BNB — teto por bundle, em BNB (padrão 0.05)
+	// WBNB: o token de partida da maioria das rotas. O Executor pode ter WBNB
+	// depositado para rodar
+	// `executar` (sem flash loan) — mais simples, sem callback, e desbloqueia
+	// V3/gerente na ponta 0.
 	private static final String WBNB = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 
-	// O saldo de BNB do operador, relido com o nonce. O pagamento ao builder sai DELE: lance acima do saldo o relay
-	// recusa ("insufficient funds" — 3 vezes na noite de 27/09). Nulo até a primeira leitura.
+	// O saldo de BNB do operador, relido com o nonce. O pagamento ao builder sai
+	// DELE: lance acima do saldo o relay
+	// recusa ("insufficient funds" — 3 vezes na noite de 27/09). Nulo até a
+	// primeira leitura.
 	private volatile BigInteger saldoOperador;
 
-	// Saldo de WBNB do Executor — capital disponível para `executar` (sem flash loan).
+	// Saldo de WBNB do Executor — capital disponível para `executar` (sem flash
+	// loan).
 	// Zero até a primeira leitura; atualizado junto com o nonce.
 	private volatile BigInteger saldoExecutorWBNB = BigInteger.ZERO;
 	private final AtomicLong lanceLimitadoPeloSaldo = new AtomicLong();
 	private final AtomicLong lanceLimitadoPeloLucro = new AtomicLong();
 
-	// O lance por rota e quem acompanha o desfecho de cada envio (ligados pelo `Main`).
+	// O lance por rota e quem acompanha o desfecho de cada envio (ligados pelo
+	// `Main`).
 	private volatile Lances lances;
 	private volatile java.util.function.Consumer<Desfechos.Envio> aoEnviar = envio -> {
 	};
@@ -137,27 +154,35 @@ public final class Disparo implements Closeable {
 
 	// A chave da rota no `Lances`: as pools, ordenadas.
 	private static String chaveDaRota(Achado achado) {
-		return String.join("-", achado.ciclo().pernas().stream().map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
+		return String.join("-",
+				achado.ciclo().pernas().stream().map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
 	}
-	private static final BigInteger TETO_PAGAMENTO = java.util.Optional
-			.ofNullable(System.getenv("PAGAMENTO_TETO_BNB")).map(String::trim).filter(v -> !v.isBlank())
+
+	private static final BigInteger TETO_PAGAMENTO = java.util.Optional.ofNullable(System.getenv("PAGAMENTO_TETO_BNB"))
+			.map(String::trim).filter(v -> !v.isBlank())
 			.map(v -> new java.math.BigDecimal(v).movePointRight(18).toBigInteger())
 			.orElse(new BigInteger("50000000000000000"));
 	private static final long GAS_DO_PAGAMENTO = 21_000;
 	private final java.util.concurrent.atomic.AtomicLong pagamentosOferecidos = new java.util.concurrent.atomic.AtomicLong();
 	private BigInteger pagamentoOferecidoTotal = BigInteger.ZERO;
 
-	// O piso já exigiu cotação da raiz; se o câmbio some entre ele e o pagamento, o lance virava ZERO em
-	// silêncio e o bundle saía sem pagar o builder. Isso é dado incoerente, não "sem lance".
+	// O piso já exigiu cotação da raiz; se o câmbio some entre ele e o pagamento, o
+	// lance virava ZERO em
+	// silêncio e o bundle saía sem pagar o builder. Isso é dado incoerente, não
+	// "sem lance".
 	private static IllegalStateException semCambio(byte[] raiz) {
-		return new IllegalStateException("sem câmbio BNB para a raiz " + HexFormat.of().formatHex(raiz)
-				+ " depois de o piso ter cotado");
+		return new IllegalStateException(
+				"sem câmbio BNB para a raiz " + HexFormat.of().formatHex(raiz) + " depois de o piso ter cotado");
 	}
 
-	// Quanto do lucro vai ao builder, no token da raiz: a fatia, mas nunca mais que o excedente sobre o
-	// piso (o piso é o gás com margem — pagar além dele deixaria a arb no prejuízo) nem que o teto.
-	// O pagamento que leva o lance ao ALVO em wei por gás, no token da raiz: o necessário, mas nunca mais que o
-	// excedente sobre o piso (pagar além dele deixaria a arb no prejuízo) nem que o teto.
+	// Quanto do lucro vai ao builder, no token da raiz: a fatia, mas nunca mais que
+	// o excedente sobre o
+	// piso (o piso é o gás com margem — pagar além dele deixaria a arb no prejuízo)
+	// nem que o teto.
+	// O pagamento que leva o lance ao ALVO em wei por gás, no token da raiz: o
+	// necessário, mas nunca mais que o
+	// excedente sobre o piso (pagar além dele deixaria a arb no prejuízo) nem que o
+	// teto.
 	static BigInteger pagamentoAoBuilder(BigInteger necessario, BigInteger lucro, BigInteger piso, BigInteger teto) {
 
 		BigInteger excedente = lucro.subtract(piso);
@@ -166,12 +191,14 @@ public final class Disparo implements Closeable {
 		return pagamento.signum() > 0 ? pagamento : BigInteger.ZERO;
 	}
 
-	// Quanto BNB falta pagar ao builder para o bundle chegar a `alvo` wei por gás: o 48club conta o gás a 90% e
+	// Quanto BNB falta pagar ao builder para o bundle chegar a `alvo` wei por gás:
+	// o 48club conta o gás a 90% e
 	// soma o BNB enviado a ele. Zero quando o próprio gás já passa do alvo.
 	static BigInteger necessarioParaOAlvo(BigInteger alvoWeiPorGas, BigInteger precoDoGas, BigInteger gas) {
 		BigInteger falta = alvoWeiPorGas.subtract(precoDoGas.multiply(BigInteger.valueOf(9)).divide(BigInteger.TEN));
 		return falta.signum() > 0 ? falta.multiply(gas) : BigInteger.ZERO;
 	}
+
 	private static final BigInteger TETO_DIA = BigInteger.valueOf(3_000_000_000_000_000L); // 0,003 BNB (~US$ 2)
 
 	// Seletores de revert do Executor, para o post-mortem dizer o motivo em vez do
@@ -191,7 +218,8 @@ public final class Disparo implements Closeable {
 	private final String endereco;
 	private final boolean armado;
 
-	// O cabeçalho do bloco mais recente recebido — o hash dele é o `parentHash` que o 48club builder-relay
+	// O cabeçalho do bloco mais recente recebido — o hash dele é o `parentHash` que
+	// o 48club builder-relay
 	// exige no RawBid. Atualizado via `aoAplicarCabecalho` a cada NewBlock.
 	private volatile Cabecalho cabecalhoAtual;
 
@@ -215,33 +243,45 @@ public final class Disparo implements Closeable {
 	private final ExecutorService autopsia = Executors.newSingleThreadExecutor(t -> new Thread(t, "autopsia"));
 	private final Map<String, AtomicLong> motivos = new ConcurrentHashMap<>();
 
-	// Mede o gás REAL das nossas txs pelo recibo e o confronta com a estimativa usada. Thread própria,
-	// fora do caminho de envio: o único jeito de "estimativa precisa" deixar de ser argumento.
+	// Mede o gás REAL das nossas txs pelo recibo e o confronta com a estimativa
+	// usada. Thread própria,
+	// fora do caminho de envio: o único jeito de "estimativa precisa" deixar de ser
+	// argumento.
 	private final MedidorDeGas medidor;
 
-	// O laudo perna a perna de cada disparo da cauda: QUAL pool desmentiu o modelo, e como.
+	// O laudo perna a perna de cada disparo da cauda: QUAL pool desmentiu o modelo,
+	// e como.
 	private final Autopsia laudos;
 	private final Quarentena quarentena;
 
-	// Por que o relay recusou, normalizado (sem endereços e números): "nonce too low" é o alvo do N+1 já
-	// minerado antes do bundle chegar — corrida perdida —, "execution reverted" é a simulação dele.
+	// Por que o relay recusou, normalizado (sem endereços e números): "nonce too
+	// low" é o alvo do N+1 já
+	// minerado antes do bundle chegar — corrida perdida —, "execution reverted" é a
+	// simulação dele.
 	private final Map<String, AtomicLong> recusasDoRelay = new ConcurrentHashMap<>();
 
-	// Quanto o disparo leva da entrada ao relay responder, por caminho. No N+1 o alvo vive ~1 bloco
+	// Quanto o disparo leva da entrada ao relay responder, por caminho. No N+1 o
+	// alvo vive ~1 bloco
 	// (450 ms): esse número tem de caber nisso.
 	private final Map<String, br.com.node.util.Amostras> milisPorCaminho = new ConcurrentHashMap<>();
 
-	// A LINHA DO TEMPO de cada envio, do bloco feito pelo validador à resposta do relay, em etapas. Existe
-	// porque a fenda real de 5,03 USDT (25/09, bloco 123894823) foi perdida para um rival no bloco seguinte
-	// e o log só tinha o SEGUNDO: não dava para dizer em que etapa foram os ≥ 200 ms. Os marcos do bloco
+	// A LINHA DO TEMPO de cada envio, do bloco feito pelo validador à resposta do
+	// relay, em etapas. Existe
+	// porque a fenda real de 5,03 USDT (25/09, bloco 123894823) foi perdida para um
+	// rival no bloco seguinte
+	// e o log só tinha o SEGUNDO: não dava para dizer em que etapa foram os ≥ 200
+	// ms. Os marcos do bloco
 	// vêm da `Cabeca`; decisão e relay, daqui.
 	private volatile java.util.function.LongFunction<java.util.Optional<br.com.node.sincronizacao.Cabeca.Momentos>> momentos = altura -> java.util.Optional
 			.empty();
 	private final Map<String, br.com.node.util.Amostras> etapasDoEnvio = new ConcurrentHashMap<>();
 
-	// A versão do Executor publicado, perguntada na subida (`versao()`). A 2 conhece `chave` e os gerentes;
-	// o antigo não tem a função, e o `eth_call` volta revert — lido como 1. Com o antigo, rota que passa por
-	// gerente não se monta, e a ABI de envio é a antiga: o node novo roda com o contrato velho sem mandar
+	// A versão do Executor publicado, perguntada na subida (`versao()`). A 2
+	// conhece `chave` e os gerentes;
+	// o antigo não tem a função, e o `eth_call` volta revert — lido como 1. Com o
+	// antigo, rota que passa por
+	// gerente não se monta, e a ABI de envio é a antiga: o node novo roda com o
+	// contrato velho sem mandar
 	// calldata que ele não entende.
 	private final int versaoDoExecutor;
 
@@ -273,15 +313,22 @@ public final class Disparo implements Closeable {
 				+ (versaoDoExecutor >= 2 ? " — pernas de gerente (V4, Infinity CL) LIGADAS"
 						: " — antigo: pernas de gerente DESLIGADAS até o deploy da versão 2 (EXECUTOR=…)"));
 
-		LOG.info(() -> "disparo: " + (privada.isEmpty() ? "SEM CHAVE (inerte)"
-				: "operador 0x" + endereco + (armado ? " ARMADO — envia de verdade" : " desarmado (dry-run)"))
-				+ " · executor 0x" + CONTRATO);
+		LOG.info(
+				() -> "disparo: "
+						+ (privada.isEmpty() ? "SEM CHAVE (inerte)"
+								: "operador 0x" + endereco
+										+ (armado ? " ARMADO — envia de verdade" : " desarmado (dry-run)"))
+						+ " · executor 0x" + CONTRATO);
 	}
 
-	// NÃO sincronizado por inteiro. CICATRIZ de 24/09: o método todo era `synchronized`, com a volta HTTP
-	// ao relay (timeout de 5 s) dentro, numa thread única — um envio lento segurava o N+1 seguinte
-	// (medido: N+1 com mediana 266 ms e máximo 10 s). Só o estado compartilhado (teto do dia, gasto,
-	// contadores) é travado; dois disparos simultâneos usam o mesmo nonce, e só um pode entrar.
+	// NÃO sincronizado por inteiro. CICATRIZ de 24/09: o método todo era
+	// `synchronized`, com a volta HTTP
+	// ao relay (timeout de 5 s) dentro, numa thread única — um envio lento segurava
+	// o N+1 seguinte
+	// (medido: N+1 com mediana 266 ms e máximo 10 s). Só o estado compartilhado
+	// (teto do dia, gasto,
+	// contadores) é travado; dois disparos simultâneos usam o mesmo nonce, e só um
+	// pode entrar.
 	public void disparar(Achado achado, byte[] cruaPendente) {
 
 		if (privada.isEmpty()) {
@@ -318,8 +365,10 @@ public final class Disparo implements Closeable {
 			return;
 		}
 
-		// O pagamento ao builder entra no CHÃO que o contrato exige: se a arb render menos que piso +
-		// pagamento, ela reverte, e o bundle (sem revert aceito) cai inteiro — o pagamento não sai.
+		// O pagamento ao builder entra no CHÃO que o contrato exige: se a arb render
+		// menos que piso +
+		// pagamento, ela reverte, e o bundle (sem revert aceito) cai inteiro — o
+		// pagamento não sai.
 		String rotaDoLance = chaveDaRota(achado);
 		Lances lancesAgora = lances;
 		if (lancesAgora == null) {
@@ -327,11 +376,15 @@ public final class Disparo implements Closeable {
 		}
 		int fracaoMilha = lancesAgora.fracaoPara(rotaDoLance);
 		BigInteger precoDoGas = custoDeGas.prioridade();
-		// A 48club conta o gasLimit assinado (gasDaCauda × 6/5), não a estimativa de gasUsed.
+		// A 48club conta o gasLimit assinado (gasDaCauda × 6/5), não a estimativa de
+		// gasUsed.
 		BigInteger gasParaOLance = gasDaCauda.multiply(BigInteger.valueOf(6)).divide(BigInteger.valueOf(5));
-		// Pagamento como fração do lucro em BNB: escala com a oportunidade e não tem teto de gwei.
-		BigInteger lucroOportunidadeBnb = custoDeGas.paraBnb(raiz, achado.oportunidade().lucro()).orElseThrow(() -> semCambio(raiz));
-		BigInteger necessarioBnb = lucroOportunidadeBnb.multiply(BigInteger.valueOf(fracaoMilha)).divide(BigInteger.valueOf(1000));
+		// Pagamento como fração do lucro em BNB: escala com a oportunidade e não tem
+		// teto de gwei.
+		BigInteger lucroOportunidadeBnb = custoDeGas.paraBnb(raiz, achado.oportunidade().lucro())
+				.orElseThrow(() -> semCambio(raiz));
+		BigInteger necessarioBnb = lucroOportunidadeBnb.multiply(BigInteger.valueOf(fracaoMilha))
+				.divide(BigInteger.valueOf(1000));
 		BigInteger necessarioBnbSemLimiteDeSaldo = necessarioBnb;
 		boolean limitadoPorSaldo = false;
 
@@ -339,8 +392,8 @@ public final class Disparo implements Closeable {
 		BigInteger saldo = saldoOperador;
 		boolean saldoConhecido = saldo != null;
 		if (saldo != null) {
-			BigInteger gasMaximo = custoDeGas.maxTaxa().multiply(gasDaCauda.multiply(BigInteger.valueOf(6)).divide(BigInteger.valueOf(5))
-					.add(BigInteger.valueOf(GAS_DO_PAGAMENTO)));
+			BigInteger gasMaximo = custoDeGas.maxTaxa().multiply(gasDaCauda.multiply(BigInteger.valueOf(6))
+					.divide(BigInteger.valueOf(5)).add(BigInteger.valueOf(GAS_DO_PAGAMENTO)));
 			BigInteger disponivel = saldo.subtract(gasMaximo).max(BigInteger.ZERO);
 			if (necessarioBnb.compareTo(disponivel) > 0) {
 				limitadoPorSaldo = true;
@@ -364,17 +417,22 @@ public final class Disparo implements Closeable {
 		BigInteger pagamentoBnb = pagamentoRaiz.signum() > 0
 				? custoDeGas.paraBnb(raiz, pagamentoRaiz).orElseThrow(() -> semCambio(raiz))
 				: BigInteger.ZERO;
-		// O que o lance vale de fato, por gás: o que o builder vê (divide pelo gasLimit, não pelo gasUsed estimado).
+		// O que o lance vale de fato, por gás: o que o builder vê (divide pelo
+		// gasLimit, não pelo gasUsed estimado).
 		BigInteger ofertadoWeiPorGas = pagamentoBnb.divide(gasParaOLance)
 				.add(precoDoGas.multiply(BigInteger.valueOf(9)).divide(BigInteger.TEN));
-		// FOLGA: quando lim_lucro=True, pagamento = lucro − piso, então chao = lucro_previsto.
-		// O contrato exigiria exatamente o previsto, mas a aritmética inteira V2/V3 arredonda
-		// para baixo em até N wei (N = número de pernas). 10 wei é insignificante e evita o revert.
+		// FOLGA: quando lim_lucro=True, pagamento = lucro − piso, então chao =
+		// lucro_previsto.
+		// O contrato exigiria exatamente o previsto, mas a aritmética inteira V2/V3
+		// arredonda
+		// para baixo em até N wei (N = número de pernas). 10 wei é insignificante e
+		// evita o revert.
 		BigInteger chao = pagamentoBnb.signum() > 0
 				? piso.get().add(pagamentoRaiz).subtract(BigInteger.TEN).max(piso.get())
 				: piso.get();
 
-		// O número que o tradutor leva é o CHÃO (piso + pagamento), e é ele o `lucroMinimo` do contrato —
+		// O número que o tradutor leva é o CHÃO (piso + pagamento), e é ele o
+		// `lucroMinimo` do contrato —
 		// a razão está na nota de `RotaDoModelo`.
 		Optional<RotaDoModelo.Chamada> chamada = RotaDoModelo.traduzir(achado, catalogo, tarifario, chao);
 
@@ -386,15 +444,19 @@ public final class Disparo implements Closeable {
 
 		List<Salto> rota = chamada.get().rota();
 
-		// Usar `executar` (sem flash loan) quando o Executor já tem capital suficiente na raiz.
-		// Com WBNB na raiz e saldo ≥ montante: sem callback, sem restrição de fonte de empréstimo —
-		// funciona inclusive com V3 ou gerente na perna 0 (o v2 já atravessa todos os tipos).
-		boolean semLoan = versaoDoExecutor >= 2
-				&& HexFormat.of().formatHex(raiz).equalsIgnoreCase(WBNB)
+		// Usar `executar` (sem flash loan) quando o Executor já tem capital suficiente
+		// na raiz.
+		// Com WBNB na raiz e saldo ≥ montante: sem callback, sem restrição de fonte de
+		// empréstimo —
+		// funciona inclusive com V3 ou gerente na perna 0 (o v2 já atravessa todos os
+		// tipos).
+		boolean semLoan = versaoDoExecutor >= 2 && HexFormat.of().formatHex(raiz).equalsIgnoreCase(WBNB)
 				&& saldoExecutorWBNB.compareTo(chamada.get().montante()) >= 0;
 
-		// Ponta V3 ou de gerente só bloqueia quando USANDO EMPRÉSTIMO: o Executor < 3 só empresta de V2.
-		// Sem empréstimo (`semLoan`), o v2 já atravessa todos os tipos pela `_percorrer`.
+		// Ponta V3 ou de gerente só bloqueia quando USANDO EMPRÉSTIMO: o Executor < 3
+		// só empresta de V2.
+		// Sem empréstimo (`semLoan`), o v2 já atravessa todos os tipos pela
+		// `_percorrer`.
 		if (!semLoan && versaoDoExecutor < 3 && (rota.get(0).v3() || rota.get(0).deGerente())) {
 			LOG.info(() -> "disparo: DROP — ponta " + (rota.get(0).deGerente() ? "de gerente" : "V3")
 					+ " e o Executor publicado só empresta de V2 (versão " + versaoDoExecutor + ")");
@@ -409,13 +471,19 @@ public final class Disparo implements Closeable {
 		byte[] calldata = semLoan
 				? AbiDoExecutor.executarV2(rota, chamada.get().montante(), chamada.get().lucroMinimo())
 				: versaoDoExecutor >= 2
-						? AbiDoExecutor.executarComEmprestimoV2(rota, chamada.get().montante(), chamada.get().lucroMinimo())
-						: AbiDoExecutor.executarComEmprestimo(rota, chamada.get().montante(), chamada.get().lucroMinimo());
+						? AbiDoExecutor.executarComEmprestimoV2(rota, chamada.get().montante(),
+								chamada.get().lucroMinimo())
+						: AbiDoExecutor.executarComEmprestimo(rota, chamada.get().montante(),
+								chamada.get().lucroMinimo());
 
-		// SEM PRÉ-VOO. Ele custava uma volta ao RPC público (~300 ms) para responder o que o relay responde
-		// de graça: o Puissant simula o bundle e, com `acceptReverting` vazio, o que reverteria não entra
-		// e não paga gás. Serviu enquanto não sabíamos POR QUE tudo revertia; esse porquê agora vem da
-		// autópsia, assíncrona, depois do envio. O limite de gás é o analítico — teto calibrado com swaps
+		// SEM PRÉ-VOO. Ele custava uma volta ao RPC público (~300 ms) para responder o
+		// que o relay responde
+		// de graça: o Puissant simula o bundle e, com `acceptReverting` vazio, o que
+		// reverteria não entra
+		// e não paga gás. Serviu enquanto não sabíamos POR QUE tudo revertia; esse
+		// porquê agora vem da
+		// autópsia, assíncrona, depois do envio. O limite de gás é o analítico — teto
+		// calibrado com swaps
 		// reais — com a folga de 6/5.
 		BigInteger gasEstimado = custoDeGas.estimarGas(rota, calldata);
 		long gasFinal = comFolgaDeLimite(gasEstimado);
@@ -436,9 +504,10 @@ public final class Disparo implements Closeable {
 
 		if (custoMaximo.compareTo(TETO_GAS_TX) > 0) {
 			registrarDropSemEnvio(achado, rotaDoLance, fracaoMilha, ofertadoWeiPorGas, piso.get(), chamadaFinal, rota,
-					"gas_acima_do_teto_por_transacao", Map.of("custo_maximo_gas_bnb_wei", custoMaximo.toString(),
-							"teto_gas_tx_bnb_wei", TETO_GAS_TX.toString(), "gas_estimado", gasEstimado.toString(),
-							"gas_limite_assinado", gasFinal));
+					"gas_acima_do_teto_por_transacao",
+					Map.of("custo_maximo_gas_bnb_wei", custoMaximo.toString(), "teto_gas_tx_bnb_wei",
+							TETO_GAS_TX.toString(), "gas_estimado", gasEstimado.toString(), "gas_limite_assinado",
+							gasFinal));
 			LOG.info(() -> "disparo: gás caro (" + bnb(custoMaximo) + " BNB > teto por tx) — pulo esta");
 			return;
 		}
@@ -454,15 +523,18 @@ public final class Disparo implements Closeable {
 		String nossoRaw = HexFormat.of().formatHex(raw);
 
 		// A tx do pagamento: BNB puro ao builder, nonce seguinte, mesmo preço de gás.
-		// 48club recebe a tx separada em `payBidTx`; BlockRazor recebe dentro do bundle via `montar`.
+		// 48club recebe a tx separada em `payBidTx`; BlockRazor recebe dentro do bundle
+		// via `montar`.
 		boolean paga = pagamentoBnb.signum() > 0;
 		boolean aceito;
 		long milisAteAceiteRelay = 0;
 		Map<String, Object> respostasRelay = new LinkedHashMap<>();
 
 		if (relay.ativo()) {
-			// Bundle do 48club: [alvo?, nossa] — sem pagamento (vai em payBidTx separado).
-			// Bundle do BlockRazor: [alvo?, nossa, pagamento] — pagamento dentro do bundle.
+			// Bundle eth_sendBundle (48club + BlockRazor): [alvo?, nossa, pagamento] —
+			// pagamento dentro do bundle.
+			// payBidTxBytes fica em BidArgs para quando builder-relay.48.club (mev_sendBid)
+			// entrar no ar.
 			List<byte[]> bundleTxsBytes = new java.util.ArrayList<>();
 			if (cruaPendente != null) {
 				bundleTxsBytes.add(cruaPendente);
@@ -471,33 +543,26 @@ public final class Disparo implements Closeable {
 
 			long alturaDoProximoBloco = achado.altura() + 1;
 			Cabecalho cab = cabecalhoAtual;
-			byte[] parentHashDoBid = (cab != null && cab.numero() == achado.altura())
-					? cab.hash() : new byte[32];
+			byte[] parentHashDoBid = (cab != null && cab.numero() == achado.altura()) ? cab.hash() : new byte[32];
 
 			BigInteger gasFee = gasDaCauda.multiply(precoDoGas);
-			byte[] payBidTxBytes = paga
-					? AssinadorDeTransacao.assinar(nonceOperadorUsado + 1, custoDeGas.prioridade(), maxTaxa,
-							GAS_DO_PAGAMENTO, RelayPrivado.PAGAMENTO_48CLUB, pagamentoBnb, new byte[0], privada.get())
-					: new byte[0];
+			byte[] payBidTxBytes = paga ? AssinadorDeTransacao.assinar(nonceOperadorUsado + 1, custoDeGas.prioridade(),
+					maxTaxa, GAS_DO_PAGAMENTO, RelayPrivado.COLATERAL_48CLUB_BID, pagamentoBnb, new byte[0],
+					privada.get()) : new byte[0];
 
-			// Hash do RawBid para assinar: keccak256(rlp([blockNumber, parentHash, txs, unRevertible, gasUsed, gasFee, builderFee]))
+			// Hash do RawBid para assinar: keccak256(rlp([blockNumber, parentHash, txs,
+			// unRevertible, gasUsed, gasFee, builderFee]))
 			var txsRlp = bundleTxsBytes.stream().map(Rlp::bytes).toList();
 			var unrevRlp = bundleTxsBytes.stream().map(tx -> Rlp.bytes(Keccak.hash(tx))).toList();
-			byte[] rawBidEncoded = Rlp.codificar(Rlp.lista(
-					Rlp.inteiro(alturaDoProximoBloco),
-					Rlp.bytes(parentHashDoBid),
-					Rlp.lista(txsRlp),
-					Rlp.lista(unrevRlp),
-					Rlp.inteiro(gasDaCauda),
-					Rlp.inteiro(gasFee),
-					Rlp.inteiro(pagamentoBnb)));
+			byte[] rawBidEncoded = Rlp.codificar(Rlp.lista(Rlp.inteiro(alturaDoProximoBloco),
+					Rlp.bytes(parentHashDoBid), Rlp.lista(txsRlp), Rlp.lista(unrevRlp), Rlp.inteiro(gasDaCauda),
+					Rlp.inteiro(gasFee), Rlp.inteiro(pagamentoBnb)));
 			byte[] rawBidHash = Keccak.hash(rawBidEncoded);
 			byte[] idPublico = Secp256k1.id(privada.get());
 			byte[] assinatura48Club = Secp256k1.assinar(rawBidHash, privada.get(), idPublico);
 
-			RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(alturaDoProximoBloco, parentHashDoBid,
-					bundleTxsBytes, gasDaCauda.longValueExact(), gasFee, pagamentoBnb,
-					assinatura48Club, payBidTxBytes, pagamentoBnb);
+			RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(alturaDoProximoBloco, parentHashDoBid, bundleTxsBytes,
+					gasDaCauda.longValueExact(), gasFee, pagamentoBnb, assinatura48Club, payBidTxBytes, pagamentoBnb);
 
 			// Para a BlockRazor (eth_sendBundle): o pagamento ainda vai dentro do bundle.
 			java.util.function.Function<byte[], List<String>> montar = destino -> {
@@ -507,9 +572,9 @@ public final class Disparo implements Closeable {
 				}
 				bundle.add("0x" + nossoRaw);
 				if (paga) {
-					bundle.add("0x" + HexFormat.of().formatHex(AssinadorDeTransacao.assinar(nonceOperadorUsado + 1,
-							custoDeGas.prioridade(), maxTaxa, GAS_DO_PAGAMENTO, destino, pagamentoBnb, new byte[0],
-							privada.get())));
+					bundle.add("0x" + HexFormat.of()
+							.formatHex(AssinadorDeTransacao.assinar(nonceOperadorUsado + 1, custoDeGas.prioridade(),
+									maxTaxa, GAS_DO_PAGAMENTO, destino, pagamentoBnb, new byte[0], privada.get())));
 				}
 				return bundle;
 			};
@@ -541,18 +606,23 @@ public final class Disparo implements Closeable {
 				respostasRelay.put(nome, detalhe);
 			});
 
-			// Cada recusa conta com o nome do builder: "nonce too low" na 48club e aceito na BlockRazor são
+			// Cada recusa conta com o nome do builder: "nonce too low" na 48club e aceito
+			// na BlockRazor são
 			// histórias diferentes.
 			envio.porBuilder().forEach((nome, resposta) -> {
 				if (!resposta.aceito()) {
-					recusasDoRelay.computeIfAbsent(nome + ": " + resposta.motivo(), k -> new AtomicLong()).incrementAndGet();
-					// No N+1 a simulação do relay é a única que roda COM o alvo: o token que não se move ali
+					recusasDoRelay.computeIfAbsent(nome + ": " + resposta.motivo(), k -> new AtomicLong())
+							.incrementAndGet();
+					// No N+1 a simulação do relay é a única que roda COM o alvo: o token que não se
+					// move ali
 					// vai para a sonda como no veredito da cauda.
 					if (naoSeMove(resposta.motivo())) {
 						suspeitarDaRota(rota, resposta.motivo());
 					}
-					// Quarentena imediata: relay confirmou o revert antes de a autopsia assíncrona terminar —
-					// sem isso o mesmo bloco pode re-despachar a mesma rota ~27× antes de a quarentena aplicar.
+					// Quarentena imediata: relay confirmou o revert antes de a autopsia assíncrona
+					// terminar —
+					// sem isso o mesmo bloco pode re-despachar a mesma rota ~27× antes de a
+					// quarentena aplicar.
 					String motivoRelay = Autopsia.motivoDoVeredito(resposta.motivo()).trim();
 					if (!motivoRelay.isBlank() && chamadaFinal != null) {
 						String razao = "relay " + nome + " recusou (" + motivoRelay + ")";
@@ -560,9 +630,8 @@ public final class Disparo implements Closeable {
 							quarentena.condenar(HexFormat.of().parseHex(chamadaFinal.rota().get(0).pool()),
 									Autopsia.PENA_DE_PROIBICAO, razao);
 						} else if (Autopsia.overflow(motivoRelay)) {
-							chamadaFinal.rota().stream().filter(s -> !s.v3() && !s.deGerente())
-									.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()),
-											Autopsia.PENA_DE_ESTADO, razao));
+							chamadaFinal.rota().stream().filter(s -> !s.v3() && !s.deGerente()).forEach(s -> quarentena
+									.condenar(HexFormat.of().parseHex(s.pool()), Autopsia.PENA_DE_ESTADO, razao));
 						} else {
 							// Qualquer outro revert (TRANSFER_FAILED, NaoPagou, etc.): quarentena curta na
 							// emprestadora, evita re-despacho até a autopsia assíncrona terminar (~3 s).
@@ -586,8 +655,9 @@ public final class Disparo implements Closeable {
 		}
 
 		long milis = (System.nanoTime() - inicio) / 1_000_000;
-		milisPorCaminho.computeIfAbsent(cruaPendente == null ? "cauda" : "n+1",
-				k -> new br.com.node.util.Amostras(2_000)).anotar(milis);
+		milisPorCaminho
+				.computeIfAbsent(cruaPendente == null ? "cauda" : "n+1", k -> new br.com.node.util.Amostras(2_000))
+				.anotar(milis);
 
 		long tempoAteConfirmacao = aceito && relay.ativo() ? milisAteAceiteRelay : milis;
 		Map<String, Object> tempo = anotarLinhaDoTempo(achado.altura(), entradaMs, tempoAteConfirmacao,
@@ -604,16 +674,16 @@ public final class Disparo implements Closeable {
 		}
 
 		Map<String, Object> detalhesEnvio = detalhesEnvio(achado, chamadaFinal, rota, piso.get(), fracaoMilha,
-				ofertadoWeiPorGas, necessarioBnbSemLimiteDeSaldo, necessarioBnb, saldoConhecido, limitadoPorSaldo, necessarioRaiz,
-				pagamentoRaiz, pagamentoBnb, precoDoGas, gasDaCauda, gasEstimado, gasFinal, maxTaxa,
-				cruaPendente == null ? "cauda" : "n+1", tempoAteConfirmacao, milis, tempo, respostasRelay, aceito, solicitadoAoBuilder,
-				limitadoPorLucro, limitadoPeloTeto, semLoan);
+				ofertadoWeiPorGas, necessarioBnbSemLimiteDeSaldo, necessarioBnb, saldoConhecido, limitadoPorSaldo,
+				necessarioRaiz, pagamentoRaiz, pagamentoBnb, precoDoGas, gasDaCauda, gasEstimado, gasFinal, maxTaxa,
+				cruaPendente == null ? "cauda" : "n+1", tempoAteConfirmacao, milis, tempo, respostasRelay, aceito,
+				solicitadoAoBuilder, limitadoPorLucro, limitadoPeloTeto, semLoan);
 		if (aceito) {
 			java.util.Set<String> poolsDaRota = new java.util.HashSet<>();
 			achado.ciclo().pernas().forEach(p -> poolsDaRota.add(HexFormat.of().formatHex(p.pool())));
-			aoEnviar.accept(new Desfechos.Envio(nossoHash, achado.altura(), poolsDaRota, entradaMs + tempoAteConfirmacao,
-					cruaPendente == null ? "cauda" : "n+1", rotaDoLance, fracaoMilha, ofertadoWeiPorGas,
-					lucroOportunidadeBnb, gasParaOLance, detalhesEnvio));
+			aoEnviar.accept(new Desfechos.Envio(nossoHash, achado.altura(), poolsDaRota,
+					entradaMs + tempoAteConfirmacao, cruaPendente == null ? "cauda" : "n+1", rotaDoLance, fracaoMilha,
+					ofertadoWeiPorGas, lucroOportunidadeBnb, gasParaOLance, detalhesEnvio));
 		} else {
 			aoRecusarTentativa.accept(nossoHash, detalhesEnvio);
 		}
@@ -629,8 +699,8 @@ public final class Disparo implements Closeable {
 		tentativa.put("altura", achado.altura());
 		tentativa.put("caminho", "cauda_ou_n+1");
 		tentativa.put("rota_id", rotaId);
-		tentativa.put("pools", achado.ciclo().pernas().stream()
-				.map(perna -> HexFormat.of().formatHex(perna.pool())).sorted().toList());
+		tentativa.put("pools", achado.ciclo().pernas().stream().map(perna -> HexFormat.of().formatHex(perna.pool()))
+				.sorted().toList());
 		tentativa.put("raiz_ativo", HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()));
 		tentativa.put("montante_entrada_wei", chamada.montante().toString());
 		tentativa.put("lucro_previsto_ativo_wei", achado.oportunidade().lucro().toString());
@@ -639,18 +709,24 @@ public final class Disparo implements Closeable {
 		tentativa.put("lance_fracao_milha", fracaoMilha);
 		tentativa.put("lance_ofertado_total_wei_por_gas", ofertado.toString());
 		tentativa.put("motivo_nao_enviado", motivo);
-		tentativa.put("pernas", rota.stream().map(salto -> Map.of("pool", salto.pool(), "tipo",
-				salto.v3() ? "V3" : salto.deGerente() ? "gerente" : "V2", "token_entrada", salto.entra(), "token_saida",
-				salto.sai(), "taxa_bps", salto.taxaBps())).toList());
+		tentativa.put("pernas",
+				rota.stream()
+						.map(salto -> Map.of("pool", salto.pool(), "tipo",
+								salto.v3() ? "V3" : salto.deGerente() ? "gerente" : "V2", "token_entrada",
+								salto.entra(), "token_saida", salto.sai(), "taxa_bps", salto.taxaBps()))
+						.toList());
 		tentativa.put("relay_aceitou", null);
 		tentativa.put("tempo", Map.of("marcos_disponiveis", false));
 		aoRecusarTentativa.accept("drop:" + achado.altura() + ":" + rotaId + ":" + sequenciaDeDrops.incrementAndGet(),
 				tentativa);
 	}
 
-	// A autópsia de um achado que o piso RECUSOU: nada se assina, nada se envia, e o veredito do contrato
-	// não é pedido (ele diria SemLucro pelo próprio piso e sujaria a contagem dos motivos reais). Só o
-	// laudo perna a perna — que não exige chave nem autorização, então roda também sem keystore.
+	// A autópsia de um achado que o piso RECUSOU: nada se assina, nada se envia, e
+	// o veredito do contrato
+	// não é pedido (ele diria SemLucro pelo próprio piso e sujaria a contagem dos
+	// motivos reais). Só o
+	// laudo perna a perna — que não exige chave nem autorização, então roda também
+	// sem keystore.
 	public void examinarSemEnviar(Achado achado) {
 
 		byte[] raiz = achado.ciclo().pernas().get(0).entra();
@@ -673,9 +749,12 @@ public final class Disparo implements Closeable {
 		});
 	}
 
-	// POST-MORTEM assíncrono (fora do caminho de envio, zero latência): pergunta ao contrato, via
-	// eth_call, POR QUE esta arb não fecha — o seletor do revert e a FRASE dele — e, na cauda, pede o
-	// laudo perna a perna. No N+1 o laudo não vale: roda no estado sem o alvo, que é justamente o que a
+	// POST-MORTEM assíncrono (fora do caminho de envio, zero latência): pergunta ao
+	// contrato, via
+	// eth_call, POR QUE esta arb não fecha — o seletor do revert e a FRASE dele —
+	// e, na cauda, pede o
+	// laudo perna a perna. No N+1 o laudo não vale: roda no estado sem o alvo, que
+	// é justamente o que a
 	// nossa tx não vai encontrar.
 	private void autopsiar(Achado achado, RotaDoModelo.Chamada chamada, byte[] calldata, String desfecho,
 			byte[] cruaPendente, String hashEnviado, String hashTentativa) {
@@ -684,20 +763,23 @@ public final class Disparo implements Closeable {
 
 		autopsia.submit(() -> {
 
-			// No N+1 o veredito roda SEM o alvo: "NaoPagou" ali é o esperado (a fenda só existe depois do
-			// swap alheio) e não diz nada — contá-lo junto com os da cauda fazia parecer erro novo.
+			// No N+1 o veredito roda SEM o alvo: "NaoPagou" ali é o esperado (a fenda só
+			// existe depois do
+			// swap alheio) e não diz nada — contá-lo junto com os da cauda fazia parecer
+			// erro novo.
 			if (cruaPendente != null) {
 				motivos.computeIfAbsent("n+1 (veredito sem o alvo, não informa)", k -> new AtomicLong())
 						.incrementAndGet();
-				laudos.concluir(hashTentativa,
-						Map.<String, Object>of("status", "nao_aplicavel_sem_transacao_alvo"));
+				laudos.concluir(hashTentativa, Map.<String, Object>of("status", "nao_aplicavel_sem_transacao_alvo"));
 				return;
 			}
 
 			String veredito = anotarVeredito(chamada.rota(), dadosHex, achado.altura());
 
-			// O desfecho precisa saber se a fenda FECHAVA: bundle que reverteria o builder descarta calado, e
-			// contá-lo como "perdeu para rival" ensinaria o lance errado (27/09: 80% das rotas por gerente).
+			// O desfecho precisa saber se a fenda FECHAVA: bundle que reverteria o builder
+			// descarta calado, e
+			// contá-lo como "perdeu para rival" ensinaria o lance errado (27/09: 80% das
+			// rotas por gerente).
 			if (hashEnviado != null) {
 				aoVeredito.accept(hashEnviado, veredito);
 			}
@@ -717,7 +799,8 @@ public final class Disparo implements Closeable {
 	// transforma o veredicto em conhecimento: o revert que nomeia a transferência
 	// que não passou tira
 	// o par do grafo na hora (via `Impostos.suspeitar`) e põe a sonda a remedi-lo.
-	// O RPC do veredito: o de estado histórico (`RPC_LOGS`), quando ligado pelo `Main`.
+	// O RPC do veredito: o de estado histórico (`RPC_LOGS`), quando ligado pelo
+	// `Main`.
 	private volatile RpcDoEnsaio rpcDoVeredito;
 
 	public void vereditoPor(RpcDoEnsaio rpc) {
@@ -730,10 +813,12 @@ public final class Disparo implements Closeable {
 
 		try {
 
-			// No BLOCO N da fenda, e esperando o RPC recebê-lo (vemos o bloco antes dele), como a autópsia.
+			// No BLOCO N da fenda, e esperando o RPC recebê-lo (vemos o bloco antes dele),
+			// como a autópsia.
 			RpcDoEnsaio fonte = rpcDoVeredito != null ? rpcDoVeredito : rpc;
 			String bloco = "0x" + Long.toHexString(altura);
-			// Só pede quando o nó JÁ tem o bloco N: antes disso ele simula no N−1 sem avisar.
+			// Só pede quando o nó JÁ tem o bloco N: antes disso ele simula no N−1 sem
+			// avisar.
 			if (!fonte.esperarBloco(altura, 15, 200)) {
 				vereditoSemEstadoDoBloco.incrementAndGet();
 				return "sem_veredito";
@@ -743,7 +828,8 @@ public final class Disparo implements Closeable {
 				Thread.sleep(700);
 				veredicto = fonte.veredito(endereco, CONTRATO, dadosHex, bloco);
 			}
-			// Sem o estado do bloco N não há veredito — e "não sei" não pode virar "inválida" nem condenar rota.
+			// Sem o estado do bloco N não há veredito — e "não sei" não pode virar
+			// "inválida" nem condenar rota.
 			if (Autopsia.blocoAindaNaoChegou(veredicto.texto()) || Autopsia.estadoIndisponivel(veredicto.texto())) {
 				vereditoSemEstadoDoBloco.incrementAndGet();
 				return "sem_veredito";
@@ -794,7 +880,8 @@ public final class Disparo implements Closeable {
 	private void suspeitarDaRota(List<Salto> rota, String motivo) {
 
 		for (Salto salto : rota) {
-			// Na perna de gerente `pool` é o gerente de todas: suspeitar ali não tira pool nenhuma do grafo.
+			// Na perna de gerente `pool` é o gerente de todas: suspeitar ali não tira pool
+			// nenhuma do grafo.
 			if (salto.deGerente()) {
 				continue;
 			}
@@ -807,16 +894,23 @@ public final class Disparo implements Closeable {
 				+ " pools postas sob suspeita; a sonda remede, e o grafo as solta ou condena");
 	}
 
-	// A ROTA POR GERENTE QUE MORRE PORQUE UM TOKEN NÃO SE MOVE. Medido na noite de 26/09 no servidor (7,6 h):
-	// 43 vereditos `WrappedError` da V4 (o `transfer` do token 0x51ea…99999 dando divisão por zero dentro da
-	// sessão) e 27 `FalhaNaChamada` do Executor, com as MESMAS rotas fantasmas (lucro "previsto" de 2,77 e 65,8)
-	// voltando a cada poucos blocos por horas — a autópsia de rota por gerente só registrava o veredito, e nada
-	// virava conhecimento. Agora a pool de gerente sai do grafo: no `WrappedError`, que NOMEIA o token, só as
-	// pools da rota que têm aquele token; na `FalhaNaChamada`, todas as de gerente da rota.
+	// A ROTA POR GERENTE QUE MORRE PORQUE UM TOKEN NÃO SE MOVE. Medido na noite de
+	// 26/09 no servidor (7,6 h):
+	// 43 vereditos `WrappedError` da V4 (o `transfer` do token 0x51ea…99999 dando
+	// divisão por zero dentro da
+	// sessão) e 27 `FalhaNaChamada` do Executor, com as MESMAS rotas fantasmas
+	// (lucro "previsto" de 2,77 e 65,8)
+	// voltando a cada poucos blocos por horas — a autópsia de rota por gerente só
+	// registrava o veredito, e nada
+	// virava conhecimento. Agora a pool de gerente sai do grafo: no `WrappedError`,
+	// que NOMEIA o token, só as
+	// pools da rota que têm aquele token; na `FalhaNaChamada`, todas as de gerente
+	// da rota.
 	private static final java.time.Duration PENA_DO_TOKEN_QUE_NAO_SE_MOVE = java.time.Duration.ofHours(3);
 	private static final String WRAPPED_ERROR = "90bfb865";
 	private static final String FALHA_NA_CHAMADA = "033d7ade";
-	// SafeCast.toInt128 dentro do V4 — pool com token taxado (fee-on-transfer); reverte sempre.
+	// SafeCast.toInt128 dentro do V4 — pool com token taxado (fee-on-transfer);
+	// reverte sempre.
 	private static final String SAFE_CAST_OVERFLOW = "93dafdf1";
 
 	private void condenarGerentesSeOTokenNaoSeMove(List<Salto> rota, String seletor, String veredito) {
@@ -830,7 +924,8 @@ public final class Disparo implements Closeable {
 			return;
 		}
 
-		// `WrappedError(address alvo, bytes4, bytes, bytes)`: o alvo é o token que não se moveu.
+		// `WrappedError(address alvo, bytes4, bytes, bytes)`: o alvo é o token que não
+		// se moveu.
 		String culpado = embrulhado && texto.length() >= 2 + 8 + 64 ? texto.substring(2 + 8 + 24, 2 + 8 + 64) : null;
 		int condenadas = 0;
 
@@ -847,8 +942,7 @@ public final class Disparo implements Closeable {
 			}
 
 			String motivo = embrulhado ? "WrappedError do token 0x" + culpado
-					: safeCast ? "SafeCastOverflow (token taxado em pool V4)"
-					: "FalhaNaChamada";
+					: safeCast ? "SafeCastOverflow (token taxado em pool V4)" : "FalhaNaChamada";
 			quarentena.condenar(Keccak.hash(salto.chave()), PENA_DO_TOKEN_QUE_NAO_SE_MOVE,
 					motivo + " em rota por gerente");
 			condenadas++;
@@ -856,8 +950,8 @@ public final class Disparo implements Closeable {
 
 		int total = condenadas;
 		if (total > 0) {
-			LOG.warning(() -> "disparo: token que não se move em rota por gerente — " + total + " pool(s) de gerente em quarentena"
-					+ (culpado != null ? " (token 0x" + culpado + ")" : ""));
+			LOG.warning(() -> "disparo: token que não se move em rota por gerente — " + total
+					+ " pool(s) de gerente em quarentena" + (culpado != null ? " (token 0x" + culpado + ")" : ""));
 		}
 	}
 
@@ -886,7 +980,8 @@ public final class Disparo implements Closeable {
 					.map(com.google.gson.JsonElement::getAsJsonObject).filter(o -> o.has("result"))
 					.map(o -> o.get("result").getAsString()).filter(r -> r.length() > 2)
 					.map(r -> new BigInteger(r.substring(2), 16).intValue())
-					// Sem versão NÃO se adivinha: tratar como antigo mudava em silêncio quais rotas saem.
+					// Sem versão NÃO se adivinha: tratar como antigo mudava em silêncio quais rotas
+					// saem.
 					.orElseThrow(() -> new IllegalStateException("versão do Executor 0x" + CONTRATO
 							+ " não veio do RPC — não subo sem saber que contrato estou chamando"));
 
@@ -946,7 +1041,8 @@ public final class Disparo implements Closeable {
 		return copia;
 	}
 
-	// Mediana e máximo do tempo de disparo por caminho, e a linha do tempo dos envios por etapa.
+	// Mediana e máximo do tempo de disparo por caminho, e a linha do tempo dos
+	// envios por etapa.
 	public Map<String, Object> milis() {
 
 		Map<String, Object> resumo = new LinkedHashMap<>();
@@ -971,26 +1067,27 @@ public final class Disparo implements Closeable {
 		this.momentos = momentos;
 	}
 
-	// Atualiza o hash do bloco atual: vira `parentHash` no RawBid do próximo lance ao 48club.
+	// Atualiza o hash do bloco atual: vira `parentHash` no RawBid do próximo lance
+	// ao 48club.
 	public void aoAplicarCabecalho(Cabecalho cabecalho) {
 		this.cabecalhoAtual = cabecalho;
 	}
 
 	private static Map<String, Object> detalhesEnvio(Achado achado, RotaDoModelo.Chamada chamada, List<Salto> rota,
 			BigInteger piso, int fracaoMilha, BigInteger ofertado, BigInteger necessarioBnbSemLimiteDeSaldo,
-			BigInteger necessarioBnb, boolean saldoConhecido, boolean limitadoPorSaldo, BigInteger necessarioRaiz, BigInteger pagamentoRaiz,
-			BigInteger pagamentoBnb, BigInteger precoDoGas, BigInteger gasDaCauda, BigInteger gasEstimado, long gasFinal,
-			BigInteger maxTaxa, String caminho, long tempoAteConfirmacao, long milisTotal, Map<String, Object> tempo,
-			Map<String, Object> respostasRelay, boolean aceito, boolean solicitadoAoBuilder, boolean limitadoPorLucro,
-			boolean limitadoPeloTeto, boolean semLoan) {
+			BigInteger necessarioBnb, boolean saldoConhecido, boolean limitadoPorSaldo, BigInteger necessarioRaiz,
+			BigInteger pagamentoRaiz, BigInteger pagamentoBnb, BigInteger precoDoGas, BigInteger gasDaCauda,
+			BigInteger gasEstimado, long gasFinal, BigInteger maxTaxa, String caminho, long tempoAteConfirmacao,
+			long milisTotal, Map<String, Object> tempo, Map<String, Object> respostasRelay, boolean aceito,
+			boolean solicitadoAoBuilder, boolean limitadoPorLucro, boolean limitadoPeloTeto, boolean semLoan) {
 
 		Map<String, Object> detalhes = new LinkedHashMap<>();
 		detalhes.put("altura", achado.altura());
 		detalhes.put("caminho", caminho);
 		detalhes.put("sem_loan", semLoan);
 		detalhes.put("rota_id", chaveDaRota(achado));
-		detalhes.put("pools", achado.ciclo().pernas().stream()
-				.map(perna -> HexFormat.of().formatHex(perna.pool())).sorted().toList());
+		detalhes.put("pools", achado.ciclo().pernas().stream().map(perna -> HexFormat.of().formatHex(perna.pool()))
+				.sorted().toList());
 		boolean envioPrivado = !respostasRelay.containsKey("rpc_publico");
 		detalhes.put("submissao_aceita", aceito);
 		detalhes.put("relay_aceitou", envioPrivado ? aceito : null);
@@ -1020,7 +1117,8 @@ public final class Disparo implements Closeable {
 		lance.put("necessario_bnb_sem_limite_saldo_wei", necessarioBnbSemLimiteDeSaldo.toString());
 		lance.put("necessario_bnb_apos_limite_saldo_wei", necessarioBnb.toString());
 		lance.put("estimativa_gas_para_bid", gasDaCauda.toString());
-		lance.put("gas_limite_para_bid", gasDaCauda.multiply(BigInteger.valueOf(6)).divide(BigInteger.valueOf(5)).toString());
+		lance.put("gas_limite_para_bid",
+				gasDaCauda.multiply(BigInteger.valueOf(6)).divide(BigInteger.valueOf(5)).toString());
 		lance.put("teto_builder_bnb_wei", TETO_PAGAMENTO.toString());
 		lance.put("solicitado_ao_builder", solicitadoAoBuilder);
 		lance.put("saldo_operador_conhecido", saldoConhecido);
@@ -1067,14 +1165,14 @@ public final class Disparo implements Closeable {
 			transacao.put("hash", hashes.get(indice));
 			transacao.put("nonce", "arbitragem_operador".equals(transacao.get("papel")) ? nonceOperador
 					: "pagamento_builder".equals(transacao.get("papel")) ? nonceOperador + 1 : null);
-			transacao.put("indicada_como_falha_pelo_relay",
-					indiceFalha != null && indiceFalha.intValue() == indice);
+			transacao.put("indicada_como_falha_pelo_relay", indiceFalha != null && indiceFalha.intValue() == indice);
 			resultado.add(transacao);
 		}
 		return resultado;
 	}
 
-	// Uma linha por envio: onde foi o tempo, do bloco feito à resposta do relay. O bloco seguinte sai
+	// Uma linha por envio: onde foi o tempo, do bloco feito à resposta do relay. O
+	// bloco seguinte sai
 	// ~450 ms depois do da fenda; o que passar disso chega tarde para ele.
 	private Map<String, Object> anotarLinhaDoTempo(long altura, long entradaMs, long relayMs, String caminho) {
 
@@ -1140,8 +1238,10 @@ public final class Disparo implements Closeable {
 		return copia;
 	}
 
-	// O placar da precisão do gás: estimado × medido pelo recibo (amostras, medianas, desvio). Vai no
-	// relatório para que a calibração seja CONFERIDA no ar, não argumentada no código.
+	// O placar da precisão do gás: estimado × medido pelo recibo (amostras,
+	// medianas, desvio). Vai no
+	// relatório para que a calibração seja CONFERIDA no ar, não argumentada no
+	// código.
 	public Map<String, Object> gasMedido() {
 		return medidor.resumo();
 	}
@@ -1195,7 +1295,8 @@ public final class Disparo implements Closeable {
 		try {
 			return Optional.of(new BigInteger(1, Keystore.decifrar(Files.readString(KEYSTORE), senha.toCharArray())));
 		} catch (RuntimeException | java.io.IOException e) {
-			// Mandaram armar e a chave não abre: isso é erro de operação, não "fica inerte" calado.
+			// Mandaram armar e a chave não abre: isso é erro de operação, não "fica inerte"
+			// calado.
 			if ("SIM".equals(System.getenv("ARB_ARMADO"))) {
 				throw new IllegalStateException("ARB_ARMADO=SIM e o keystore não abriu: " + e.getMessage(), e);
 			}
