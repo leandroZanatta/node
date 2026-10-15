@@ -66,6 +66,37 @@ public final class Gatilhos implements Closeable {
 	// de US$ 1 somaram ~US$ 2.197 de ~2.485 — e 72% do valor era de UM tipo de gatilho (lote 7702) que o funil
 	// por contagem nem destacava. Aqui cada arbitragem entra com o valor em BNB, e a GORDA (acima de
 	// GORDA_BNB) fura a fila, vai ao log inteira e tem placar próprio por etapa.
+	// Fenda grande: a faixa em que a diferença entre ganhar e perder é relevante (0,001 BNB).
+	private static final java.math.BigInteger FENDA_GRANDE_BNB = java.math.BigInteger.valueOf(1_000_000_000_000_000L);
+
+	private volatile java.nio.file.Path arquivoFendasGrandes;
+
+	// Liga a gravação das fendas grandes num arquivo JSON por linha. Sem chamada, nada é gravado.
+	public void gravarFendasGrandesEm(java.nio.file.Path arquivo) {
+		this.arquivoFendasGrandes = arquivo;
+	}
+
+	private void gravarFendaGrande(long altura, int indice, String hashGatilho, String etapa, Long margemMs,
+			java.math.BigInteger emBnb) {
+		java.nio.file.Path arquivo = arquivoFendasGrandes;
+		if (arquivo == null) {
+			return;
+		}
+		JsonObject linha = new JsonObject();
+		linha.addProperty("altura", altura);
+		linha.addProperty("posicao_arbitragem", indice);
+		linha.addProperty("hash_abertura", hashGatilho);
+		linha.addProperty("etapa_abertura", etapa);
+		linha.addProperty("margem_antes_do_bloco_ms", margemMs);
+		linha.addProperty("valor_bnb_wei", emBnb.toString());
+		try {
+			java.nio.file.Files.write(arquivo, (linha + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8),
+					java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+		} catch (java.io.IOException e) {
+			LOG.warning(() -> "fenda grande não gravada: " + e.getMessage());
+		}
+	}
+
 	private static final java.math.BigInteger GORDA_BNB = java.math.BigInteger.valueOf(2_000_000_000_000_000L); // 0,002 BNB
 
 	private final java.util.function.Function<Arbitragem, Optional<java.math.BigInteger>> valorBnb;
@@ -175,6 +206,12 @@ public final class Gatilhos implements Closeable {
 
 		long n = investigadas.incrementAndGet();
 		Long margemMs = visto.isPresent() && instanteDoBloco > 0 ? instanteDoBloco - visto.getAsLong() : null;
+
+		// Só as fendas grandes (0,001 BNB ou mais): é onde o backrun com alvo compensa. Uma linha por arbitragem:
+		// a abertura foi vista pendente antes do bloco? quanto antes? (ver /gatilhos)
+		if (emBnb != null && emBnb.compareTo(FENDA_GRANDE_BNB) >= 0) {
+			gravarFendaGrande(altura, indice, semPrefixo(texto(gatilho, "hash")), etapaDoGatilho, margemMs, emBnb);
+		}
 
 		synchronized (this) {
 			gatilhoPorEtapa.computeIfAbsent(etapaDoGatilho, k -> new AtomicLong()).incrementAndGet();

@@ -31,7 +31,7 @@ public final class HttpApi {
 
 	@SuppressWarnings("unchecked")
 	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado,
-			Path arquivoDespachos, Path arquivoPagamentos, Path arquivoVencedores,
+			Path arquivoDespachos, Path arquivoPagamentos, Path arquivoVencedores, Path arquivoFendas,
 			Supplier<Map<String, Object>> pools) throws IOException {
 		servidor = HttpServer.create(new InetSocketAddress(porta), 0);
 		servidor.createContext("/status", troca -> responder(troca, () -> resumo(relatorio)));
@@ -50,6 +50,13 @@ public final class HttpApi {
 				throw new RuntimeException(e);
 			}
 		});
+		servidor.createContext("/fendas", troca -> responder(troca, () -> {
+			try {
+				return fendas(arquivoFendas, troca.getRequestURI().getQuery());
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}));
 		servidor.createContext("/disputa", troca -> responder(troca, () -> {
 			try {
 				return disputa(arquivoDespachos, arquivoPagamentos, arquivoVencedores, troca.getRequestURI().getQuery());
@@ -201,6 +208,32 @@ public final class HttpApi {
 		r.put("analisadas", analises.size());
 		r.put("resumo", Disputa.resumir(analises));
 		r.put("entradas", analises);
+		return r;
+	}
+
+	// Fendas grandes (0,001 BNB ou mais): a abertura foi vista pendente antes do bloco? Resume por etapa.
+	private static Object fendas(Path arquivo, String query) throws IOException {
+		int n = 500;
+		if (query != null) {
+			for (String par : query.split("&")) {
+				String[] kv = par.split("=", 2);
+				if (kv.length == 2 && "n".equals(kv[0])) n = Integer.parseInt(kv[1]);
+			}
+		}
+		if (!Files.exists(arquivo)) {
+			return Map.of("total", 0, "por_etapa", Map.of(), "entradas", List.of());
+		}
+		List<String> linhas = Files.readAllLines(arquivo);
+		List<JsonObject> entradas = linhas.stream().filter(l -> !l.isBlank())
+				.skip(Math.max(0, linhas.size() - n)).map(l -> JsonParser.parseString(l).getAsJsonObject()).toList();
+		Map<String, Long> porEtapa = new java.util.TreeMap<>();
+		for (JsonObject e : entradas) {
+			porEtapa.merge(e.get("etapa_abertura").getAsString(), 1L, Long::sum);
+		}
+		Map<String, Object> r = new java.util.LinkedHashMap<>();
+		r.put("total", linhas.size());
+		r.put("por_etapa", porEtapa);
+		r.put("entradas", entradas);
 		return r;
 	}
 }
