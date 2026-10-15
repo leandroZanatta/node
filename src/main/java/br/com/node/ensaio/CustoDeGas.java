@@ -464,7 +464,23 @@ public final class CustoDeGas {
 	// O token da raiz entrou na assinatura porque sem ele este número saía em BNB e era comparado com
 	// um lucro em USDT — 600× de erro no contador `pagaria_o_gas`, MEDIDO em produção (25/09).
 	public BigInteger custoDoGas(byte[] tokenRaiz, BigInteger gasEstimado) {
-		return converterDoBnb(tokenRaiz, precoEfetivo().multiply(gasEstimado));
+		return converterDoBnb(tokenRaiz, precoEfetivo().multiply(gasCalibrado(gasEstimado)));
+	}
+
+	// Fator medido do gás (milésimos de medido/estimado), vindo dos recibos das nossas txs (MedidorDeGas).
+	// 1000 = a estimativa analítica. Limitado a [0,5; 1,5]: uma leva ruim não derruba o piso.
+	private volatile int fatorDeGasMilesimos = 1000;
+
+	public void fatorDeGas(int milesimos) {
+		this.fatorDeGasMilesimos = Math.max(500, Math.min(1500, milesimos));
+	}
+
+	public int fatorDeGasMilesimos() {
+		return fatorDeGasMilesimos;
+	}
+
+	private BigInteger gasCalibrado(BigInteger gasEstimado) {
+		return gasEstimado.multiply(BigInteger.valueOf(fatorDeGasMilesimos)).divide(BigInteger.valueOf(1000));
 	}
 
 	// A TAXA DO EMPRÉSTIMO RELÂMPAGO sobre o valor tomado emprestado (a entrada do ciclo), EM WEI DO
@@ -498,7 +514,7 @@ public final class CustoDeGas {
 			return Optional.empty();
 		}
 
-		BigInteger gasComMargem = precoEfetivo().multiply(gasEstimado).multiply(MARGEM_NUM).divide(MARGEM_DEN);
+		BigInteger gasComMargem = precoEfetivo().multiply(gasCalibrado(gasEstimado)).multiply(MARGEM_NUM).divide(MARGEM_DEN);
 
 		return Optional.of(converterDoBnb(tokenRaiz, gasComMargem).add(taxaDoEmprestimo(montante)));
 	}
