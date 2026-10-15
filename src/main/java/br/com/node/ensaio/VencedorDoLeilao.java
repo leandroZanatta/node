@@ -85,6 +85,26 @@ public final class VencedorDoLeilao {
 			}
 		}
 		r.addProperty("pagamento_do_vencedor_wei", pagoPeloVencedor.toString());
+
+		// TODAS as transferências de valor do bloco, sem filtro de destino nem de posição. O filtro acima só olha
+		// o remetente exato e três builders conhecidas: se o lance foi para outro endereço (payout, coinbase,
+		// contrato), ele aparece aqui, e a conclusão não fica presa à nossa suposição de forma de busca.
+		JsonArray valores = new JsonArray();
+		JsonArray todas = txs.getAsJsonArray();
+		for (int i = 0; i < todas.size(); i++) {
+			JsonObject t = todas.get(i).getAsJsonObject();
+			BigInteger v = hexParaInteiro(texto(t, "value"));
+			if (v.signum() > 0) {
+				JsonObject linha = new JsonObject();
+				linha.addProperty("posicao", i);
+				linha.addProperty("de", semPrefixo(texto(t, "from")));
+				linha.addProperty("para", semPrefixo(texto(t, "to")));
+				linha.addProperty("valor_wei", v.toString());
+				linha.addProperty("hash", texto(t, "hash"));
+				valores.add(linha);
+			}
+		}
+		r.add("transferencias_de_valor_no_bloco", valores);
 		return r;
 	}
 
