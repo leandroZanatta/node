@@ -33,6 +33,15 @@ public final class Disputa {
 	// `despacho`: uma entrada de /despachos. `pagamentos`: as linhas de pagamentos.jsonl do bloco do vencedor
 	// (quem chama filtra por altura). Função pura.
 	public static Map<String, Object> analisar(JsonObject despacho, List<JsonObject> pagamentos) {
+		return analisar(despacho, pagamentos, null);
+	}
+
+	// Com o registro do vencedor (`vencedores.jsonl`), o casamento é exato, pelo hash da transação vencedora.
+	// Sem ele, cai no critério antigo por posição, que é só aproximação.
+	public static Map<String, Object> analisar(JsonObject despacho, List<JsonObject> pagamentos, JsonObject vencedor) {
+		if (vencedor != null && vencedor.has("hash_vencedor")) {
+			return analisarComVencedor(despacho, vencedor);
+		}
 
 		JsonObject envio = despacho.getAsJsonObject("envio");
 		JsonObject desfecho = despacho.getAsJsonObject("desfecho");
@@ -92,6 +101,64 @@ public final class Disputa {
 		r.put("faltou_bnb_wei", faltou == null ? null : faltou.toString());
 
 		r.put("veredito", veredito(classe, perdemos, levamos, nosso, pagoVencedor, faltou, casamento));
+		return r;
+	}
+
+	// O vencedor é a transação registrada: o que ele enviou direto à builder, a taxa dele e a lista de pagamentos do bloco.
+	private static Map<String, Object> analisarComVencedor(JsonObject despacho, JsonObject vencedor) {
+
+		JsonObject envio = despacho.getAsJsonObject("envio");
+		JsonObject desfecho = despacho.getAsJsonObject("desfecho");
+		String classe = texto(desfecho, "classe");
+		long altura = envio.get("altura").getAsBigDecimal().longValue();
+		BigInteger nosso = big(envio.has("lance") && envio.get("lance").isJsonObject()
+				? envio.getAsJsonObject("lance") : null, "pagamento_direto_builder_bnb_wei");
+		BigInteger lucro = big(envio, "lucro_previsto_bnb_wei");
+		boolean perdemos = classe.startsWith("rival") || classe.startsWith("pool_mexida");
+		boolean levamos = "incluida".equals(classe);
+
+		BigInteger pagoDireto = "true".equals(String.valueOf(vencedor.get("direto_a_builder")))
+				? new BigInteger(texto(vencedor, "valor_wei")) : BigInteger.ZERO;
+		BigInteger gasPrice = new BigInteger(texto(vencedor, "gas_price_wei"));
+		BigInteger gasUsado = vencedor.has("gas_usado_vencedor") ? new BigInteger(texto(vencedor, "gas_usado_vencedor")) : null;
+		BigInteger taxa = gasUsado == null ? null : gasPrice.multiply(gasUsado);
+
+		Map<String, Object> r = new LinkedHashMap<>();
+		r.put("altura", altura);
+		r.put("classe", classe);
+		r.put("posicao_do_vencedor", inteiro(desfecho, "posicao"));
+		r.put("nosso_lance_bnb_wei", nosso == null ? null : nosso.toString());
+		r.put("nosso_lucro_bnb_wei", lucro == null ? null : lucro.toString());
+		r.put("nossa_fracao_milha", fracao(nosso, lucro));
+		r.put("hash_vencedor", texto(vencedor, "hash_vencedor"));
+		r.put("vencedor_de", texto(vencedor, "de"));
+		r.put("vencedor_para", texto(vencedor, "para"));
+		r.put("vencedor_minerador_builder", texto(vencedor, "minerador"));
+		r.put("vencedor_pagou_bnb_wei", pagoDireto.toString());
+		r.put("vencedor_taxa_wei", taxa == null ? null : taxa.toString());
+		r.put("vencedor_gas_usado", gasUsado == null ? null : gasUsado.toString());
+		r.put("fracao_do_vencedor_milha", fracao(pagoDireto, lucro));
+		r.put("pagamentos_a_builder_no_bloco", vencedor.get("pagamentos_a_builder_no_bloco"));
+		r.put("casamento_do_pagamento", "hash");
+
+		BigInteger faltou = nosso != null && pagoDireto.compareTo(nosso) > 0 ? pagoDireto.subtract(nosso) : null;
+		r.put("faltou_bnb_wei", faltou == null ? null : faltou.toString());
+
+		String veredito;
+		if (levamos) {
+			veredito = "levamos";
+		} else if (!perdemos) {
+			veredito = veredito(classe, false, false, nosso, null, null, null);
+		} else if (pagoDireto.signum() == 0) {
+			veredito = "perdemos: o vencedor não enviou BNB direto a builder (taxa de gás "
+					+ (taxa == null ? "desconhecida" : taxa + " wei") + ")";
+		} else if (faltou != null) {
+			veredito = "perdemos por lance: vencedor enviou " + pagoDireto + " wei à builder, nós " + nosso
+					+ " wei; faltaram " + faltou + " wei";
+		} else {
+			veredito = "perdemos com lance igual ou maior: a diferença é ordem ou tempo, não preço";
+		}
+		r.put("veredito", veredito);
 		return r;
 	}
 

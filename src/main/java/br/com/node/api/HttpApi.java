@@ -31,7 +31,8 @@ public final class HttpApi {
 
 	@SuppressWarnings("unchecked")
 	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado,
-			Path arquivoDespachos, Path arquivoPagamentos, Supplier<Map<String, Object>> pools) throws IOException {
+			Path arquivoDespachos, Path arquivoPagamentos, Path arquivoVencedores,
+			Supplier<Map<String, Object>> pools) throws IOException {
 		servidor = HttpServer.create(new InetSocketAddress(porta), 0);
 		servidor.createContext("/status", troca -> responder(troca, () -> resumo(relatorio)));
 		servidor.createContext("/relatorio", troca -> responder(troca, relatorio::snapshot));
@@ -51,7 +52,7 @@ public final class HttpApi {
 		});
 		servidor.createContext("/disputa", troca -> responder(troca, () -> {
 			try {
-				return disputa(arquivoDespachos, arquivoPagamentos, troca.getRequestURI().getQuery());
+				return disputa(arquivoDespachos, arquivoPagamentos, arquivoVencedores, troca.getRequestURI().getQuery());
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -140,7 +141,7 @@ public final class HttpApi {
 
 	// A pergunta de cada tentativa: se não levamos, foi por quanto, e quem levou pagou quanto. Cruza o despacho
 	// com os pagamentos medidos no bloco do vencedor (ver `Disputa`).
-	private static Object disputa(Path despachos, Path pagamentos, String query) throws IOException {
+	private static Object disputa(Path despachos, Path pagamentos, Path vencedores, String query) throws IOException {
 		int n = 200;
 		if (query != null) {
 			for (String par : query.split("&")) {
@@ -175,13 +176,24 @@ public final class HttpApi {
 			}
 		}
 
+		// Quem ganhou, por hash da nossa tentativa (`vencedores.jsonl`, ver `VencedorDoLeilao`).
+		Map<String, JsonObject> vencedorPorHash = new java.util.HashMap<>();
+		if (Files.exists(vencedores)) {
+			for (String linha : Files.readAllLines(vencedores)) {
+				if (linha.isBlank()) continue;
+				JsonObject v = JsonParser.parseString(linha).getAsJsonObject();
+				vencedorPorHash.put(v.get("nosso_hash").getAsString(), v);
+			}
+		}
+
 		List<Map<String, Object>> analises = new ArrayList<>();
 		for (JsonObject t : tentativas) {
 			long altura = t.getAsJsonObject("envio").get("altura").getAsBigDecimal().longValue();
 			boolean n2 = t.getAsJsonObject("desfecho").get("classe").getAsString().endsWith("n2");
 			List<JsonObject> doVencedor = new ArrayList<>(pagamentosPorAltura.getOrDefault(altura + 1, List.of()));
 			if (n2) doVencedor.addAll(pagamentosPorAltura.getOrDefault(altura + 2, List.of()));
-			analises.add(Disputa.analisar(t, doVencedor));
+			JsonObject vencedor = vencedorPorHash.get(t.get("id").getAsString());
+			analises.add(Disputa.analisar(t, doVencedor, vencedor));
 		}
 
 		Map<String, Object> r = new java.util.LinkedHashMap<>();
