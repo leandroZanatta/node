@@ -234,6 +234,8 @@ public final class Main {
 						.ifPresent(achado -> backrun.considerar(List.of(achado), crua)));
 		Gatilhos gatilhos = new Gatilhos(rpcEnsaio, mempool::etapas, mempool::primeiraVisaoMs,
 				arbitragem -> custoDeGas.paraBnb(arbitragem.token(), arbitragem.sobra()));
+		gatilhos.gravarFendasGrandesEm(Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
+				.orElse("fendas_grandes.jsonl")));
 		br.com.node.ensaio.AutopsiaDoMercado mercado = new br.com.node.ensaio.AutopsiaDoMercado(catalogo, cotador,
 				tarifario, custoDeGas, gabarito, Path.of("target", "mercado-" + carimbo + ".jsonl"));
 		mercado.versaoDoExecutor(disparo.versaoDoExecutor());
@@ -380,7 +382,7 @@ public final class Main {
 		Path arquivoDespachos = Path.of("target", "ensaio.jsonl");
 		br.com.node.api.HttpApi httpApi;
 		try {
-			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, arquivoVencedores, () -> {
+			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, arquivoVencedores, Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG")).orElse("fendas_grandes.jsonl")), () -> {
 					Map<String, Object> p = new LinkedHashMap<>();
 					p.put("v2", catalogo.poolsV2());
 					p.put("v3", catalogo.poolsV3());
