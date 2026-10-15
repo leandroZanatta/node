@@ -171,6 +171,7 @@ public final class Main {
 		br.com.node.ensaio.Desfechos desfechos = new br.com.node.ensaio.Desfechos(br.com.node.ensaio.Disparo.executor(),
 				cabeca::momentos, null);
 		Path arquivoPagamentos = Path.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
+		Path arquivoVencedores = Path.of(java.util.Optional.ofNullable(System.getenv("VENCEDORES_LOG")).orElse("vencedores.jsonl"));
 		br.com.node.ensaio.PagamentosDeBloco pagamentos = new br.com.node.ensaio.PagamentosDeBloco(rpcEnsaio,
 				arquivoPagamentos, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 		br.com.node.ensaio.Lances lances = new br.com.node.ensaio.Lances(Path.of("lances.json"),
@@ -190,6 +191,10 @@ public final class Main {
 			return t;
 		});
 		desfechos.aoDecidir(desfecho -> {
+			// QUEM GANHOU, em toda perda para rival ou pool mexida: a transação vencedora e o pagamento dela às builders.
+			if (ganhouOutro(desfecho) && desfecho.posicao() != null) {
+				bidLookup.submit(() -> registrarVencedor(desfecho, rpcEnsaio, arquivoVencedores));
+			}
 			boolean deveEnriquecer = (desfecho.classe().equals("pool_mexida_n1") || desfecho.classe().equals("rival_n1"))
 					&& desfecho.folgaMs() != null && desfecho.folgaMs() > 0
 					&& desfecho.posicao() != null;
@@ -375,7 +380,7 @@ public final class Main {
 		Path arquivoDespachos = Path.of("target", "ensaio.jsonl");
 		br.com.node.api.HttpApi httpApi;
 		try {
-			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, () -> {
+			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, arquivoVencedores, () -> {
 					Map<String, Object> p = new LinkedHashMap<>();
 					p.put("v2", catalogo.poolsV2());
 					p.put("v3", catalogo.poolsV3());
@@ -446,6 +451,50 @@ public final class Main {
 	// variados — só o 48club e o BlockRazor são conhecidos, mas há outros. Uma tx de BNB puro (sem
 	// dados) do mesmo remetente, perto da arb, é o pagamento ao builder, independente do endereço.
 	// Deltas cobrem bundle típico [pag, arb] e [arb, pag] e casos com 1 tx de separação.
+	// Perdemos para outra transação do bloco (o vencedor está em outra posição, no bloco N+1 ou N+2).
+	private static boolean ganhouOutro(br.com.node.ensaio.Desfechos.Desfecho desfecho) {
+		return switch (desfecho.classe()) {
+			case "rival_n1", "rival_n2", "pool_mexida_n1", "pool_mexida_n2" -> true;
+			default -> false;
+		};
+	}
+
+	// Lê o bloco do vencedor e grava quem ganhou e quanto levou, ligado à nossa tentativa pelo hash.
+	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
+		try {
+			gravarVencedor(desfecho, rpc, arquivo);
+		} catch (RuntimeException e) {
+			// O executor engole exceção de tarefa: sem este registro, a perda some sem nenhum sinal.
+			LOG.warning(() -> "vencedor do leilão não lido para " + desfecho.envio().hash() + ": " + e);
+		}
+	}
+
+	private static void gravarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
+
+		int saltos = desfecho.classe().endsWith("n2") ? 2 : 1;
+		long alturaDoVencedor = desfecho.envio().altura() + saltos;
+
+		com.google.gson.JsonObject linha;
+		com.google.gson.JsonObject bloco = rpc.bloco(alturaDoVencedor).orElse(null);
+		if (bloco == null) {
+			linha = new com.google.gson.JsonObject();
+			linha.addProperty("nosso_hash", desfecho.envio().hash());
+			linha.addProperty("classe", desfecho.classe());
+			linha.addProperty("erro", "bloco do vencedor indisponível no RPC");
+		} else {
+			linha = br.com.node.ensaio.VencedorDoLeilao.extrair(desfecho.envio().hash(), desfecho.classe(),
+					alturaDoVencedor, desfecho.posicao(), bloco,
+					br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
+			if (linha.has("hash_vencedor")) {
+				rpc.recibo(linha.get("hash_vencedor").getAsString()).ifPresent(r -> {
+					linha.addProperty("sucesso_vencedor", r.sucesso());
+					linha.addProperty("gas_usado_vencedor", r.gasUsado().toString());
+				});
+			}
+		}
+		br.com.node.ensaio.VencedorDoLeilao.gravar(arquivo, linha);
+	}
+
 	private static java.util.Optional<BigInteger> bidRealDoRival(
 			br.com.node.ensaio.Desfechos.Desfecho desfecho,
 			RpcDoEnsaio rpc) {
