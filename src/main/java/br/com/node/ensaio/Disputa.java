@@ -143,6 +143,7 @@ public final class Disputa {
 		r.put("vencedor_gas_usado", gasUsado == null ? null : gasUsado.toString());
 		r.put("fracao_do_vencedor_milha", fracao(pagoDireto, lucro));
 		r.put("pagamentos_a_builder_no_bloco", vencedor.get("pagamentos_a_builder_no_bloco"));
+		r.put("transferencias_de_valor_no_bloco", vencedor.get("transferencias_de_valor_no_bloco"));
 		r.put("casamento_do_pagamento", "hash");
 
 		BigInteger faltou = nosso != null && pagoDireto.compareTo(nosso) > 0 ? pagoDireto.subtract(nosso) : null;
@@ -154,8 +155,10 @@ public final class Disputa {
 		} else if (!perdemos) {
 			veredito = veredito(classe, false, false, nosso, null, null, null);
 		} else if (pagoDireto.signum() == 0) {
-			veredito = "perdemos: o vencedor não enviou BNB direto a builder (taxa de gás "
-					+ (taxa == null ? "desconhecida" : taxa + " wei") + ")";
+			// Não afirmamos ausência: a busca cobre só o remetente exato e três builders. A lista completa de
+			// transferências do bloco está em transferencias_de_valor_no_bloco.
+			veredito = "perdemos: nenhum BNB do remetente vencedor para as builders conhecidas (taxa de gás "
+					+ (taxa == null ? "desconhecida" : taxa + " wei") + "); ver transferencias_de_valor_no_bloco";
 		} else if (faltou != null) {
 			veredito = "perdemos por lance: vencedor enviou " + pagoDireto + " wei à builder, nós " + nosso
 					+ " wei; faltaram " + faltou + " wei";

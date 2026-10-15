@@ -34,6 +34,8 @@ class VencedorDoLeilaoTest {
 		assertEquals(1, v.getAsJsonArray("pagamentos_a_builder_no_bloco").size());
 		// O pagamento do vencedor está na tx vizinha (posição 1, mesmo remetente), não na própria arbitragem.
 		assertEquals("1", v.get("pagamento_do_vencedor_wei").getAsString());
+		// A lista completa traz as duas transferências de valor do bloco (posições 1 e a da builder).
+		assertEquals(1, v.getAsJsonArray("transferencias_de_valor_no_bloco").size());
 	}
 
 	@Test
