@@ -279,6 +279,7 @@ public final class Disparo implements Closeable {
 		this.laudos = laudos;
 		this.quarentena = quarentena;
 		this.medidor = new MedidorDeGas(rpc);
+		this.medidor.aoCalibrar(custoDeGas::fatorDeGas);
 		this.privada = carregarChave();
 		this.endereco = privada
 				.map(p -> HexFormat.of().formatHex(Arrays.copyOfRange(Keccak.hash(Secp256k1.id(p)), 12, 32)))

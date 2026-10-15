@@ -30,6 +30,8 @@ public final class MedidorDeGas implements Closeable {
 	// no bloco seguinte. Cinco tentativas de 3 s cobrem ~4 blocos sem segurar nada.
 	private static final int TENTATIVAS = 5;
 	private static final long ESPERA_MS = 3_000;
+	// Abaixo disso, a mediana é ruído: o piso segue com a estimativa analítica.
+	static final int AMOSTRAS_PARA_CALIBRAR = 5;
 
 	private record Amostra(BigInteger estimado, BigInteger medido, boolean sucesso) {
 	}
@@ -90,6 +92,35 @@ public final class MedidorDeGas implements Closeable {
 	// a prova, sem rede.
 	void registrar(BigInteger estimado, BigInteger medido, boolean sucesso) {
 		amostras.add(new Amostra(estimado, medido, sucesso));
+		int fator = fatorMilesimos(amostrasCopia());
+		if (fator > 0) {
+			aoCalibrar.accept(fator);
+		}
+	}
+
+	// Quem usa o fator (o piso) recebe a mediana do gás medido sobre o estimado, em milésimos, quando já há
+	// amostras suficientes. Antes disso, o piso segue com a estimativa analítica.
+	private volatile java.util.function.IntConsumer aoCalibrar = fator -> {
+	};
+
+	public void aoCalibrar(java.util.function.IntConsumer ouvinte) {
+		this.aoCalibrar = ouvinte;
+	}
+
+	private List<Amostra> amostrasCopia() {
+		synchronized (amostras) {
+			return List.copyOf(amostras);
+		}
+	}
+
+	// Função pura: mediana de medido/estimado em milésimos. Zero enquanto não houver amostras suficientes.
+	static int fatorMilesimos(List<Amostra> copia) {
+		List<BigInteger> razoes = copia.stream().filter(a -> a.estimado().signum() > 0)
+				.map(a -> a.medido().multiply(BigInteger.valueOf(1000)).divide(a.estimado())).sorted().toList();
+		if (razoes.size() < AMOSTRAS_PARA_CALIBRAR) {
+			return 0;
+		}
+		return razoes.get(razoes.size() / 2).intValue();
 	}
 
 	private static long desvioPercentual(BigInteger estimado, BigInteger medido) {
