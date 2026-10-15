@@ -32,6 +32,18 @@ class VencedorDoLeilaoTest {
 		assertFalse(v.get("direto_a_builder").getAsBoolean());
 		assertEquals(BUILDER, v.get("minerador").getAsString());
 		assertEquals(1, v.getAsJsonArray("pagamentos_a_builder_no_bloco").size());
+		// O pagamento do vencedor está na tx vizinha (posição 1, mesmo remetente), não na própria arbitragem.
+		assertEquals("1", v.get("pagamento_do_vencedor_wei").getAsString());
+	}
+
+	@Test
+	void pagamentoDeOutroRemetenteNaoEContaDoVencedor() {
+		JsonObject b = JsonParser.parseString("{\"number\":\"0x7c5a3f0\",\"miner\":\"0x" + BUILDER + "\",\"transactions\":["
+				+ "{\"hash\":\"0x01\",\"from\":\"0x" + VENCEDOR + "\",\"to\":\"0xdd00000000000000000000000000000000000004\",\"value\":\"0x0\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x0\"},"
+				+ "{\"hash\":\"0x02\",\"from\":\"0xbb00000000000000000000000000000000000002\",\"to\":\"0x" + BUILDER + "\",\"value\":\"0x5\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x1\"}"
+				+ "]}").getAsJsonObject();
+		JsonObject v = VencedorDoLeilao.extrair("0xnossa", "rival_n1", 101, 0, b, Set.of(BUILDER));
+		assertEquals("0", v.get("pagamento_do_vencedor_wei").getAsString());
 	}
 
 	@Test

@@ -461,6 +461,15 @@ public final class Main {
 
 	// Lê o bloco do vencedor e grava quem ganhou e quanto levou, ligado à nossa tentativa pelo hash.
 	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
+		try {
+			gravarVencedor(desfecho, rpc, arquivo);
+		} catch (RuntimeException e) {
+			// O executor engole exceção de tarefa: sem este registro, a perda some sem nenhum sinal.
+			LOG.warning(() -> "vencedor do leilão não lido para " + desfecho.envio().hash() + ": " + e);
+		}
+	}
+
+	private static void gravarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
 
 		int saltos = desfecho.classe().endsWith("n2") ? 2 : 1;
 		long alturaDoVencedor = desfecho.envio().altura() + saltos;

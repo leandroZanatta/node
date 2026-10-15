@@ -28,6 +28,8 @@ public final class VencedorDoLeilao {
 
 	private static final Logger LOG = Logger.getLogger(VencedorDoLeilao.class.getName());
 	private static final BigInteger SEM_VALOR = BigInteger.ZERO;
+	// Quantas posições ao redor da transação vencedora olhamos para achar o pagamento dela.
+	static final int JANELA_POSICAO = 3;
 
 	private VencedorDoLeilao() {
 	}
@@ -72,6 +74,17 @@ public final class VencedorDoLeilao {
 			pagamentos.add(linha);
 		}
 		r.add("pagamentos_a_builder_no_bloco", pagamentos);
+
+		// O pagamento do VENCEDOR: BNB que o remetente dele mandou a uma builder, na própria tx ou numa tx vizinha
+		// (o lance costuma ser uma transferência separada, do mesmo remetente, logo depois da arbitragem).
+		String de = semPrefixo(texto(tx, "from"));
+		BigInteger pagoPeloVencedor = BigInteger.ZERO;
+		for (PagamentosDeBloco.Pagamento p : PagamentosDeBloco.interpretar(bloco, enderecosDeBuilder)) {
+			if (de != null && de.equals(p.de()) && Math.abs(p.posicao() - posicao) <= JANELA_POSICAO) {
+				pagoPeloVencedor = pagoPeloVencedor.add(p.valorWei());
+			}
+		}
+		r.addProperty("pagamento_do_vencedor_wei", pagoPeloVencedor.toString());
 		return r;
 	}
 

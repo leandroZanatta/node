@@ -117,8 +117,9 @@ public final class Disputa {
 		boolean perdemos = classe.startsWith("rival") || classe.startsWith("pool_mexida");
 		boolean levamos = "incluida".equals(classe);
 
-		BigInteger pagoDireto = "true".equals(String.valueOf(vencedor.get("direto_a_builder")))
-				? new BigInteger(texto(vencedor, "valor_wei")) : BigInteger.ZERO;
+		// O que o vencedor mandou à builder, na própria tx ou numa vizinha do mesmo remetente (ver VencedorDoLeilao).
+		BigInteger pagoDireto = vencedor.has("pagamento_do_vencedor_wei")
+				? new BigInteger(texto(vencedor, "pagamento_do_vencedor_wei")) : BigInteger.ZERO;
 		BigInteger gasPrice = new BigInteger(texto(vencedor, "gas_price_wei"));
 		BigInteger gasUsado = vencedor.has("gas_usado_vencedor") ? new BigInteger(texto(vencedor, "gas_usado_vencedor")) : null;
 		BigInteger taxa = gasUsado == null ? null : gasPrice.multiply(gasUsado);
@@ -126,6 +127,9 @@ public final class Disputa {
 		Map<String, Object> r = new LinkedHashMap<>();
 		r.put("altura", altura);
 		r.put("classe", classe);
+		// Em rival_* o vencedor é a arbitragem de outro bot. Em pool_mexida é a transação que mexeu na pool,
+		// que pode nem ser um lance: não chame de "vencedor do leilão" sem olhar o tipo.
+		r.put("tipo_do_vencedor", classe.startsWith("rival") ? "arbitragem_do_rival" : "transacao_que_moveu_a_pool");
 		r.put("posicao_do_vencedor", inteiro(desfecho, "posicao"));
 		r.put("nosso_lance_bnb_wei", nosso == null ? null : nosso.toString());
 		r.put("nosso_lucro_bnb_wei", lucro == null ? null : lucro.toString());
