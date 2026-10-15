@@ -144,6 +144,9 @@ public final class Disputa {
 		r.put("fracao_do_vencedor_milha", fracao(pagoDireto, lucro));
 		r.put("pagamentos_a_builder_no_bloco", vencedor.get("pagamentos_a_builder_no_bloco"));
 		r.put("transferencias_de_valor_no_bloco", vencedor.get("transferencias_de_valor_no_bloco"));
+		r.put("transferencias_internas", vencedor.get("transferencias_internas"));
+		r.put("fonte_transferencias_internas", vencedor.get("fonte_transferencias_internas"));
+		r.put("transferencias_internas_erro", vencedor.get("transferencias_internas_erro"));
 		r.put("casamento_do_pagamento", "hash");
 
 		BigInteger faltou = nosso != null && pagoDireto.compareTo(nosso) > 0 ? pagoDireto.subtract(nosso) : null;

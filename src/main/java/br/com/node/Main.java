@@ -488,6 +488,9 @@ public final class Main {
 					alturaDoVencedor, desfecho.posicao(), bloco,
 					br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 			if (linha.has("hash_vencedor")) {
+				// Quem recebeu BNB DENTRO da transação vencedora (o trace, ou a API do BscScan).
+				br.com.node.ensaio.TransferenciasInternas.anexar(rpc, linha.get("hash_vencedor").getAsString(),
+						System.getenv("BSCSCAN_API_KEY"), linha);
 				rpc.recibo(linha.get("hash_vencedor").getAsString()).ifPresent(r -> {
 					linha.addProperty("sucesso_vencedor", r.sucesso());
 					linha.addProperty("gas_usado_vencedor", r.gasUsado().toString());
