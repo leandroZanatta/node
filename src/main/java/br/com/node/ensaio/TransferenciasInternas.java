@@ -27,8 +27,13 @@ public final class TransferenciasInternas {
 	public record Transferencia(String de, String para, BigInteger valorWei) {
 	}
 
-	private static final String API_BSCSCAN = "https://api.bscscan.com/api";
-	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+	// O endereço antigo do BscScan responde 301 (redirecionado). O cliente padrão do Java NÃO segue redirecionamento,
+	// e isso fazia a consulta falhar em silêncio. Por isso: segue redirecionamento, e a URL é configurável
+	// (BSCSCAN_API_URL), para trocar sem recompilar se o provedor mudar de novo.
+	private static final String API_PADRAO = "https://api.etherscan.io/v2/api?chainid=56";
+	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+			.followRedirects(HttpClient.Redirect.NORMAL).build();
+	private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(TransferenciasInternas.class.getName());
 
 	private TransferenciasInternas() {
 	}
@@ -70,15 +75,21 @@ public final class TransferenciasInternas {
 
 	// Transações internas pela API do BscScan. Vazio se a chamada falhar.
 	public static Optional<List<Transferencia>> consultarBscScan(String hash, String chave) {
-		String url = API_BSCSCAN + "?module=account&action=txlistinternal&txhash=" + hash + "&apikey=" + chave;
+		String base = java.util.Optional.ofNullable(System.getenv("BSCSCAN_API_URL")).map(String::trim)
+				.filter(u -> !u.isBlank()).orElse(API_PADRAO);
+		String url = base + (base.contains("?") ? "&" : "?") + "module=account&action=txlistinternal&txhash=" + hash
+				+ "&apikey=" + chave;
 		try {
 			HttpRequest pedido = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15)).GET().build();
 			HttpResponse<String> resposta = HTTP.send(pedido, HttpResponse.BodyHandlers.ofString());
 			if (resposta.statusCode() != 200) {
+				LOG.warning(() -> "BscScan respondeu HTTP " + resposta.statusCode() + " para " + hash);
 				return Optional.empty();
 			}
 			JsonObject corpo = JsonParser.parseString(resposta.body()).getAsJsonObject();
 			if (!corpo.has("result") || !corpo.get("result").isJsonArray()) {
+				// Ex.: chave inválida ou limite de uso. A mensagem da API vem em "result" como texto.
+				LOG.warning(() -> "BscScan sem lista para " + hash + ": " + corpo);
 				return Optional.empty();
 			}
 			List<Transferencia> lista = new ArrayList<>();
