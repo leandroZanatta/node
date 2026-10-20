@@ -6883,3 +6883,145 @@ out. 11, 2026 4:58:16 AM br.com.node.catalogo.Quentes carregar
 INFO: quentes: /tmp/junit6986829380456750952/quentes.json não existe — começa vazio e aquece pelo organizador e pelas arbitragens
 out. 11, 2026 4:58:16 AM br.com.node.catalogo.Quentes carregar
 INFO: quentes: 1 pools quentes e 1 contagens carregadas de /tmp/junit6986829380456750952/quentes.json
+out. 20, 2026 3:20:54 PM br.com.node.util.Diario ligar
+INFO: diário ligado: console + logs/node-%g.log
+out. 20, 2026 3:20:54 PM br.com.node.repository.postgres.Postgres migrar
+INFO: aplicando esquema em jdbc:postgresql://127.0.0.1:5432/arbitragens (lock_timeout de 10s)
+out. 20, 2026 3:20:54 PM br.com.node.repository.postgres.Postgres migrar
+INFO: esquema aplicado em jdbc:postgresql://127.0.0.1:5432/arbitragens
+out. 20, 2026 3:20:55 PM br.com.node.repository.postgres.Postgres migrar
+INFO: aplicando esquema em jdbc:postgresql://127.0.0.1:5432/arbitragens (lock_timeout de 10s)
+out. 20, 2026 3:20:55 PM br.com.node.repository.postgres.Postgres migrar
+INFO: esquema aplicado em jdbc:postgresql://127.0.0.1:5432/arbitragens
+out. 20, 2026 3:20:55 PM br.com.node.repository.postgres.Postgres migrar
+INFO: aplicando esquema em jdbc:postgresql://127.0.0.1:5432/arbitragens (lock_timeout de 10s)
+out. 20, 2026 3:20:55 PM br.com.node.repository.postgres.Postgres migrar
+INFO: esquema aplicado em jdbc:postgresql://127.0.0.1:5432/arbitragens
+out. 20, 2026 3:20:55 PM br.com.node.ensaio.Backrun anotarRecusa
+INFO: piso: melhor recusa em 9999 bps (gás 218560 · custo 218560000000000 · piso 218560000000001 · lucro 218560000000000 · líquido 0 — custo, piso, lucro e líquido em wei DO TOKEN DA RAIZ) · raiz bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c · 1 pernas · entrada 1000000000000000000 · não cobre o gás com sobra · pools 1111111111111111111111111111111111111111
+out. 20, 2026 3:20:55 PM br.com.node.ensaio.Backrun considerar
+INFO: backrun: despacho lucro 218560000000001 wei, 1 pernas (cauda)
+out. 20, 2026 3:20:55 PM br.com.node.ensaio.Backrun anotarRecusa
+INFO: piso: melhor recusa em 9999 bps (gás 218560 · custo 218560000000000 · piso 218560000000001 · lucro 218560000000000 · líquido 0 — custo, piso, lucro e líquido em wei DO TOKEN DA RAIZ) · raiz bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c · 1 pernas · entrada 1000000000000000000 · não cobre o gás com sobra · pools 1111111111111111111111111111111111111111
+out. 20, 2026 3:20:55 PM br.com.node.ensaio.RelayPrivado <init>
+INFO: relay privado: ativo em a (eth_sendBundle), b (eth_sendBundle)
+out. 20, 2026 3:20:59 PM br.com.node.ensaio.Gabarito confirmar
+INFO: gabarito: ACERTO n+1 — arbitragem alheia na altura 100 nas pools [550c36d2c777f8621d300f2aa9da4fda5aefffe5, 5aca9563f8d14a6d79f12421d549a5606644a270] rendeu 70 (token bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c); nós achamos 0 ms antes, prevendo 2 (raiz bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c)
+out. 20, 2026 3:20:59 PM br.com.node.rede.PortaUdp abrir
+INFO: porta UDP 40244 aberta
+out. 20, 2026 3:20:59 PM br.com.node.descoberta.Descoberta iniciar
+INFO: descoberta iniciada com 6 sementes
+out. 20, 2026 3:21:01 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 6 sessões, 3 provadas, 3 na tabela, 0 redes declaradas
+out. 20, 2026 3:21:01 PM br.com.node.util.Falhas anotar
+WARNING: FALHA em datagrama descartado (1ª): br.com.node.exception.PeerException: Falha ao enviar datagrama para /95.216.147.18:30303: Socket closed
+br.com.node.exception.PeerException: Falha ao enviar datagrama para /95.216.147.18:30303: Socket closed
+	at br.com.node.rede.PortaUdp.enviar(PortaUdp.java:53)
+	at br.com.node.sessao.ConexaoUdp.enviar(ConexaoUdp.java:45)
+	at br.com.node.sessao.Sessao.enviar(Sessao.java:390)
+	at br.com.node.sessao.Sessao.handshake(Sessao.java:96)
+	at br.com.node.descoberta.Descoberta.aprender(Descoberta.java:140)
+	at br.com.node.descoberta.Descoberta.receber(Descoberta.java:123)
+	at br.com.node.rede.PortaUdp.receber(PortaUdp.java:83)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+out. 20, 2026 3:21:01 PM br.com.node.rede.PortaUdp receber
+INFO: porta UDP encerrada
+out. 20, 2026 3:21:01 PM br.com.node.rede.PortaUdp abrir
+INFO: porta UDP 44533 aberta
+out. 20, 2026 3:21:01 PM br.com.node.descoberta.Descoberta iniciar
+INFO: descoberta iniciada com 6 sementes
+out. 20, 2026 3:21:03 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 6 sessões, 3 provadas, 3 na tabela, 0 redes declaradas
+out. 20, 2026 3:21:18 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 54 sessões, 50 provadas, 38 na tabela, 1 redes declaradas
+out. 20, 2026 3:21:19 PM br.com.node.rede.PortaUdp receber
+INFO: porta UDP encerrada
+out. 20, 2026 3:21:19 PM br.com.node.rede.PortaUdp abrir
+INFO: porta UDP 49557 aberta
+out. 20, 2026 3:21:19 PM br.com.node.descoberta.Descoberta iniciar
+INFO: descoberta iniciada com 6 sementes
+out. 20, 2026 3:21:19 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 0/25 ativas, 0 abrindo, 0 penalizados, quedas: {}, não tratados: {}
+out. 20, 2026 3:21:21 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 6 sessões, 3 provadas, 3 na tabela, 0 redes declaradas
+out. 20, 2026 3:21:24 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 0/25 ativas, 46 abrindo, 0 penalizados, quedas: {}, não tratados: {}
+out. 20, 2026 3:21:29 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 0/25 ativas, 12 abrindo, 34 penalizados, quedas: {abertura · conexão caiu=2, abertura · derrubou antes do Status: peers demais=9, abertura · derrubou antes do Status: peer inútil=7, abertura · inalcançável=8, abertura · outra cadeia no Status=2, abertura · derrubou antes do Hello: peers demais=3, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:34 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 0/25 ativas, 0 abrindo, 46 penalizados, quedas: {abertura · conexão caiu=2, abertura · derrubou antes do Status: peers demais=9, abertura · derrubou antes do Status: peer inútil=8, abertura · inalcançável=15, abertura · outra cadeia no Status=5, abertura · derrubou antes do Hello: peers demais=4, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:36 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 51 sessões, 48 provadas, 38 na tabela, 1 redes declaradas
+out. 20, 2026 3:21:39 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 0/25 ativas, 85 abrindo, 46 penalizados, quedas: {abertura · conexão caiu=2, abertura · derrubou antes do Status: peers demais=9, abertura · derrubou antes do Status: peer inútil=8, abertura · inalcançável=15, abertura · outra cadeia no Status=5, abertura · derrubou antes do Hello: peers demais=4, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:44 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 56 abrindo, 71 penalizados, quedas: {abertura · conexão caiu=8, abertura · derrubou antes do Status: peers demais=10, abertura · derrubou antes do Status: peer inútil=9, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=21, abertura · outra cadeia no Status=7, abertura · derrubou antes do Hello: peers demais=12, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:44 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[35b04a4e68acb284…@208.91.105.173:30315] terminou: conexão caiu
+out. 20, 2026 3:21:49 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 53 abrindo, 74 penalizados, quedas: {abertura · conexão caiu=8, conversa · conexão caiu=1, abertura · derrubou antes do Status: peers demais=10, abertura · derrubou antes do Status: peer inútil=9, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=22, abertura · outra cadeia no Status=7, abertura · derrubou antes do Hello: peers demais=13, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:51 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 148 sessões, 133 provadas, 67 na tabela, 5 redes declaradas
+out. 20, 2026 3:21:54 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 53 abrindo, 74 penalizados, quedas: {abertura · conexão caiu=8, conversa · conexão caiu=1, abertura · derrubou antes do Status: peers demais=10, abertura · derrubou antes do Status: peer inútil=9, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=22, abertura · outra cadeia no Status=7, abertura · derrubou antes do Hello: peers demais=13, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:21:59 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 44 abrindo, 83 penalizados, quedas: {abertura · conexão caiu=11, conversa · conexão caiu=1, abertura · derrubou antes do Status: peers demais=10, abertura · derrubou antes do Status: peer inútil=11, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=22, abertura · outra cadeia no Status=8, abertura · derrubou antes do Hello: peers demais=16, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:04 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 38 abrindo, 89 penalizados, quedas: {abertura · conexão caiu=12, conversa · conexão caiu=1, abertura · derrubou antes do Status: peers demais=11, abertura · derrubou antes do Status: peer inútil=11, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=24, abertura · outra cadeia no Status=10, abertura · derrubou antes do Hello: peers demais=16, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:06 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 222 sessões, 199 provadas, 79 na tabela, 17 redes declaradas
+out. 20, 2026 3:22:08 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[315e23e64a99f688…@44.205.48.69:30303] terminou: conexão caiu
+out. 20, 2026 3:22:09 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 31 abrindo, 96 penalizados, quedas: {abertura · conexão caiu=12, conversa · conexão caiu=2, abertura · derrubou antes do Status: peers demais=11, abertura · derrubou antes do Status: peer inútil=13, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=26, abertura · outra cadeia no Status=10, abertura · derrubou antes do Hello: peers demais=18, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:11 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[44c642a73156f6f0…@147.135.94.52:30303] terminou: conexão caiu
+out. 20, 2026 3:22:13 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[f7118db45c6e2742…@131.153.207.141:30320] terminou: conexão caiu
+out. 20, 2026 3:22:14 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 2/25 ativas, 41 abrindo, 112 penalizados, quedas: {abertura · conexão caiu=20, conversa · conexão caiu=4, abertura · derrubou antes do Status: peers demais=11, abertura · derrubou antes do Status: peer inútil=14, abertura · derrubou antes do Status: erro de subprotocolo=1, abertura · inalcançável=27, abertura · outra cadeia no Status=11, abertura · derrubou antes do Hello: peers demais=21, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:19 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 2/25 ativas, 53 abrindo, 136 penalizados, quedas: {abertura · conexão caiu=29, conversa · conexão caiu=4, abertura · derrubou antes do Status: peers demais=19, abertura · derrubou antes do Status: peer inútil=14, abertura · derrubou antes do Status: erro de subprotocolo=2, abertura · inalcançável=31, abertura · outra cadeia no Status=13, abertura · derrubou antes do Hello: peers demais=25, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:21 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 310 sessões, 278 provadas, 84 na tabela, 22 redes declaradas
+out. 20, 2026 3:22:24 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 5/25 ativas, 29 abrindo, 159 penalizados, quedas: {abertura · conexão caiu=37, conversa · conexão caiu=4, abertura · derrubou antes do Status: peers demais=22, abertura · derrubou antes do Status: peer inútil=22, abertura · derrubou antes do Status: erro de subprotocolo=2, abertura · inalcançável=35, abertura · outra cadeia no Status=15, abertura · derrubou antes do Hello: peers demais=33, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:28 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[fd01dad915897ce0…@100.28.71.30:30311] terminou: derrubou: peer inútil
+out. 20, 2026 3:22:29 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 4/25 ativas, 56 abrindo, 183 penalizados, quedas: {abertura · conexão caiu=40, conversa · conexão caiu=4, abertura · derrubou antes do Status: peers demais=24, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=24, abertura · derrubou antes do Status: erro de subprotocolo=3, abertura · inalcançável=46, abertura · outra cadeia no Status=17, abertura · derrubou antes do Hello: peers demais=36, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:31 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[98e1c65f1ec46fa3…@15.204.152.155:30303] terminou: conexão caiu
+out. 20, 2026 3:22:34 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 3/25 ativas, 35 abrindo, 201 penalizados, quedas: {abertura · conexão caiu=46, conversa · conexão caiu=5, abertura · derrubou antes do Status: peers demais=25, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=27, abertura · derrubou antes do Status: erro de subprotocolo=4, abertura · inalcançável=52, abertura · outra cadeia no Status=19, abertura · derrubou antes do Hello: peers demais=38, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:36 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 355 sessões, 319 provadas, 84 na tabela, 33 redes declaradas
+out. 20, 2026 3:22:37 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[67dd6cc1cfdd993b…@54.220.37.162:30303] terminou: conexão caiu
+out. 20, 2026 3:22:39 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[101d916ebbd1d911…@65.108.237.103:30311] terminou: derrubou: peers demais
+out. 20, 2026 3:22:39 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 2/25 ativas, 26 abrindo, 211 penalizados, quedas: {abertura · conexão caiu=49, conversa · conexão caiu=6, abertura · derrubou antes do Status: peers demais=26, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=30, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=56, abertura · outra cadeia no Status=19, abertura · derrubou antes do Hello: peers demais=39, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:44 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 2/25 ativas, 71 abrindo, 227 penalizados, quedas: {abertura · conexão caiu=52, conversa · conexão caiu=6, abertura · derrubou antes do Status: peers demais=28, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=35, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=60, abertura · outra cadeia no Status=19, abertura · derrubou antes do Hello: peers demais=44, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:44 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[82e2c7089aa57bf1…@64.130.59.47:30314] terminou: conexão caiu
+out. 20, 2026 3:22:44 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[8800bbcf0b084496…@198.244.205.49:30303] terminou: conexão caiu
+out. 20, 2026 3:22:45 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[e7bac1aea99a8dd7…@208.91.105.173:30319] terminou: conexão caiu
+out. 20, 2026 3:22:49 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 5/25 ativas, 39 abrindo, 251 penalizados, quedas: {abertura · conexão caiu=59, conversa · conexão caiu=9, abertura · derrubou antes do Status: peers demais=29, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=37, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=67, abertura · outra cadeia no Status=21, abertura · derrubou antes do Hello: peers demais=51, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:49 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[133fa7eeae827108…@64.130.57.172:30315] terminou: conexão caiu
+out. 20, 2026 3:22:50 PM br.com.node.sessao.Lotacao atender
+INFO: conversa com NoRemoto[3ed9a133243cab10…@51.195.39.186:30303] terminou: conexão caiu
+out. 20, 2026 3:22:51 PM br.com.node.descoberta.Descoberta rodada
+INFO: rodada: 418 sessões, 382 provadas, 93 na tabela, 38 redes declaradas
+out. 20, 2026 3:22:54 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 5/25 ativas, 22 abrindo, 267 penalizados, quedas: {abertura · conexão caiu=63, conversa · conexão caiu=11, abertura · derrubou antes do Status: peers demais=29, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=39, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=74, abertura · outra cadeia no Status=21, abertura · derrubou antes do Hello: peers demais=53, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:22:59 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 5/25 ativas, 65 abrindo, 284 penalizados, quedas: {abertura · conexão caiu=68, conversa · conexão caiu=11, abertura · derrubou antes do Status: peers demais=29, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=39, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=82, abertura · outra cadeia no Status=23, abertura · derrubou antes do Hello: peers demais=55, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}
+out. 20, 2026 3:23:04 PM br.com.node.sessao.Lotacao rodada
+INFO: lotação: 5/25 ativas, 23 abrindo, 302 penalizados, quedas: {abertura · conexão caiu=76, conversa · conexão caiu=11, abertura · derrubou antes do Status: peers demais=38, conversa · derrubou: peer inútil=1, abertura · derrubou antes do Status: peer inútil=46, abertura · derrubou antes do Status: erro de subprotocolo=4, conversa · derrubou: peers demais=1, abertura · inalcançável=90, abertura · outra cadeia no Status=26, abertura · derrubou antes do Hello: peers demais=62, abertura · derrubou antes do Hello: peer inútil=3}, não tratados: {}

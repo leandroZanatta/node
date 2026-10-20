@@ -290,6 +290,33 @@ public final class RpcDoEnsaio {
 		return corpo.map(RpcDoEnsaio::interpretar).orElse(new Veredicto("sem_resposta", ""));
 	}
 
+	// Trace opcional de uma chamada que reverteu. `callTracer` revela qual token recebeu
+	// `transfer()` e qual frame devolveu TF. É diagnóstico fora do caminho quente; nós sem
+	// namespace debug retornam erro JSON-RPC e o chamador registra essa indisponibilidade.
+	public Optional<JsonObject> rastrearChamada(String de, String para, String dados, String bloco) {
+		JsonObject chamada = new JsonObject();
+		chamada.addProperty("from", comPrefixo(de));
+		chamada.addProperty("to", comPrefixo(para));
+		chamada.addProperty("data", comPrefixo(dados));
+		JsonObject configuracao = new JsonObject();
+		configuracao.addProperty("tracer", "callTracer");
+		configuracao.addProperty("timeout", "3s");
+		JsonArray parametros = new JsonArray();
+		parametros.add(chamada);
+		parametros.add(bloco);
+		parametros.add(configuracao);
+
+		return chamar("debug_traceCall", parametros).flatMap(corpo -> {
+			try {
+				JsonObject json = JsonParser.parseString(corpo).getAsJsonObject();
+				return json.has("result") && json.get("result").isJsonObject()
+						? Optional.of(json.getAsJsonObject("result")) : Optional.empty();
+			} catch (RuntimeException e) {
+				return Optional.empty();
+			}
+		});
+	}
+
 	// O `eth_call` com OVERRIDE de estado (o terceiro parâmetro): é como a `Autopsia` roda um código que
 	// não está deployado no endereço do Executor. Devolve o CORPO cru — o laudo vem no `data` do erro,
 	// e quem o lê é quem sabe decodificá-lo. Vazio só quando nenhum nó respondeu.

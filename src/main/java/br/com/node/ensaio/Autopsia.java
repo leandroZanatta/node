@@ -42,9 +42,11 @@ import br.com.node.nucleo.Travessia;
 // `eth_call` com o código trocado no endereço do Executor — e recebe de volta o que a cadeia entregou
 // em cada perna.
 //
-// A comparação que isola a culpa: para cada perna, o modelo é recalculado com a entrada que a CADEIA
-// produziu até ali, não com a do plano. Assim o erro de uma perna não contamina as seguintes, e a
-// culpada é a que diverge sozinha. E a classe do erro sai do próprio laudo:
+// Quando a sonda produz laudo, a comparação isola a culpa: para cada perna, o modelo é recalculado com
+// a entrada que a CADEIA produziu até ali, não com a do plano. Assim o erro de uma perna não contamina
+// as seguintes, e a culpada é a que diverge sozinha. A sonda atual não executa flash loan com ponta V3;
+// nesse caso o erro dela não é um laudo da execução real e não pode condenar a pool. E a classe do erro
+// sai do próprio laudo:
 //   - REVERTEU:        a perna reverteu (motivo cru no laudo);
 //   - TAXA_SUBESTIMADA: a perna V2 reverteu pelo invariante (`K`): pedimos a saída com a nossa taxa e o
 //                      par cobra mais — o caso da 7a3eb6e7 (5 bps provados, 10% cobrados de nós);
@@ -64,6 +66,7 @@ public final class Autopsia implements Closeable {
 			.seletor("autopsiar((address,address,address,uint8,uint16)[],uint256)");
 	private static final String LAUDO = HexFormat.of().formatHex(AbiDoExecutor.seletor(
 			"Laudo(uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256,bytes,bytes4)"));
+	private static final String EMPRESTIMO_NAO_V2 = "7978d88b";
 
 	// Os callbacks de flash swap que o Executor IMPLEMENTA. A pool que chama outro nome faz a rota
 	// real reverter sem dado nenhum — o "0x" do veredito.
@@ -238,11 +241,15 @@ public final class Autopsia implements Closeable {
 
 		if (laudo.isEmpty()) {
 			semLaudo.incrementAndGet();
-			publicar(hashEnviado, semLaudo(achado, chamada, desfecho, veredito, corpo.orElse(null)));
+			publicar(hashEnviado, semLaudo(achado, chamada, desfecho, veredito, corpo.orElse(null), extras));
 			return;
 		}
 
 		Map<String, Object> registro = comparar(achado, chamada, laudo.get());
+		if (laudo.get().falhouEm() < 0) {
+			quarentena.absolverRota(chamada.rota().stream()
+					.map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList());
+		}
 		registro.put("desfecho", desfecho);
 		registro.put("veredito", veredito);
 		if (extras != null) {
@@ -596,11 +603,11 @@ public final class Autopsia implements Closeable {
 		return pedirCorpo(operador, contrato, chamada, bloco).flatMap(Autopsia::lerLaudo);
 	}
 
-	// SEM LAUDO também é resultado, e é gravado. O caso medido em 23/09: `Pancake: TRANSFER_FAILED` na
-	// perna do EMPRÉSTIMO — o par reverte ao nos mandar o token, antes de chamar o callback, então o laudo
-	// (que sai do callback) nunca nasce. Se a rota nem começa, a culpada é a pool que empresta.
+	// SEM LAUDO também é resultado, e é gravado. Sem a resposta da sonda, a causa só pode ser atribuída
+	// quando o veredito do Executor identifica algo explícito. Um erro genérico do runtime da sonda não
+	// prova que a primeira pool falhou; em rota com ponta V3 a própria sonda tem uma limitação conhecida.
 	private Map<String, Object> semLaudo(Achado achado, RotaDoModelo.Chamada chamada, String desfecho, String veredito,
-			String corpo) {
+			String corpo, Map<String, Object> extras) {
 
 		String motivo = corpo == null ? "nenhum nó respondeu" : RpcDoEnsaio.interpretar(corpo).texto();
 		String motivoFinal = motivo.isBlank() ? String.valueOf(corpo).substring(0, Math.min(300, String.valueOf(corpo).length()))
@@ -616,42 +623,78 @@ public final class Autopsia implements Closeable {
 		registro.put("desfecho", desfecho);
 		registro.put("veredito", veredito);
 		registro.put("motivo", motivoFinal);
+		registro.put("motivo_sonda", motivoFinal);
+		registro.put("motivo_executor", motivoDoVeredito(veredito).trim());
 		registro.put("montante", chamada.montante().toString());
 		registro.put("lucro_previsto", achado.oportunidade().lucro().toString());
 		registro.put("rota", pools);
 
-		boolean emprestimoReverteu = corpo != null && !motivo.isBlank();
+		String motivoExecutor = motivoDoVeredito(veredito).trim();
+		boolean sondaSemFlashV3 = !chamada.rota().isEmpty() && chamada.rota().get(0).v3()
+				&& (motivo.toLowerCase(java.util.Locale.ROOT).contains(EMPRESTIMO_NAO_V2)
+						|| motivo.toLowerCase(java.util.Locale.ROOT).contains("emprestimonaov2"));
+		boolean transferenciaFalhou = transferenciaFalhou(motivoExecutor);
 
-		if (emprestimoReverteu) {
-			if (overflow(motivo)) {
-				// OVERFLOW pode ser em QUALQUER perna V2 da rota, não só na emprestadora.
-				// CICATRIZ de 10/10: quarentenávamos sempre rota[0]; se o overflow era numa perna
-				// intermediária a pool ruim ficava livre e o mesmo erro se repetia em massa antes de
-				// a próxima autopsia terminar. Pena de estado (3 h): o estado inválido persiste
-				// até a próxima Sync válida chegar, e 30 min não é suficiente.
-				chamada.rota().stream()
-						.filter(s -> !s.v3() && !s.deGerente())
-						.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()), PENA_DE_ESTADO,
-								"Pancake: OVERFLOW na rota em " + registro.get("instante")));
-				porClasse.computeIfAbsent("OVERFLOW", k -> new AtomicLong()).incrementAndGet();
-			} else {
-				byte[] emprestadora = HexFormat.of().parseHex(chamada.rota().get(0).pool());
-				// PROIBIÇÃO não passa com o tempo. CICATRIZ de 26/09: o par Demax d87c1fff respondeu "DEMAX PAIR :
-				// FORBIDDEN" às 15:26, cumpriu os 30 min e às 16:01 foi despachado de novo — mesmo revert. O que o
-				// par recusa por regra fica fora pelo teto da quarentena; o resto (estado, liquidez) segue a pena curta.
-				Duration pena = proibicao(motivo) ? PENA_DE_PROIBICAO : PENA;
-				quarentena.condenar(emprestadora, pena, "empréstimo reverteu (" + motivo + ") em " + registro.get("instante"));
-				registro.put("culpada", Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "EMPRESTIMO_REVERTEU"));
-				porClasse.computeIfAbsent("EMPRESTIMO_REVERTEU", k -> new AtomicLong()).incrementAndGet();
-			}
-		} else {
+		// A sonda substitui o bytecode do Executor por autopsia-runtime.hex. Esse bytecode
+		// também contém EmprestimoNaoV2 e não sabe simular empréstimo V3. Esse revert é da
+		// sonda, não prova contra a pool nem contra a execução real.
+		if (sondaSemFlashV3) {
+			porClasse.computeIfAbsent("SONDA_SEM_FLASH_V3", k -> new AtomicLong()).incrementAndGet();
+		}
+		if (transferenciaFalhou) {
+			// TF confirma que a chamada falhou durante transfer(). Sem trace não revela qual pool
+			// ou token foi o culpado: suspendemos só esta sequência ordenada, preservando as pools
+			// para outros ciclos. A pena expira e cresce apenas se a mesma rota reincidir.
+			List<String> saltos = chamada.rota().stream()
+					.map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList();
+			String chaveRota = Quarentena.chaveRota(saltos);
+			quarentena.condenarRota(saltos, PENA,
+					"TF sem perna identificada em " + registro.get("instante"));
+			registro.put("rota_em_quarentena", chaveRota);
+			porClasse.computeIfAbsent("TRANSFERENCIA_SEM_PERNA", k -> new AtomicLong()).incrementAndGet();
+		}
+
+		if (!transferenciaFalhou && !motivoExecutor.isBlank()
+				&& overflow(motivoExecutor)) {
+			// OVERFLOW pode ser em QUALQUER perna V2 da rota, não só na emprestadora.
+			// CICATRIZ de 10/10: quarentenávamos sempre rota[0]; se o overflow era numa perna
+			// intermediária a pool ruim ficava livre e o mesmo erro se repetia em massa antes de
+			// a próxima autopsia terminar. Pena de estado (3 h): o estado inválido persiste
+			// até a próxima Sync válida chegar, e 30 min não é suficiente.
+			chamada.rota().stream()
+					.filter(s -> !s.v3() && !s.deGerente())
+					.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()), PENA_DE_ESTADO,
+							"Pancake: OVERFLOW na rota em " + registro.get("instante")));
+			porClasse.computeIfAbsent("OVERFLOW", k -> new AtomicLong()).incrementAndGet();
+		} else if (!transferenciaFalhou && !motivoExecutor.isBlank()
+				&& proibicao(motivoExecutor) && !chamada.rota().isEmpty()) {
+			byte[] emprestadora = HexFormat.of().parseHex(chamada.rota().get(0).pool());
+			quarentena.condenar(emprestadora, PENA_DE_PROIBICAO,
+					"executor recebeu proibição explícita (" + motivoExecutor + ") em " + registro.get("instante"));
+			registro.put("culpada", Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "PROIBICAO_EXPLICITA"));
+			porClasse.computeIfAbsent("PROIBICAO_EXPLICITA", k -> new AtomicLong()).incrementAndGet();
+		} else if (!sondaSemFlashV3 && !transferenciaFalhou) {
 			porClasse.computeIfAbsent("SEM_LAUDO", k -> new AtomicLong()).incrementAndGet();
 		}
 
-		escrever(registro);
+		if (sondaSemFlashV3) {
+			registro.put("limitacao_sonda", "autopsia-runtime nao simula flash loan com ponta V3");
+		}
 
-		registro.put("status", emprestimoReverteu ? "emprestimo_reverteu" : "sem_laudo");
+		if (extras != null) {
+			registro.putAll(extras);
+		}
+
+		registro.put("status", transferenciaFalhou ? "transferencia_falhou_sem_perna"
+				: sondaSemFlashV3 ? "sonda_sem_flash_v3" : "sem_laudo");
+		escrever(registro);
 		return registro;
+	}
+
+	static boolean transferenciaFalhou(String motivo) {
+		String m = motivo == null ? "" : motivo.trim().toLowerCase(java.util.Locale.ROOT);
+		return m.equals("tf") || m.endsWith(": tf") || m.equals("transfer_failed")
+				|| m.equals("transferhelper: transfer failed") || m.equals("pancake: transfer_failed");
 	}
 
 	static boolean proibicao(String motivo) {

@@ -10,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,20 +23,18 @@ import br.com.node.catalogo.Impostos;
 import br.com.node.catalogo.Quarentena;
 import br.com.node.catalogo.Tarifario;
 import br.com.node.util.Falhas;
-import br.com.node.util.Keccak;
 import br.com.node.vo.Cabecalho;
 
 public final class Disparo implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(Disparo.class.getName());
 
-	private static final String CONTRATO = Optional.ofNullable(System.getenv("EXECUTOR")).map(String::trim)
-			.map(e -> {
-				if (!e.matches("(0x)?[0-9a-fA-F]{40}")) {
-					throw new IllegalStateException("EXECUTOR ilegível: " + e);
-				}
-				return e.replaceFirst("^0x", "").toLowerCase(java.util.Locale.ROOT);
-			}).orElse("b0599744c5858f9082c4ca9d92fc314476307496");
+	private static final String CONTRATO = Optional.ofNullable(System.getenv("EXECUTOR")).map(String::trim).map(e -> {
+		if (!e.matches("(0x)?[0-9a-fA-F]{40}")) {
+			throw new IllegalStateException("EXECUTOR ilegível: " + e);
+		}
+		return e.replaceFirst("^0x", "").toLowerCase(java.util.Locale.ROOT);
+	}).orElse("b0599744c5858f9082c4ca9d92fc314476307496");
 
 	public static byte[] executor() {
 		return HexFormat.of().parseHex(CONTRATO);
@@ -48,35 +45,19 @@ public final class Disparo implements Closeable {
 	private static final long GAS_LIMIT_MARGEM_NUM = 6L;
 	private static final long GAS_LIMIT_MARGEM_DEN = 5L;
 
-	// Faixas de percentual máximo do lucro a pagar ao builder, por faixa de lucro em USD.
-	// Formato: PAGAMENTO_TIERS=<limite_usd>:<pct>,<limite_usd>:<pct>,...  (crescente)
-	// Ex.: "1:20,5:35" → lucro 0–$1 paga até 20%, $1–$5 até 35%, acima de $5 usa 35% (última faixa).
-	// Sem a env: sem limite, leilão decide.
-	private record Faixa(double limiteUsd, int percentual) {}
-	private static final List<Faixa> PAGAMENTO_TIERS = parseTiers(System.getenv("PAGAMENTO_TIERS"));
-
-	private static List<Faixa> parseTiers(String env) {
-		if (env == null || env.isBlank()) return List.of();
-		try {
-			return java.util.Arrays.stream(env.split(",")).map(String::trim).filter(s -> !s.isEmpty()).map(s -> {
-				String[] p = s.split(":");
-				return new Faixa(Double.parseDouble(p[0].trim().replace(',', '.')), Integer.parseInt(p[1].trim()));
-			}).sorted(java.util.Comparator.comparingDouble(Faixa::limiteUsd)).toList();
-		} catch (Exception e) {
-			throw new IllegalStateException("PAGAMENTO_TIERS inválido: " + env, e);
-		}
-	}
-
 	private static final BigInteger TETO_GAS_TX = BigInteger.valueOf(2_000_000_000_000_000L);
 
 	private static final String WBNB = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 
 	private volatile Lances lances;
-	private volatile java.util.function.Consumer<Desfechos.Envio> aoEnviar = envio -> {};
-	private volatile java.util.function.BiConsumer<String, Map<String, Object>> aoRecusarTentativa = (hash, dados) -> {};
-	private volatile java.util.function.BiConsumer<String, String> aoVeredito = (hash, veredito) -> {};
-	private volatile java.util.function.LongFunction<Optional<br.com.node.sincronizacao.Cabeca.Momentos>> momentos =
-			altura -> Optional.empty();
+	private volatile java.util.function.Consumer<Desfechos.Envio> aoEnviar = envio -> {
+	};
+	private volatile java.util.function.BiConsumer<String, Map<String, Object>> aoRecusarTentativa = (hash, dados) -> {
+	};
+	private volatile java.util.function.BiConsumer<String, String> aoVeredito = (hash, veredito) -> {
+	};
+	private volatile java.util.function.LongFunction<Optional<br.com.node.sincronizacao.Cabeca.Momentos>> momentos = altura -> Optional
+			.empty();
 	private volatile Cabecalho cabecalhoAtual;
 
 	private final long sequenciaDeDrops_counter_ref;
@@ -217,26 +198,11 @@ public final class Disparo implements Closeable {
 			}
 		}
 
+		// O leilão usa a fração configurada por rota e considera gás no reward do bundle.
+		// PAGAMENTO_TIERS não limita mais o lance: no evento 128794204 cortou o direto para
+		// 20% do lucro, apesar de haver saldo. Os limites econômicos abaixo ainda preservam
+		// piso, margem, saldo do operador e teto absoluto por builder.
 		boolean limitadoPorPct = false;
-		if (!PAGAMENTO_TIERS.isEmpty()) {
-			Optional<Double> lucroUsd = custoDeGas.bnbWeiParaUsd(lucroOportunidadeBnb);
-			if (lucroUsd.isPresent()) {
-				double usd = lucroUsd.get();
-				int pct = PAGAMENTO_TIERS.get(PAGAMENTO_TIERS.size() - 1).percentual();
-				for (Faixa f : PAGAMENTO_TIERS) {
-					if (usd <= f.limiteUsd()) {
-						pct = f.percentual();
-						break;
-					}
-				}
-				BigInteger tetoPct = lucroOportunidadeBnb.multiply(BigInteger.valueOf(pct))
-						.divide(BigInteger.valueOf(100));
-				if (necessarioBnb.compareTo(tetoPct) > 0) {
-					limitadoPorPct = true;
-					necessarioBnb = tetoPct;
-				}
-			}
-		}
 
 		BigInteger necessarioRaiz = custoDeGas.deBnb(raiz, necessarioBnb).orElseThrow(() -> semCambio(raiz));
 		BigInteger pisoBase = piso.get();
@@ -251,7 +217,8 @@ public final class Disparo implements Closeable {
 		boolean limitadoPorLucro = solicitadoAoBuilder && necessarioRaiz.compareTo(excedenteLucro) > 0;
 		boolean limitadoPeloTeto = solicitadoAoBuilder && necessarioRaiz.compareTo(tetoPagamentoRaiz) > 0;
 		BigInteger pagamentoRaiz = relay.ativo() && montador.armado
-				? CalculadorDeLance.pagamentoAoBuilder(necessarioRaiz, lucroParaLance, pisoComPagamento, tetoPagamentoRaiz)
+				? CalculadorDeLance.pagamentoAoBuilder(necessarioRaiz, lucroParaLance, pisoComPagamento,
+						tetoPagamentoRaiz)
 				: BigInteger.ZERO;
 		if (limitadoPorLucro) {
 			metricas.contarLucroLimitado();
@@ -317,8 +284,8 @@ public final class Disparo implements Closeable {
 			registrarDropSemEnvio(achado, rotaDoLance, fracaoMilha, pisoDoEnvio, chamadaFinal, rota,
 					"gas_acima_do_teto_por_transacao",
 					Map.of("custo_maximo_gas_bnb_wei", custoMaximo.toString(), "teto_gas_tx_bnb_wei",
-							TETO_GAS_TX.toString(), "gas_estimado", gasEstimado.toString(),
-							"gas_limite_assinado", gasFinal));
+							TETO_GAS_TX.toString(), "gas_estimado", gasEstimado.toString(), "gas_limite_assinado",
+							gasFinal));
 			LOG.info(() -> "disparo: gás caro (" + bnb(custoMaximo) + " BNB > teto por tx) — pulo esta");
 			return;
 		}
@@ -327,15 +294,15 @@ public final class Disparo implements Closeable {
 		Cabecalho cab = cabecalhoAtual;
 		byte[] parentHash = (cab != null && cab.numero() == achado.altura()) ? cab.hash() : new byte[32];
 
-		MontadorDeBundle.Pacote pacote = montador.empacotar(cruaPendente, alturaDoProximoBloco, parentHash,
-				precoDoGas, maxTaxa, gasFinal, gasDaCauda, calldata, pagamentoBnb);
+		MontadorDeBundle.Pacote pacote = montador.empacotar(cruaPendente, alturaDoProximoBloco, parentHash, precoDoGas,
+				maxTaxa, gasFinal, gasDaCauda, calldata, pagamentoBnb);
 
 		boolean paga = pagamentoBnb.signum() > 0;
 		boolean aceito;
 		long milisAteAceiteRelay = 0;
 		Map<String, Object> respostasRelay = new LinkedHashMap<>();
 
-		String[] bundle48Ref = {null};
+		String[] bundle48Ref = { null };
 		if (relay.ativo()) {
 			long antesDoRelay = (System.nanoTime() - inicio) / 1_000_000;
 			RelayPrivado.Envio envio = relay.enviar(pacote.bid(), pacote.lista());
@@ -343,8 +310,8 @@ public final class Disparo implements Closeable {
 			milisAteAceiteRelay = antesDoRelay + envio.latenciaAtePrimeiraAceitacaoMs();
 
 			envio.porBuilder().forEach((nome, resposta) -> {
-				respostasRelay.put(nome, detalheBuilder(resposta, pacote.nonceOperadorUsado(), paga,
-						cruaPendente != null));
+				respostasRelay.put(nome,
+						detalheBuilder(resposta, pacote.nonceOperadorUsado(), paga, cruaPendente != null));
 				if ("48club".equals(nome) && resposta.bundle() != null && !resposta.bundle().isBlank()) {
 					bundle48Ref[0] = resposta.bundle();
 				}
@@ -360,9 +327,8 @@ public final class Disparo implements Closeable {
 							quarentena.condenar(HexFormat.of().parseHex(chamadaFinal.rota().get(0).pool()),
 									Autopsia.PENA_DE_PROIBICAO, razao);
 						} else if (Autopsia.overflow(motivoRelay)) {
-							chamadaFinal.rota().stream().filter(s -> !s.v3() && !s.deGerente())
-									.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()),
-											Autopsia.PENA_DE_ESTADO, razao));
+							chamadaFinal.rota().stream().filter(s -> !s.v3() && !s.deGerente()).forEach(s -> quarentena
+									.condenar(HexFormat.of().parseHex(s.pool()), Autopsia.PENA_DE_ESTADO, razao));
 						}
 					}
 				}
@@ -393,16 +359,16 @@ public final class Disparo implements Closeable {
 		Map<String, Object> detalhes = detalhesEnvio(achado, chamadaFinal, rota, pisoDoEnvio, fracaoMilha,
 				ofertadoWeiPorGas, necessarioBnbSemLimiteDeSaldo, necessarioBnb, saldoConhecido, limitadoPorSaldo,
 				limitadoPorPct, necessarioRaiz, pagamentoRaiz, pagamentoBnb, precoDoGas, gasDaCauda, gasEstimado,
-				gasFinal, maxTaxa, relay.builders().stream().anyMatch(b -> "48club".equals(b.nome())),
-				caminho, tempoAteConfirmacao, milis, tempo, respostasRelay, aceito,
-				solicitadoAoBuilder, limitadoPorLucro, limitadoPeloTeto, semLoan);
+				gasFinal, maxTaxa, relay.builders().stream().anyMatch(b -> "48club".equals(b.nome())), caminho,
+				tempoAteConfirmacao, milis, tempo, respostasRelay, aceito, solicitadoAoBuilder, limitadoPorLucro,
+				limitadoPeloTeto, semLoan, calldata, versaoDoExecutor);
 
 		if (aceito) {
 			java.util.Set<String> poolsDaRota = new java.util.HashSet<>();
 			achado.ciclo().pernas().forEach(p -> poolsDaRota.add(HexFormat.of().formatHex(p.pool())));
 			aoEnviar.accept(new Desfechos.Envio(pacote.arbHash(), achado.altura(), poolsDaRota,
-					entradaMs + tempoAteConfirmacao, caminho, rotaDoLance, fracaoMilha,
-					ofertadoWeiPorGas, lucroOportunidadeBnb, gasParaOLance, detalhes));
+					entradaMs + tempoAteConfirmacao, caminho, rotaDoLance, fracaoMilha, ofertadoWeiPorGas,
+					lucroOportunidadeBnb, gasParaOLance, detalhes));
 		} else {
 			detalhes.put("lucro_previsto_bnb_wei", lucroOportunidadeBnb.toString());
 			aoRecusarTentativa.accept(pacote.arbHash(), detalhes);
@@ -476,11 +442,12 @@ public final class Disparo implements Closeable {
 		vereditor.close();
 		laudos.close();
 		medidor.close();
-		LOG.info(() -> "disparo encerrado: " + metricas.enviadas() + " enviadas, " + metricas.recusadas() + " recusadas");
+		LOG.info(() -> "disparo encerrado: " + metricas.enviadas() + " enviadas, " + metricas.recusadas()
+				+ " recusadas");
 	}
 
-	private void autopsiarAsync(Achado achado, RotaDoModelo.Chamada chamada, byte[] calldata,
-			String desfecho, byte[] cruaPendente, String hashEnviado, String hashTentativa, String bundle48) {
+	private void autopsiarAsync(Achado achado, RotaDoModelo.Chamada chamada, byte[] calldata, String desfecho,
+			byte[] cruaPendente, String hashEnviado, String hashTentativa, String bundle48) {
 
 		String dadosHex = HexFormat.of().formatHex(calldata);
 		List<Salto> rota = chamada.rota();
@@ -488,8 +455,7 @@ public final class Disparo implements Closeable {
 
 		vereditor.submeterAsync(() -> {
 			if (cruaPendente != null) {
-				laudos.concluir(hashTentativa,
-						Map.<String, Object>of("status", "nao_aplicavel_sem_transacao_alvo"));
+				laudos.concluir(hashTentativa, Map.<String, Object>of("status", "nao_aplicavel_sem_transacao_alvo"));
 				return;
 			}
 
@@ -499,7 +465,16 @@ public final class Disparo implements Closeable {
 				aoVeredito.accept(hashEnviado, veredito);
 			}
 
-			Map<String, Object> extras = bundle48 != null ? consultar48Club(bundle48) : null;
+			Map<String, Object> extras = bundle48 != null ? new LinkedHashMap<>(consultar48Club(bundle48)) : null;
+			if (Autopsia.transferenciaFalhou(Autopsia.motivoDoVeredito(veredito))
+					|| VereditorDoContrato.falhaNaChamada(veredito)) {
+				if (extras == null) {
+					extras = new LinkedHashMap<>();
+				}
+				extras.put("trace_executor", vereditor.rastrearChamada(de, CONTRATO, dadosHex, achado.altura())
+						.map(Disparo::resumirTraceFalha)
+						.orElse(Map.of("status", "debug_traceCall indisponivel no RPC")));
+			}
 
 			try {
 				laudos.examinar(de, CONTRATO, achado, chamada, desfecho, veredito, hashTentativa, extras);
@@ -511,15 +486,50 @@ public final class Disparo implements Closeable {
 		});
 	}
 
+	private static Map<String, Object> resumirTraceFalha(com.google.gson.JsonObject raiz) {
+		List<Map<String, Object>> quadros = new java.util.ArrayList<>();
+		coletarQuadrosDeFalha(raiz, quadros, 0);
+		Map<String, Object> resumo = new LinkedHashMap<>();
+		resumo.put("status", "trace_obtido");
+		resumo.put("quadros_transfer_ou_falha", quadros);
+		return resumo;
+	}
+
+	private static void coletarQuadrosDeFalha(com.google.gson.JsonObject quadro,
+			List<Map<String, Object>> encontrados, int profundidade) {
+		if (profundidade > 64) {
+			return;
+		}
+		String input = quadro.has("input") && quadro.get("input").isJsonPrimitive()
+				? quadro.get("input").getAsString() : "";
+		String erro = quadro.has("error") && quadro.get("error").isJsonPrimitive()
+				? quadro.get("error").getAsString() : "";
+		boolean chamadaTransfer = input.length() >= 10 && input.regionMatches(true, 2, "a9059cbb", 0, 8);
+		if (chamadaTransfer || !erro.isBlank()) {
+			Map<String, Object> detalhe = new LinkedHashMap<>();
+			for (String campo : List.of("type", "from", "to", "input", "output", "error", "gasUsed")) {
+				if (quadro.has(campo) && !quadro.get(campo).isJsonNull()) {
+					detalhe.put(campo, quadro.get(campo).getAsString());
+				}
+			}
+			encontrados.add(detalhe);
+		}
+		if (quadro.has("calls") && quadro.get("calls").isJsonArray()) {
+			for (com.google.gson.JsonElement filho : quadro.getAsJsonArray("calls")) {
+				if (filho.isJsonObject()) {
+					coletarQuadrosDeFalha(filho.getAsJsonObject(), encontrados, profundidade + 1);
+				}
+			}
+		}
+	}
+
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> consultar48Club(String bundleHash) {
 		try {
 			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 			HttpRequest req = HttpRequest.newBuilder()
 					.uri(URI.create("https://explore.48.club/v2/bundle?hash=" + bundleHash))
-					.timeout(Duration.ofSeconds(8))
-					.GET()
-					.build();
+					.timeout(Duration.ofSeconds(8)).GET().build();
 			HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
 			Map<String, Object> resultado = new com.google.gson.Gson().fromJson(resp.body(), Map.class);
 			return Map.of("48club_status", resultado != null ? resultado : Map.of("bruto", resp.body()));
@@ -528,15 +538,14 @@ public final class Disparo implements Closeable {
 		}
 	}
 
-	private void registrarDropSemEnvio(Achado achado, String rotaId, int fracaoMilha,
-			BigInteger pisoDoEnvio, RotaDoModelo.Chamada chamada, List<Salto> rota, String motivo,
-			Map<String, Object> detalhes) {
+	private void registrarDropSemEnvio(Achado achado, String rotaId, int fracaoMilha, BigInteger pisoDoEnvio,
+			RotaDoModelo.Chamada chamada, List<Salto> rota, String motivo, Map<String, Object> detalhes) {
 		Map<String, Object> tentativa = new LinkedHashMap<>(detalhes);
 		tentativa.put("altura", achado.altura());
 		tentativa.put("caminho", "cauda_ou_n+1");
 		tentativa.put("rota_id", rotaId);
-		tentativa.put("pools", achado.ciclo().pernas().stream()
-				.map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
+		tentativa.put("pools",
+				achado.ciclo().pernas().stream().map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
 		tentativa.put("raiz_ativo", HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()));
 		tentativa.put("montante_entrada_wei", chamada.montante().toString());
 		tentativa.put("lucro_previsto_ativo_wei", achado.oportunidade().lucro().toString());
@@ -544,14 +553,14 @@ public final class Disparo implements Closeable {
 		tentativa.put("piso_ativo_wei", pisoDoEnvio.toString());
 		tentativa.put("lance_fracao_milha", fracaoMilha);
 		tentativa.put("motivo_nao_enviado", motivo);
-		tentativa.put("pernas", rota.stream()
-				.map(s -> Map.of("pool", s.pool(), "tipo", s.v3() ? "V3" : s.deGerente() ? "gerente" : "V2",
-						"token_entrada", s.entra(), "token_saida", s.sai(), "taxa_bps", s.taxaBps()))
-				.toList());
+		tentativa.put("pernas",
+				rota.stream()
+						.map(s -> Map.of("pool", s.pool(), "tipo", s.v3() ? "V3" : s.deGerente() ? "gerente" : "V2",
+								"token_entrada", s.entra(), "token_saida", s.sai(), "taxa_bps", s.taxaBps()))
+						.toList());
 		tentativa.put("relay_aceitou", null);
 		tentativa.put("tempo", Map.of("marcos_disponiveis", false));
-		aoRecusarTentativa.accept(
-				"drop:" + achado.altura() + ":" + rotaId + ":" + sequenciaDeDrops.incrementAndGet(),
+		aoRecusarTentativa.accept("drop:" + achado.altura() + ":" + rotaId + ":" + sequenciaDeDrops.incrementAndGet(),
 				tentativa);
 	}
 
@@ -585,8 +594,8 @@ public final class Disparo implements Closeable {
 		return linha;
 	}
 
-	private static Map<String, Object> detalheBuilder(RelayPrivado.Resposta resposta, long nonceOperador,
-			boolean paga, boolean temAlvo) {
+	private static Map<String, Object> detalheBuilder(RelayPrivado.Resposta resposta, long nonceOperador, boolean paga,
+			boolean temAlvo) {
 		Map<String, Object> d = new LinkedHashMap<>();
 		d.put("aceito", resposta.aceito());
 		d.put("motivo", resposta.motivo());
@@ -612,9 +621,11 @@ public final class Disparo implements Closeable {
 	private static List<Map<String, Object>> transacoesDoBundle(List<String> hashes, boolean temAlvo, boolean paga,
 			long nonceOperador, Integer indiceFalha) {
 		List<String> papeis = new java.util.ArrayList<>();
-		if (temAlvo) papeis.add("transacao_alvo_mempool");
+		if (temAlvo)
+			papeis.add("transacao_alvo_mempool");
 		papeis.add("arbitragem_operador");
-		if (paga) papeis.add("pagamento_builder");
+		if (paga)
+			papeis.add("pagamento_builder");
 		List<Map<String, Object>> resultado = new java.util.ArrayList<>();
 		for (int i = 0; i < hashes.size(); i++) {
 			Map<String, Object> tx = new LinkedHashMap<>();
@@ -636,15 +647,18 @@ public final class Disparo implements Closeable {
 			BigInteger gasDaCauda, BigInteger gasEstimado, long gasFinal, BigInteger maxTaxa, boolean enviadoAo48Club,
 			String caminho, long tempoAteConfirmacao, long milisTotal, Map<String, Object> tempo,
 			Map<String, Object> respostasRelay, boolean aceito, boolean solicitadoAoBuilder, boolean limitadoPorLucro,
-			boolean limitadoPeloTeto, boolean semLoan) {
+			boolean limitadoPeloTeto, boolean semLoan, byte[] calldata, int versaoExecutor) {
 
 		Map<String, Object> detalhes = new LinkedHashMap<>();
 		detalhes.put("altura", achado.altura());
 		detalhes.put("caminho", caminho);
+		detalhes.put("executor", "0x" + CONTRATO);
+		detalhes.put("versao_executor", versaoExecutor);
+		detalhes.put("seletor_executor", "0x" + HexFormat.of().formatHex(calldata, 0, 4));
 		detalhes.put("sem_loan", semLoan);
 		detalhes.put("rota_id", chaveDaRota(achado));
-		detalhes.put("pools", achado.ciclo().pernas().stream()
-				.map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
+		detalhes.put("pools",
+				achado.ciclo().pernas().stream().map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
 		boolean envioPrivado = !respostasRelay.containsKey("rpc_publico");
 		detalhes.put("submissao_aceita", aceito);
 		detalhes.put("relay_aceitou", envioPrivado ? aceito : null);
@@ -700,13 +714,13 @@ public final class Disparo implements Closeable {
 	}
 
 	private static String chaveDaRota(Achado achado) {
-		return String.join("-", achado.ciclo().pernas().stream()
-				.map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
+		return String.join("-",
+				achado.ciclo().pernas().stream().map(p -> HexFormat.of().formatHex(p.pool())).sorted().toList());
 	}
 
 	private static long comFolgaDeLimite(BigInteger gas) {
-		return gas.multiply(BigInteger.valueOf(GAS_LIMIT_MARGEM_NUM))
-				.divide(BigInteger.valueOf(GAS_LIMIT_MARGEM_DEN)).longValueExact();
+		return gas.multiply(BigInteger.valueOf(GAS_LIMIT_MARGEM_NUM)).divide(BigInteger.valueOf(GAS_LIMIT_MARGEM_DEN))
+				.longValueExact();
 	}
 
 	private static IllegalStateException semCambio(byte[] raiz) {

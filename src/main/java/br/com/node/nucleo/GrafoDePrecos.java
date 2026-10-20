@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 // Acha arbitragem por CICLO NEGATIVO, em vez de enumerar ciclos.
 //
@@ -252,7 +253,12 @@ public final class GrafoDePrecos {
 	// saltos: imune a ciclo negativo alheio, O(maxPernas·E) por aresta tocada). Ciclo = aresta + caminho.
 	// O melhor dos que fecham negativo, rotacionado para entrar por numerário com ponta V2.
 	public Optional<Ciclo> cicloPela(Set<String> poolsTocadas, Set<String> numerarios, int maxPernas) {
-		List<Ciclo> ciclos = ciclosPela(poolsTocadas, numerarios, maxPernas, 1);
+		return cicloPela(poolsTocadas, numerarios, maxPernas, ciclo -> true);
+	}
+
+	public Optional<Ciclo> cicloPela(Set<String> poolsTocadas, Set<String> numerarios, int maxPernas,
+			Predicate<Ciclo> permitido) {
+		List<Ciclo> ciclos = ciclosPela(poolsTocadas, numerarios, maxPernas, 1, permitido);
 		return ciclos.isEmpty() ? Optional.empty() : Optional.of(ciclos.get(0));
 	}
 
@@ -260,6 +266,11 @@ public final class GrafoDePrecos {
 	// mais lucrativo (marginal) ao menos. É o que o garimpo do estado confirmado usa: um bloco abre várias
 	// fendas, e devolver só a melhor deixava as outras para os bots que as pegam no bloco seguinte.
 	public List<Ciclo> ciclosPela(Set<String> poolsTocadas, Set<String> numerarios, int maxPernas, int quantos) {
+		return ciclosPela(poolsTocadas, numerarios, maxPernas, quantos, ciclo -> true);
+	}
+
+	public List<Ciclo> ciclosPela(Set<String> poolsTocadas, Set<String> numerarios, int maxPernas, int quantos,
+			Predicate<Ciclo> permitido) {
 
 		int v = saintes.size();
 
@@ -380,12 +391,16 @@ public final class GrafoDePrecos {
 				}
 
 				if (busca.ciclo().isPresent()) {
+					Ciclo ciclo = busca.ciclo().get();
+					if (!permitido.test(ciclo)) {
+						continue;
+					}
 					Set<String> conjunto = new java.util.TreeSet<>();
-					busca.ciclo().get().pernas().forEach(p -> conjunto.add(HexFormat.of().formatHex(p.pool())));
+					ciclo.pernas().forEach(p -> conjunto.add(HexFormat.of().formatHex(p.pool())));
 					String chave = String.join("-", conjunto);
 					if (total < pesoPorConjunto.getOrDefault(chave, Double.POSITIVE_INFINITY)) {
 						pesoPorConjunto.put(chave, total);
-						cicloPorConjunto.put(chave, busca.ciclo().get());
+						cicloPorConjunto.put(chave, ciclo);
 					}
 				}
 			}

@@ -54,6 +54,12 @@ final class VereditorDoContrato implements Closeable {
 		this.rpcAlternativo = alternativo;
 	}
 
+	java.util.Optional<com.google.gson.JsonObject> rastrearChamada(String endereco, String contrato,
+			String dadosHex, long altura) {
+		RpcDoEnsaio fonte = rpcAlternativo != null ? rpcAlternativo : rpc;
+		return fonte.rastrearChamada(endereco, contrato, dadosHex, "0x" + Long.toHexString(altura));
+	}
+
 	String anotar(String endereco, String contrato, List<Salto> rota, String dadosHex, long altura) {
 		try {
 			RpcDoEnsaio fonte = rpcAlternativo != null ? rpcAlternativo : rpc;
@@ -98,6 +104,11 @@ final class VereditorDoContrato implements Closeable {
 		return min.contains("transfer_failed") || min.contains("transfer_from_failed");
 	}
 
+	static boolean falhaNaChamada(String veredito) {
+		String texto = veredito == null ? "" : veredito.toLowerCase(java.util.Locale.ROOT);
+		return texto.equals("0x" + FALHA_NA_CHAMADA) || texto.contains("0x" + FALHA_NA_CHAMADA);
+	}
+
 	void suspeitarDaRota(List<Salto> rota, String motivo) {
 		for (Salto salto : rota) {
 			if (salto.deGerente()) {
@@ -114,11 +125,10 @@ final class VereditorDoContrato implements Closeable {
 	void condenarGerentesSeNaoQuitado(List<Salto> rota, String seletor, String veredito) {
 		String texto = veredito == null ? "" : veredito.toLowerCase(java.util.Locale.ROOT);
 		boolean embrulhado = WRAPPED_ERROR.equals(seletor) || texto.startsWith("0x" + WRAPPED_ERROR);
-		boolean falhou = FALHA_NA_CHAMADA.equals(seletor) || texto.contains(FALHA_NA_CHAMADA) || naoSeMove(veredito);
 		boolean safeCast = SAFE_CAST_OVERFLOW.equals(seletor) || texto.contains(SAFE_CAST_OVERFLOW);
 		boolean naoQuitado = CURRENCY_NOT_SETTLED.equals(seletor) || texto.contains(CURRENCY_NOT_SETTLED);
 
-		if ((!embrulhado && !falhou && !safeCast && !naoQuitado) || rota.stream().noneMatch(Salto::deGerente)) {
+		if ((!embrulhado && !safeCast && !naoQuitado) || rota.stream().noneMatch(Salto::deGerente)) {
 			return;
 		}
 

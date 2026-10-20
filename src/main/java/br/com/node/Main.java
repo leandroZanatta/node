@@ -225,6 +225,7 @@ public final class Main {
 		backrun.medirCom(cabeca::momentos);
 		disparo.medirCom(cabeca::momentos);
 		Cauda cauda = new Cauda(catalogo, cotador, tarifario, achado -> backrun.considerar(List.of(achado), null));
+		cauda.quarentena(quarentena);
 		// O Executor 3 empresta também da ponta V3 ou de gerente: a busca deixa de exigir V2 na entrada.
 		cauda.pontaLivre(disparo.versaoDoExecutor() >= 3);
 		cauda.aoSemFlashAchar(achado -> gabarito.anotar(achado, false));

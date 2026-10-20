@@ -6,9 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import br.com.node.catalogo.Impostos;
+import br.com.node.catalogo.Quarentena;
+import br.com.node.util.Keccak;
 
 class VeredictoDoRevertTest {
 
@@ -64,6 +69,23 @@ class VeredictoDoRevertTest {
 		assertEquals("revert_sem_dado", veredicto.seletor());
 		assertEquals("", veredicto.texto());
 		assertFalse(VereditorDoContrato.naoSeMove(veredicto.texto()));
+	}
+
+	@Test
+	@DisplayName("FalhaNaChamada sem trace não condena pools Infinity CL da rota")
+	void falhaGenericaNaoCondenaGerente() {
+
+		Quarentena quarentena = new Quarentena();
+		VereditorDoContrato vereditor = new VereditorDoContrato(new RpcDoEnsaio(), quarentena, new Impostos());
+		byte[] chave = new byte[32];
+		chave[31] = 1;
+		Salto infinity = new Salto("11".repeat(20), "22".repeat(20), "33".repeat(20),
+				Salto.TIPO_INFINITY_CL, 0, chave);
+
+		assertTrue(VereditorDoContrato.falhaNaChamada("0x033d7ade"));
+		vereditor.condenarGerentesSeNaoQuitado(List.of(infinity), "033d7ade", "0x033d7ade");
+		assertTrue(quarentena.livre(Keccak.hash(chave)), "sem trace, não temos evidência para atribuir a falha ao gerente");
+		vereditor.close();
 	}
 
 	@Test

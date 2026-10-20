@@ -70,6 +70,7 @@ public final class Cauda implements Closeable {
 	// as pools com histórico de arbitragem (~4 mil) cobriam 3/4 das fendas reais. Sem `Quentes` ligado, uma camada
 	// só, como antes.
 	private volatile Quentes quentes;
+	private volatile Quarentena quarentena;
 	private final ExecutorService lacoFrio = Executors.newSingleThreadExecutor(tarefa -> new Thread(tarefa, "cauda-fria"));
 	private final AtomicBoolean friaOcupada = new AtomicBoolean();
 	private final Set<String> tocadasParaOFrio = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -82,6 +83,15 @@ public final class Cauda implements Closeable {
 
 	public void quentesDe(Quentes quentes) {
 		this.quentes = quentes;
+	}
+
+	public void quarentena(Quarentena quarentena) {
+		this.quarentena = quarentena;
+	}
+
+	private boolean rotaLivre(Ciclo ciclo) {
+		Quarentena q = quarentena;
+		return q == null || q.livreRota(ciclo);
 	}
 
 	// Diagnóstico do funil — para SABER onde os candidatos somem, não adivinhar. Escritos na thread da
@@ -256,7 +266,8 @@ public final class Cauda implements Closeable {
 		GrafoDePrecos grafo = q != null ? grafoQuente(tocadas, q) : grafoDoBloco(tocadas);
 		grafo.pontaLivre(pontaLivre);
 		long t1 = System.nanoTime();
-		List<Ciclo> ciclos = grafo.ciclosPela(ancoras, NUMERARIOS, PERNAS_CAUDA, FENDAS_POR_RODADA);
+		List<Ciclo> ciclos = grafo.ciclosPela(ancoras, NUMERARIOS, PERNAS_CAUDA, FENDAS_POR_RODADA,
+				this::rotaLivre);
 		long t2 = System.nanoTime();
 		List<Ciclo> semFlash = grafo.ciclosSemFlash();
 		garimpoMontagem.anotar((t1 - t0) / 1_000_000);
@@ -365,7 +376,8 @@ public final class Cauda implements Closeable {
 		Quentes q = quentes;
 		GrafoDePrecos grafo = grafoDoBloco(tocadas);
 		grafo.pontaLivre(pontaLivre);
-		List<Ciclo> ciclos = grafo.ciclosPela(tocadas, NUMERARIOS, PERNAS_CAUDA, FENDAS_POR_RODADA);
+		List<Ciclo> ciclos = grafo.ciclosPela(tocadas, NUMERARIOS, PERNAS_CAUDA, FENDAS_POR_RODADA,
+				this::rotaLivre);
 		List<Ciclo> semFlash = grafo.ciclosSemFlash();
 
 		List<Achado> foraDoQuente = new ArrayList<>();
@@ -485,7 +497,7 @@ public final class Cauda implements Closeable {
 	public Optional<Achado> projetar(Map<String, Pool> overlay, long altura) {
 		projecoes.incrementAndGet();
 		return detectar(overlay, altura, grafo -> {
-			Optional<Ciclo> ciclo = grafo.cicloPela(overlay.keySet(), NUMERARIOS, PERNAS_N1);
+			Optional<Ciclo> ciclo = grafo.cicloPela(overlay.keySet(), NUMERARIOS, PERNAS_N1, this::rotaLivre);
 			if (grafo.ancorasNoGrafo() == 0) {
 				projecoesSemAncora.incrementAndGet();
 			} else if (grafo.melhorRetornoBps() >= 0) {

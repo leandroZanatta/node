@@ -9,6 +9,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import br.com.node.sincronizacao.VarredorDeGerentes;
+
 // A varredura contra o RPC de logs de VERDADE, numa faixa de 21 blocos em volta do nascimento de uma pool
 // conhecida (a V4 sem hook dos pares de swap). Sem `RPC_LOGS` o teste não roda: não há outro jeito de
 // pedir `eth_getLogs` à BSC (o RPC público recusa com "limit exceeded").

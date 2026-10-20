@@ -19,6 +19,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import br.com.node.sincronizacao.VarredorDeGerentes;
+
 import br.com.node.nucleo.MapaDeTicks;
 
 // A FOTO dos ticks contra a cadeia (roda só com `RPC_LOGS`): a leitura em lote pelo Multicall3 tem de dar, tick

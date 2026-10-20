@@ -79,9 +79,9 @@ public final class RelayPrivado {
 
 	// Um builder: onde se entrega o bundle e a quem se paga o lance.
 	// `mevSendBid` = true → protocolo mev_sendBid do 48club; false → eth_sendBundle (BlockRazor, etc.).
-	// `txPrivada` = true → envia a arb_tx ao pool privado antes do bundle para garantir TransactionUnique.
-	// `urlPrivada` → endpoint do pool privado (rpc.48.club); null usa o builder.url() (legacy, causa inclusão standalone).
-	// `metodoPrivado` → método JSON-RPC para o pool privado (eth_sendPrivateTransaction ou eth_sendRawTransaction).
+	// Os últimos três campos são mantidos por compatibilidade com configurações antigas. A arbitragem
+	// só é enviada dentro do bundle: submissão privada avulsa podia torná-la elegível fora da atomicidade
+	// com o pagamento ao builder.
 	public record Builder(String nome, String url, String metodo, Optional<String> auth, byte[] pagamento,
 			boolean mevSendBid, boolean txPrivada, String urlPrivada, String metodoPrivado) {
 	}
@@ -120,7 +120,7 @@ public final class RelayPrivado {
 				.ifPresent(url -> lista.add(new Builder("48club", url,
 						Optional.ofNullable(System.getenv("RELAY_METODO")).filter(m -> !m.isBlank()).orElse("eth_sendBundle"),
 						Optional.ofNullable(System.getenv("RELAY_AUTH")).filter(a -> !a.isBlank()), PAGAMENTO_48CLUB,
-						false, true, "https://rpc.48.club", "eth_sendPrivateTransaction")));
+						false, false, null, null)));
 
 		Optional.ofNullable(System.getenv("BLOCKRAZOR_TOKEN")).map(String::trim).filter(t -> !t.isBlank())
 				.ifPresent(token -> lista.add(new Builder("blockrazor",
@@ -191,10 +191,6 @@ public final class RelayPrivado {
 		long maxTimestamp = System.currentTimeMillis() / 1000 + VALIDADE_SEGUNDOS;
 		Map<String, java.util.concurrent.CompletableFuture<Resposta>> emVoo = new java.util.LinkedHashMap<>();
 
-		// A arb_tx é sempre o último elemento de bid.txs() (cruaPendente vem antes quando presente).
-		byte[] arbTxRaw = (bid != null && !bid.txs().isEmpty())
-				? bid.txs().get(bid.txs().size() - 1) : null;
-
 		for (Builder builder : builders) {
 			if (builder.mevSendBid()) {
 				if (bid == null) {
@@ -208,13 +204,7 @@ public final class RelayPrivado {
 				List<String> transacoes = montar.apply(builder.pagamento());
 				List<String> hashes = transacoes.stream().map(RelayPrivado::hashTransacao).toList();
 				JsonObject corpoBundle = corpo(builder.metodo(), transacoes, maxTimestamp, POSICAO_POR_PRIORIDADE);
-				java.util.concurrent.CompletableFuture<Resposta> futuro;
-				if (builder.txPrivada() && arbTxRaw != null) {
-					enviarTxPrivada(builder, arbTxRaw);
-					futuro = enviarA(builder, corpoBundle, hashes);
-				} else {
-					futuro = enviarA(builder, corpoBundle, hashes);
-				}
+				java.util.concurrent.CompletableFuture<Resposta> futuro = enviarA(builder, corpoBundle, hashes);
 				emVoo.put(builder.nome(), futuro);
 			}
 		}
@@ -223,27 +213,6 @@ public final class RelayPrivado {
 		emVoo.forEach((nome, futuro) -> respostas.put(nome, futuro.join()));
 
 		return new Envio(respostas);
-	}
-
-	// Envia a arb_tx ao pool privado do builder para registrá-la como TransactionUnique antes do bundle.
-	// Usa urlPrivada (ex: rpc.48.club) e metodoPrivado (ex: eth_sendPrivateTransaction).
-	// Ignora o resultado: best-effort; falha aqui não cancela o bundle.
-	private java.util.concurrent.CompletableFuture<Void> enviarTxPrivada(Builder builder, byte[] txRaw) {
-		String url = builder.urlPrivada() != null ? builder.urlPrivada() : builder.url();
-		String metodo = builder.metodoPrivado() != null ? builder.metodoPrivado() : "eth_sendRawTransaction";
-		JsonArray params = new JsonArray();
-		params.add("0x" + HexFormat.of().formatHex(txRaw));
-		JsonObject corpo = new JsonObject();
-		corpo.addProperty("jsonrpc", "2.0");
-		corpo.addProperty("id", 1);
-		corpo.addProperty("method", metodo);
-		corpo.add("params", params);
-		HttpRequest.Builder pedido = HttpRequest.newBuilder(URI.create(url))
-				.timeout(Duration.ofSeconds(5))
-				.header("Content-Type", "application/json")
-				.POST(HttpRequest.BodyPublishers.ofString(corpo.toString()));
-		return http.sendAsync(pedido.build(), HttpResponse.BodyHandlers.discarding())
-				.<Void>handle((r, e) -> null);
 	}
 
 	// Monta o JSON-RPC `mev_sendBid` com o `BidArgsUpgrade` do 48club builder-relay:
