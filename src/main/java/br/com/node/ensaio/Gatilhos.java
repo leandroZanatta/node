@@ -240,7 +240,7 @@ public final class Gatilhos implements Closeable {
 			LOG.info(() -> "gatilho GORDO: " + emBnb + " wei BNB na altura " + altura + " (arb na posição " + indice
 					+ ", gatilho na " + indiceDoGatilho + ") — gatilho " + texto(gatilho, "hash") + " tipo "
 					+ texto(gatilho, "type") + " para " + assinatura(gatilho) + ": " + etapaDoGatilho
-					+ (margemMs != null ? " (visto " + margemMs + " ms antes do bloco)" : " (nunca visto)")
+					+ descricaoMargem(margemMs)
 					+ " · arbitrador " + texto(arbitrador, "to") + " a " + texto(arbitrador, "gasPrice")
 					+ " wei/gás: " + etapaDoArbitrador);
 		}
@@ -251,6 +251,19 @@ public final class Gatilhos implements Closeable {
 					+ texto(gatilho, "hash") + " para " + assinatura(gatilho) + ": " + etapaDoGatilho
 					+ " · a tx do arbitrador: " + etapaDoArbitrador);
 		}
+	}
+
+	static String descricaoMargem(Long margemMs) {
+		if (margemMs == null) {
+			return " (nunca visto)";
+		}
+		if (margemMs > 0) {
+			return " (visto " + margemMs + " ms antes do bloco)";
+		}
+		if (margemMs < 0) {
+			return " (visto " + java.math.BigInteger.valueOf(margemMs).abs() + " ms depois do bloco)";
+		}
+		return " (visto no instante do bloco)";
 	}
 
 	private Optional<JsonArray> transacoes(long altura) {

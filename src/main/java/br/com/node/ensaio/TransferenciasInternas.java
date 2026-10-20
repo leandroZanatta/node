@@ -19,12 +19,21 @@ import com.google.gson.JsonParser;
 // QUEM RECEBEU BNB DENTRO de uma transação. A transferência feita por um contrato durante a execução
 // (um `coinbase.transfer`, por exemplo) não aparece na transação de topo nem nos logs: só o trace mostra.
 //
-// Duas fontes, na ordem: o trace do próprio RPC (`debug_traceTransaction`, callTracer), e se o RPC não
-// tiver trace, a API de transações internas do BscScan (precisa de `BSCSCAN_API_KEY`). Se as duas faltarem,
-// o registro diz isso, em vez de mostrar uma lista vazia que pareceria "não houve transferência".
+// Três fontes, na ordem: o trace do próprio RPC (`debug_traceTransaction`, callTracer); se o RPC não tiver
+// trace, `nr_getAssetTransfers` do NodeReal (free tier, requer `NODEREAL_API_URL`); por último, a API de
+// transações internas do BscScan (precisa de `BSCSCAN_API_KEY`). Se as três faltarem, o registro diz isso.
 public final class TransferenciasInternas {
 
 	public record Transferencia(String de, String para, BigInteger valorWei) {
+	}
+
+	public record ResultadoTrace(Optional<List<Transferencia>> transferencias, String erro) {
+	}
+
+	public record ResultadoBscScan(Optional<List<Transferencia>> transferencias, String erro) {
+	}
+
+	public record ResultadoNodeReal(Optional<List<Transferencia>> transferencias, String erro) {
 	}
 
 	// O endereço antigo do BscScan responde 301 (redirecionado). O cliente padrão do Java NÃO segue redirecionamento,
@@ -39,42 +48,122 @@ public final class TransferenciasInternas {
 	}
 
 	// Anexa ao registro do vencedor o campo `transferencias_internas` (lista) ou `transferencias_internas_erro`.
+	// Lê `NODEREAL_API_URL` do ambiente para a segunda fonte; `BSCSCAN_API_KEY` para a terceira.
+	// `linha` precisa ter `altura_do_vencedor` para o fallback NodeReal funcionar.
 	public static void anexar(RpcDoEnsaio rpc, String hash, String chaveBscScan, JsonObject linha) {
 
-		Optional<List<Transferencia>> trace = rpc == null ? Optional.empty() : consultarTrace(rpc, hash);
-		if (trace.isPresent()) {
-			linha.add("transferencias_internas", paraJson(trace.get()));
+		ResultadoTrace trace = consultarTraceDetalhado(rpc, hash);
+		linha.addProperty("trace_rpc_status", trace.transferencias().isPresent() ? "sucesso" : "falha");
+		if (trace.erro() != null) {
+			linha.addProperty("trace_rpc_erro", trace.erro());
+		}
+		if (trace.transferencias().isPresent()) {
+			linha.add("transferencias_internas", paraJson(trace.transferencias().get()));
 			linha.addProperty("fonte_transferencias_internas", "trace do RPC");
 			return;
 		}
 
-		Optional<List<Transferencia>> bscscan = chaveBscScan == null || chaveBscScan.isBlank()
-				? Optional.empty() : consultarBscScan(hash, chaveBscScan);
-		if (bscscan.isPresent()) {
-			linha.add("transferencias_internas", paraJson(bscscan.get()));
+		String nodeRealUrl = java.util.Optional.ofNullable(System.getenv("NODEREAL_API_URL"))
+				.map(String::trim).filter(u -> !u.isBlank()).orElse(null);
+		if (nodeRealUrl != null && linha.has("altura_do_vencedor")) {
+			long altura = linha.get("altura_do_vencedor").getAsLong();
+			ResultadoNodeReal nodeReal = consultarNodeRealDetalhado(hash, altura, nodeRealUrl);
+			linha.addProperty("nodereal_status", nodeReal.transferencias().isPresent() ? "sucesso" : "falha");
+			if (nodeReal.erro() != null) {
+				linha.addProperty("nodereal_erro", nodeReal.erro());
+			}
+			if (nodeReal.transferencias().isPresent()) {
+				linha.add("transferencias_internas", paraJson(nodeReal.transferencias().get()));
+				linha.addProperty("fonte_transferencias_internas", "NodeReal nr_getAssetTransfers");
+				return;
+			}
+		}
+
+		ResultadoBscScan bscscan = chaveBscScan == null || chaveBscScan.isBlank()
+				? new ResultadoBscScan(Optional.empty(), "BSCSCAN_API_KEY nao configurada")
+				: consultarBscScanDetalhado(hash, chaveBscScan);
+		linha.addProperty("bscscan_status", bscscan.transferencias().isPresent() ? "sucesso" : "falha");
+		if (bscscan.erro() != null) {
+			linha.addProperty("bscscan_erro", bscscan.erro());
+		}
+		if (bscscan.transferencias().isPresent()) {
+			linha.add("transferencias_internas", paraJson(bscscan.transferencias().get()));
 			linha.addProperty("fonte_transferencias_internas", "BscScan");
 			return;
 		}
 
-		linha.addProperty("transferencias_internas_erro",
-				"indisponível: o RPC não tem debug_traceTransaction e BSCSCAN_API_KEY não está definida ou não respondeu");
+		linha.addProperty("transferencias_internas_erro", "trace RPC: " + trace.erro()
+				+ (nodeRealUrl != null ? "; NodeReal: " + (linha.has("nodereal_erro") ? linha.get("nodereal_erro").getAsString() : "falha") : "")
+				+ "; BscScan: " + bscscan.erro());
 	}
 
 	// Trace do RPC com callTracer. Devolve vazio se o método não existir ou der erro (não é "sem transferência").
 	public static Optional<List<Transferencia>> consultarTrace(RpcDoEnsaio rpc, String hash) {
+		return consultarTraceDetalhado(rpc, hash).transferencias();
+	}
+
+	public static ResultadoTrace consultarTraceDetalhado(RpcDoEnsaio rpc, String hash) {
+		if (rpc == null) {
+			return new ResultadoTrace(Optional.empty(), "RPC de tracing nao configurado");
+		}
+
 		JsonArray parametros = new JsonArray();
 		parametros.add(hash);
 		JsonObject tracer = new JsonObject();
 		tracer.addProperty("tracer", "callTracer");
 		parametros.add(tracer);
-		return rpc.chamar("debug_traceTransaction", parametros)
-				.map(JsonParser::parseString).map(JsonElement::getAsJsonObject)
-				.filter(o -> o.has("result") && o.get("result").isJsonObject())
-				.map(o -> doTrace(o.getAsJsonObject("result")));
+
+		List<RpcDoEnsaio.RespostaRpc> respostas = rpc.chamarComFallback("debug_traceTransaction", parametros);
+		if (respostas.isEmpty()) {
+			return new ResultadoTrace(Optional.empty(),
+					"nenhum endpoint de trace configurado");
+		}
+
+		List<String> erros = new ArrayList<>();
+		for (RpcDoEnsaio.RespostaRpc resposta : respostas) {
+			if (resposta.erro() != null) {
+				erros.add(resposta.host() + ": " + resposta.erro());
+				continue;
+			}
+			ResultadoTrace resultado = interpretarRespostaTrace(resposta.corpo());
+			if (resultado.transferencias().isPresent()) {
+				return resultado;
+			}
+			erros.add(resposta.host() + ": " + resultado.erro());
+		}
+		return new ResultadoTrace(Optional.empty(), limitar(String.join("; ", erros), 700));
+	}
+
+	static ResultadoTrace interpretarRespostaTrace(String resposta) {
+		try {
+			JsonElement elemento = JsonParser.parseString(resposta);
+			if (!elemento.isJsonObject()) {
+				return new ResultadoTrace(Optional.empty(), "resposta JSON-RPC nao e um objeto");
+			}
+			JsonObject corpo = elemento.getAsJsonObject();
+			if (corpo.has("error") && corpo.get("error").isJsonObject()) {
+				JsonObject erro = corpo.getAsJsonObject("error");
+				String codigo = erro.has("code") ? erro.get("code").getAsString() : "desconhecido";
+				String mensagem = erro.has("message") ? erro.get("message").getAsString() : "sem mensagem";
+				return new ResultadoTrace(Optional.empty(),
+						"JSON-RPC code=" + codigo + ": " + limitar(mensagem, 300));
+			}
+			if (corpo.has("result") && corpo.get("result").isJsonObject()) {
+				return new ResultadoTrace(Optional.of(doTrace(corpo.getAsJsonObject("result"))), null);
+			}
+			return new ResultadoTrace(Optional.empty(), "resposta JSON-RPC sem result de trace nem objeto error");
+		} catch (com.google.gson.JsonParseException | IllegalStateException e) {
+			return new ResultadoTrace(Optional.empty(),
+					"resposta JSON-RPC invalida: " + limitar(e.getMessage(), 300));
+		}
 	}
 
 	// Transações internas pela API do BscScan. Vazio se a chamada falhar.
 	public static Optional<List<Transferencia>> consultarBscScan(String hash, String chave) {
+		return consultarBscScanDetalhado(hash, chave).transferencias();
+	}
+
+	public static ResultadoBscScan consultarBscScanDetalhado(String hash, String chave) {
 		String base = java.util.Optional.ofNullable(System.getenv("BSCSCAN_API_URL")).map(String::trim)
 				.filter(u -> !u.isBlank()).orElse(API_PADRAO);
 		String url = base + (base.contains("?") ? "&" : "?") + "module=account&action=txlistinternal&txhash=" + hash
@@ -84,13 +173,20 @@ public final class TransferenciasInternas {
 			HttpResponse<String> resposta = HTTP.send(pedido, HttpResponse.BodyHandlers.ofString());
 			if (resposta.statusCode() != 200) {
 				LOG.warning(() -> "BscScan respondeu HTTP " + resposta.statusCode() + " para " + hash);
-				return Optional.empty();
+				return new ResultadoBscScan(Optional.empty(), "HTTP " + resposta.statusCode());
 			}
 			JsonObject corpo = JsonParser.parseString(resposta.body()).getAsJsonObject();
+			if (corpo.has("status") && "0".equals(corpo.get("status").getAsString())) {
+				String mensagem = corpo.has("result") ? corpo.get("result").getAsString()
+						: corpo.has("message") ? corpo.get("message").getAsString() : "resposta NOTOK";
+				String detalhe = "API status=0: " + limitar(mensagem, 300);
+				LOG.warning(() -> "BscScan sem lista para " + hash + ": " + detalhe);
+				return new ResultadoBscScan(Optional.empty(), detalhe);
+			}
 			if (!corpo.has("result") || !corpo.get("result").isJsonArray()) {
-				// Ex.: chave inválida ou limite de uso. A mensagem da API vem em "result" como texto.
-				LOG.warning(() -> "BscScan sem lista para " + hash + ": " + corpo);
-				return Optional.empty();
+				String detalhe = "resposta sem lista de transacoes internas";
+				LOG.warning(() -> "BscScan sem lista para " + hash + ": " + detalhe);
+				return new ResultadoBscScan(Optional.empty(), detalhe);
 			}
 			List<Transferencia> lista = new ArrayList<>();
 			for (JsonElement e : corpo.getAsJsonArray("result")) {
@@ -101,12 +197,77 @@ public final class TransferenciasInternas {
 							semPrefixo(t.get("to").getAsString()), valor));
 				}
 			}
-			return Optional.of(lista);
+			return new ResultadoBscScan(Optional.of(lista), null);
 		} catch (IOException | InterruptedException | RuntimeException e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
 			}
-			return Optional.empty();
+			return new ResultadoBscScan(Optional.empty(), e.getClass().getSimpleName());
+		}
+	}
+
+	// Transferências internas via `nr_getAssetTransfers` (NodeReal, free tier). Filtra por txHash e retorna
+	// apenas as transferências nativas de BNB (category=internal) daquela transação específica.
+	// Requer que o bloco do hash seja conhecido (`alturaDoBloco`) para limitar a busca.
+	public static ResultadoNodeReal consultarNodeRealDetalhado(String hash, long alturaDoBloco, String urlNodeReal) {
+		String blocoHex = "0x" + Long.toHexString(alturaDoBloco);
+		JsonArray categorias = new JsonArray();
+		categorias.add("internal");
+		JsonObject params = new JsonObject();
+		params.addProperty("fromBlock", blocoHex);
+		params.addProperty("toBlock", blocoHex);
+		params.add("category", categorias);
+		params.addProperty("maxCount", "0x64");
+		JsonArray parametros = new JsonArray();
+		parametros.add(params);
+		JsonObject corpo = new JsonObject();
+		corpo.addProperty("jsonrpc", "2.0");
+		corpo.addProperty("id", 1);
+		corpo.addProperty("method", "nr_getAssetTransfers");
+		corpo.add("params", parametros);
+		try {
+			HttpRequest pedido = HttpRequest.newBuilder(URI.create(urlNodeReal))
+					.timeout(Duration.ofSeconds(15))
+					.header("Content-Type", "application/json")
+					.POST(HttpRequest.BodyPublishers.ofString(corpo.toString()))
+					.build();
+			HttpResponse<String> resposta = HTTP.send(pedido, HttpResponse.BodyHandlers.ofString());
+			if (resposta.statusCode() != 200) {
+				return new ResultadoNodeReal(Optional.empty(), "HTTP " + resposta.statusCode());
+			}
+			JsonObject json = JsonParser.parseString(resposta.body()).getAsJsonObject();
+			if (json.has("error") && json.get("error").isJsonObject()) {
+				JsonObject erro = json.getAsJsonObject("error");
+				String msg = erro.has("message") ? erro.get("message").getAsString() : "erro desconhecido";
+				return new ResultadoNodeReal(Optional.empty(), limitar(msg, 300));
+			}
+			if (!json.has("result") || !json.get("result").isJsonObject()) {
+				return new ResultadoNodeReal(Optional.empty(), "resposta sem result");
+			}
+			JsonObject resultado = json.getAsJsonObject("result");
+			if (!resultado.has("transfers") || !resultado.get("transfers").isJsonArray()) {
+				return new ResultadoNodeReal(Optional.of(List.of()), null);
+			}
+			List<Transferencia> lista = new ArrayList<>();
+			String hashLower = hash.toLowerCase(java.util.Locale.ROOT);
+			for (JsonElement e : resultado.getAsJsonArray("transfers")) {
+				JsonObject t = e.getAsJsonObject();
+				String txHash = t.has("hash") ? t.get("hash").getAsString().toLowerCase(java.util.Locale.ROOT) : "";
+				if (!hashLower.equals(txHash)) continue;
+				String valorHex = t.has("value") ? t.get("value").getAsString() : null;
+				if (valorHex == null) continue;
+				BigInteger valor = hex(valorHex);
+				if (valor.signum() > 0) {
+					lista.add(new Transferencia(
+							semPrefixo(t.has("from") ? t.get("from").getAsString() : ""),
+							semPrefixo(t.has("to") ? t.get("to").getAsString() : ""),
+							valor));
+				}
+			}
+			return new ResultadoNodeReal(Optional.of(lista), null);
+		} catch (IOException | InterruptedException | RuntimeException e) {
+			if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+			return new ResultadoNodeReal(Optional.empty(), e.getClass().getSimpleName());
 		}
 	}
 
@@ -150,5 +311,12 @@ public final class TransferenciasInternas {
 
 	private static String semPrefixo(String endereco) {
 		return endereco == null ? null : (endereco.startsWith("0x") ? endereco.substring(2) : endereco).toLowerCase(java.util.Locale.ROOT);
+	}
+
+	private static String limitar(String texto, int maximo) {
+		if (texto == null) {
+			return "sem detalhe";
+		}
+		return texto.length() <= maximo ? texto : texto.substring(0, maximo);
 	}
 }

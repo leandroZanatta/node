@@ -48,6 +48,7 @@ public final class Quarentena {
 	private final Map<String, Pena> penas = new ConcurrentHashMap<>();
 	private final Map<String, String> semEmprestimo = new ConcurrentHashMap<>();
 	private final Map<String, Integer> taxas = new ConcurrentHashMap<>();
+	private final java.util.concurrent.atomic.AtomicLong exclusoesPorPena = new java.util.concurrent.atomic.AtomicLong();
 
 	private final Path arquivo;
 	private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -71,12 +72,23 @@ public final class Quarentena {
 
 		long milis = Math.min(PENA_MAXIMA.toMillis(), base.toMillis() << Math.min(reincidencias, 20));
 		penas.put(chave, new Pena(System.currentTimeMillis() + milis, motivo, reincidencias));
+
+		long minutos = milis / 60_000;
+		String durStr = minutos < 2 ? milis + "ms" : minutos + "min";
+		LOG.info(() -> "quarentena: condenando " + chave + " por " + durStr
+				+ (reincidencias > 0 ? " (reincidência " + reincidencias + ")" : "")
+				+ " — " + motivo);
+
 		salvar();
 	}
 
 	public boolean livre(byte[] pool) {
 		Pena pena = penas.get(HexFormat.of().formatHex(pool));
-		return pena == null || pena.ate() <= System.currentTimeMillis();
+		boolean bloqueada = pena != null && pena.ate() > System.currentTimeMillis();
+		if (bloqueada) {
+			exclusoesPorPena.incrementAndGet();
+		}
+		return !bloqueada;
 	}
 
 	public void proibirEmprestimo(byte[] pool, String callback) {
@@ -112,6 +124,51 @@ public final class Quarentena {
 		});
 
 		return presas;
+	}
+
+	// Limpa todas as penas, preservando taxas medidas e restrições de empréstimo.
+	// Usado via POST /quarentena/limpar para liberar pools bloqueadas por erros passados.
+	public int limparPenas() {
+		int total = penas.size();
+		penas.clear();
+		salvar();
+		return total;
+	}
+
+	// Resumo para o endpoint HTTP /quarentena.
+	public Map<String, Object> statusHttp() {
+		long agora = System.currentTimeMillis();
+		Map<String, Object> r = new LinkedHashMap<>();
+		long ativas = penas.values().stream().filter(p -> p.ate() > agora).count();
+		r.put("penas_ativas", ativas);
+		r.put("penas_total", penas.size());
+		r.put("taxas_medidas", taxas.size());
+		r.put("sem_emprestimo_proibido", semEmprestimo.size());
+		r.put("exclusoes_por_pena_acumuladas", exclusoesPorPena.get());
+		Map<String, Long> porMotivo = new java.util.TreeMap<>();
+		penas.forEach((pool, pena) -> {
+			if (pena.ate() > agora) {
+				String chave = pena.motivo().length() > 50 ? pena.motivo().substring(0, 50) : pena.motivo();
+				porMotivo.merge(chave, 1L, Long::sum);
+			}
+		});
+		r.put("ativas_por_motivo", porMotivo);
+
+		List<Map<String, Object>> detalhe = penas.entrySet().stream()
+				.filter(e -> e.getValue().ate() > agora)
+				.sorted((a, b) -> Long.compare(b.getValue().ate(), a.getValue().ate()))
+				.limit(20)
+				.map(e -> {
+					Map<String, Object> p = new LinkedHashMap<>();
+					p.put("pool", e.getKey());
+					p.put("restam_min", (e.getValue().ate() - agora) / 60_000);
+					p.put("reincidencias", e.getValue().reincidencias());
+					p.put("motivo", e.getValue().motivo());
+					return p;
+				}).toList();
+		r.put("penas_ativas_detalhe", detalhe);
+
+		return r;
 	}
 
 	public Map<String, String> semEmprestimo() {

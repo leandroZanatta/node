@@ -20,10 +20,10 @@ import br.com.node.nucleo.Travessia;
 //
 // Nasceu de um erro medido: o piso usava uma constante de ~1 gwei (era da BSC cara) enquanto a taxa
 // usava o preço vivo. A BSC roda a 0,05 gwei — o piso pedia ~34× o gás real e recusava o mercado
-// inteiro (`pagariam_gas`=0). Agora piso e taxa saem do MESMO preço, relido da rede, e a margem de
-// 3/2 é literal sobre o gás.
+// inteiro (`pagariam_gas`=0). Agora piso e taxa saem do MESMO preço, relido da rede; o padrão do
+// piso cobre 1× os custos estimados e exige sobra líquida estritamente positiva.
 //
-// A ESTIMATIVA DE GÁS é ESTRUTURAL e CONSERVADORA: um teto por tipo de perna, não um chute único.
+// A ESTIMATIVA DE GÁS é ESTRUTURAL: um teto por tipo de perna, não um chute único.
 // As constantes saíram de swaps REAIS da BSC medidos numa janela de ~60 blocos (comentário de cada
 // uma), e são teto de propósito — superestimar o piso só recusa fenda boa (perder oportunidade não
 // custa gas); subestimar faz entrar em fenda que não paga o próprio gas. Quem quiser o número EXATO
@@ -118,26 +118,22 @@ public final class CustoDeGas {
 	// traduzir): cada perna ocupa 5 palavras = 160 bytes, e o teto é todos eles não-zero.
 	private static final long GAS_CALLDATA_POR_PERNA = 160L * GAS_BYTE_NAO_ZERO;
 
-	// Margem sobre o gás para entrar (o piso), como fração NUM/DEN. 3/2 (1,5×): baixa de propósito —
-	// a decisão é "migalha que paga o gás serve, consistência importa mais que tamanho". Fica ACIMA
-	// de 1× para o líquido ser positivo mesmo se o gás real diferir um pouco da estimativa, mas
-	// captura as fendas entre 1× e 3× que o piso antigo (3×) jogava fora.
-	//
-	// `PISO_MARGEM` troca o 1,5 na subida (ex.: 1.1), em centésimos. Abaixo de 1,0 não aceita: piso menor que
-	// o gás é pagar para trabalhar. É seguro descer até perto de 1: o pagamento ao builder é no máximo o que
-	// sobra ACIMA do piso (`Disparo.pagamentoAoBuilder`), então o líquido nunca fica abaixo de (margem − 1)
-	// × gás — e o gás daqui é teto calibrado, não mediana.
+	// O piso-base exige o custo de arbitragem + eventual taxa de empréstimo + 1 wei de sobra prevista.
+	// O custo da transferência ao builder entra no Disparo apenas se houver pagamento direto.
+	// PISO_MARGEM permite configurar margem adicional; o padrão é 1,00×.
 	private static final BigInteger MARGEM_DEN = BigInteger.valueOf(100);
 	private static final BigInteger MARGEM_NUM = BigInteger.valueOf(java.util.Optional
 			.ofNullable(System.getenv("PISO_MARGEM")).map(String::trim).flatMap(texto -> {
-				// Valor ilegível ou abaixo de 1,0 ESTOURA na subida: antes caía calado no 1,5, e um erro de
+				// Valor ilegível ou abaixo de 1,0 ESTOURA na subida: um erro de
 				// digitação no servidor mudava o piso sem ninguém saber.
 				long centesimos = Math.round(Double.parseDouble(texto.replace(',', '.')) * 100);
 				if (centesimos < 100) {
 					throw new IllegalStateException("PISO_MARGEM abaixo de 1,0: " + texto);
 				}
 				return java.util.Optional.of(centesimos);
-			}).orElse(150L));
+			}).orElse(100L));
+	public static final long GAS_TX_PAGAMENTO_BUILDER = 21_000L;
+	private static final BigInteger GAS_PAGAMENTO_BUILDER = BigInteger.valueOf(GAS_TX_PAGAMENTO_BUILDER);
 
 	// NÃO HÁ GORJETA FIXA AQUI, e a ausência é a correção de um erro medido DUAS vezes. Havia um 0,1
 	// gwei fixo: somado à base no piso (`base + 0,1` = 0,15 gwei, 3× o mercado) e assinado como
@@ -321,6 +317,17 @@ public final class CustoDeGas {
 		return medido.add(gorjeta);
 	}
 
+	// Converte BNB wei em USD aproximado. Vazio se câmbio ainda não foi medido.
+	public Optional<Double> bnbWeiParaUsd(BigInteger bnbWei) {
+		BigInteger cambio = usdtPorBnb;
+		if (cambio == null || cambio.signum() <= 0 || bnbWei == null || bnbWei.signum() <= 0) {
+			return Optional.empty();
+		}
+		// emUsdt(bnbWei) = bnbWei * cambio → USDT wei; ÷ 1e18 → USDT (≈ USD)
+		return Optional.of(new java.math.BigDecimal(bnbWei).multiply(new java.math.BigDecimal(cambio))
+				.divide(java.math.BigDecimal.TEN.pow(18), 6, java.math.RoundingMode.DOWN).doubleValue());
+	}
+
 	// O câmbio USDT/BNB que o piso está usando agora (wei a wei, o mesmo número que converte o piso de
 	// USDT). Público para o RELATÓRIO publicá-lo: sem ele, um piso em USDT é um valor sem unidade nem
 	// escala — e foi assim que o fator fixo de 600 atravessou uma corrida inteira sem ninguém ver.
@@ -388,7 +395,8 @@ public final class CustoDeGas {
 	// Gás estimado da rota COM a calldata real do contrato. A parte estrutural é a mesma; o custo de
 	// calldata passa a ser contado byte a byte (EIP-2028), em vez do teto por perna. É o número mais
 	// preciso que se obtém SEM a EVM — e o ponto de partida que o `Disparo` manda ao nó.
-	public BigInteger estimarGas(List<Salto> rota, byte[] calldata) {
+	// Quando `semLoan` é true, o GAS_EMPRESTIMO não é incluído: a rota usa saldo próprio do Executor.
+	public BigInteger estimarGas(List<Salto> rota, byte[] calldata, boolean semLoan) {
 
 		if (rota == null || rota.isEmpty()) {
 			return BigInteger.valueOf(GAS_BASE_TX);
@@ -400,12 +408,17 @@ public final class CustoDeGas {
 
 		int v3 = contarV3(rota);
 		int gerente = contarGerente(rota);
+		long gasEmprestimo = semLoan ? 0L : GAS_EMPRESTIMO;
 
-		return BigInteger.valueOf(GAS_BASE_TX + GAS_EXECUTOR_FIXO + GAS_EMPRESTIMO)
+		return BigInteger.valueOf(GAS_BASE_TX + GAS_EXECUTOR_FIXO + gasEmprestimo)
 				.add(BigInteger.valueOf(GAS_PERNA_V2).multiply(BigInteger.valueOf(rota.size() - v3 - gerente)))
 				.add(BigInteger.valueOf(GAS_PERNA_V3).multiply(BigInteger.valueOf(v3)))
 				.add(BigInteger.valueOf(GAS_PERNA_GERENTE).multiply(BigInteger.valueOf(gerente)))
 				.add(gasDaCalldata(calldata));
+	}
+
+	public BigInteger estimarGas(List<Salto> rota, byte[] calldata) {
+		return estimarGas(rota, calldata, false);
 	}
 
 	// Custo EXATO dos bytes da calldata (EIP-2028). Público para o teste poder prová-lo: a diferença
@@ -455,9 +468,9 @@ public final class CustoDeGas {
 	}
 
 
-	// O CUSTO DO GÁS da rota, 1× e sem margem, EM WEI DO TOKEN DA RAIZ. É ele que responde
-	// "esta fenda PAGA o próprio gás?"; o `piso` acrescenta a margem e a taxa do empréstimo, e
-	// responde "vale a pena?". As duas perguntas são diferentes e por isso os dois números existem
+	// O CUSTO ESTIMADO da transação de arbitragem, EM WEI DO TOKEN DA RAIZ. A transação de pagamento
+	// só existe quando há pagamento direto ao builder e seu custo é somado condicionalmente no Disparo.
+	// O `piso` acrescenta a margem configurada, eventual taxa do empréstimo e 1 wei de sobra.
 	// separados: sem a distinção, uma fenda que paga o gás mas não a margem some no mesmo contador
 	// da poeira, e "abaixo do piso" deixa de dizer QUAL das duas coisas aconteceu.
 	//
@@ -465,6 +478,10 @@ public final class CustoDeGas {
 	// um lucro em USDT — 600× de erro no contador `pagaria_o_gas`, MEDIDO em produção (25/09).
 	public BigInteger custoDoGas(byte[] tokenRaiz, BigInteger gasEstimado) {
 		return converterDoBnb(tokenRaiz, precoEfetivo().multiply(gasCalibrado(gasEstimado)));
+	}
+
+	public BigInteger custoDaTransferenciaBuilder(byte[] tokenRaiz) {
+		return converterDoBnb(tokenRaiz, precoEfetivo().multiply(GAS_PAGAMENTO_BUILDER));
 	}
 
 	// Fator medido do gás (milésimos de medido/estimado), vindo dos recibos das nossas txs (MedidorDeGas).
@@ -479,6 +496,10 @@ public final class CustoDeGas {
 		return fatorDeGasMilesimos;
 	}
 
+	public int margemDoPisoCentimos() {
+		return MARGEM_NUM.intValueExact();
+	}
+
 	private BigInteger gasCalibrado(BigInteger gasEstimado) {
 		return gasEstimado.multiply(BigInteger.valueOf(fatorDeGasMilesimos)).divide(BigInteger.valueOf(1000));
 	}
@@ -490,16 +511,13 @@ public final class CustoDeGas {
 				: montante.multiply(TAXA_FLASH_BPS).divide(BigInteger.valueOf(10_000));
 	}
 
-	// O piso de lucro para entrar, EM WEI DO TOKEN DE RAIZ (o token em que o ciclo abre e fecha, e em
-	// que o contrato mede o lucro): o gás da rota × preço vigente × margem de 3/2, MAIS a taxa do
-	// empréstimo relâmpago. WBNB: direto. USDT: convertido pelo preço da canônica. Qualquer outro
-	// token: vazio — não se entra.
+	// O piso de lucro para entrar, EM WEI DO TOKEN DE RAIZ: gás calibrado da rota, margem configurada,
+	// custo do pagamento ao builder e uma unidade mínima de sobra líquida. WBNB: direto; USDT e demais
+	// numerários: convertidos pelo preço medido. Qualquer outra raiz não pode ser cotada e não entra.
 	//
 	// As duas parcelas são as duas coisas que a fenda tem de pagar para o líquido ser positivo. O gás
-	// é FIXO (uma rota de 3 pernas custa o mesmo com 3 ou 3.000 dólares de entrada); a taxa do
-	// empréstimo é 25 bps de QUALQUER entrada. Numa fenda fina é ela que domina — medido em produção
-	// (25/09): a melhor fenda de 63 min tinha 42,5 bps de borda bruta, 35,8 de gás e 25 de
-	// empréstimo, ou seja 18,3 bps NEGATIVA antes de qualquer limiar.
+	// é FIXO (uma rota de 3 pernas custa o mesmo com 3 ou 3.000 dólares de entrada); uma eventual taxa
+	// de empréstimo entra à parte se configurada.
 	//
 	// Recebe o GÁS já estimado (analítico ou medido pela EVM) e o MONTANTE emprestado: é o único jeito
 	// de o `Disparo` refinar o piso com o número que o nó devolveu, sem recontar as pernas.
@@ -514,9 +532,12 @@ public final class CustoDeGas {
 			return Optional.empty();
 		}
 
-		BigInteger gasComMargem = precoEfetivo().multiply(gasCalibrado(gasEstimado)).multiply(MARGEM_NUM).divide(MARGEM_DEN);
+		BigInteger gasDaArbitragem = gasCalibrado(gasEstimado);
+		BigInteger custoGasBnb = precoEfetivo()
+				.multiply(gasDaArbitragem.multiply(MARGEM_NUM).divide(MARGEM_DEN));
+		BigInteger custoGasRaiz = converterDoBnb(tokenRaiz, custoGasBnb);
 
-		return Optional.of(converterDoBnb(tokenRaiz, gasComMargem).add(taxaDoEmprestimo(montante)));
+		return Optional.of(custoGasRaiz.add(taxaDoEmprestimo(montante)).add(BigInteger.ONE));
 	}
 
 	// Valor em BNB → wei do token da raiz. Identidade no WBNB; no USDT, pelo preço da canônica; em U, pela pool V2.
@@ -562,6 +583,51 @@ public final class CustoDeGas {
 				: Optional.empty();
 	}
 
+	// Conversão para métricas observacionais: antes da primeira leitura da canônica, ausência de preço é
+	// um dado incompleto, não uma falha do processamento do bloco. Os caminhos de execução continuam
+	// usando `paraBnb`, que falha fechado se a conversão necessária ainda não existe.
+	public Optional<BigInteger> paraBnbSeDisponivel(byte[] tokenRaiz, BigInteger quantia) {
+
+		if (tokenRaiz == null || quantia == null) {
+			return Optional.empty();
+		}
+
+		if (Arrays.equals(tokenRaiz, WBNB)) {
+			return Optional.of(quantia);
+		}
+
+		Optional<BigInteger> umBnbEmRaiz;
+		if (Arrays.equals(tokenRaiz, U)) {
+			umBnbEmRaiz = cambioUDisponivel();
+		} else if (Arrays.equals(tokenRaiz, USDT) || Arrays.equals(tokenRaiz, BUSD)
+				|| Arrays.equals(tokenRaiz, USDC)) {
+			umBnbEmRaiz = cambioUsdtDisponivel();
+		} else {
+			return Optional.empty();
+		}
+
+		return umBnbEmRaiz.filter(cambio -> cambio.signum() > 0)
+				.map(cambio -> quantia.multiply(BigInteger.TEN.pow(18)).divide(cambio));
+	}
+
+	private Optional<BigInteger> cambioUsdtDisponivel() {
+		Optional<BigInteger> medido = cambioDaCanonica();
+		if (medido.isPresent()) {
+			usdtPorBnb = medido.get();
+			return medido;
+		}
+		return Optional.ofNullable(usdtPorBnb);
+	}
+
+	private Optional<BigInteger> cambioUDisponivel() {
+		Optional<BigInteger> medido = cambioDaPoolU();
+		if (medido.isPresent()) {
+			uPorBnb = medido.get();
+			return medido;
+		}
+		return Optional.ofNullable(uPorBnb);
+	}
+
 	// Converte um valor em wei de BNB para wei de USDT. A razão vem da canônica (V2 pelas reservas, V3
 	// pelo `sqrtPrecoX96`); quando ela não está disponível NESTE instante, usa a última medida — e só
 	// cai no valor frio se nunca se mediu nada. NUNCA devolve vazio: antes, o vazio derrubava toda arb
@@ -569,40 +635,22 @@ public final class CustoDeGas {
 	// recurso, não o primeiro (ver o comentário da canônica).
 	private BigInteger emUsdt(BigInteger valorBnb) {
 
-		Optional<BigInteger> medido = cambioDaCanonica();
-
-		if (medido.isPresent()) {
-			usdtPorBnb = medido.get();
-			return valorBnb.multiply(medido.get());
-		}
-
-		BigInteger ultimo = usdtPorBnb;
-
-		if (ultimo == null) {
+		Optional<BigInteger> cambio = cambioUsdtDisponivel();
+		if (cambio.isEmpty()) {
 			throw new IllegalStateException("câmbio BNB/USDT nunca medido: a canônica ainda não está no catálogo");
 		}
-
-		return valorBnb.multiply(ultimo);
+		return valorBnb.multiply(cambio.get());
 	}
 
 	// Converte um valor em wei de BNB para wei de U (United Stables). Lê as reservas V2 da pool WBNB/U;
 	// se não disponíveis agora, usa a última medida. ESTOURA se nunca mediu — mesma política do USDT.
 	private BigInteger emU(BigInteger valorBnb) {
 
-		Optional<BigInteger> medido = cambioDaPoolU();
-
-		if (medido.isPresent()) {
-			uPorBnb = medido.get();
-			return valorBnb.multiply(medido.get());
-		}
-
-		BigInteger ultimo = uPorBnb;
-
-		if (ultimo == null) {
+		Optional<BigInteger> cambio = cambioUDisponivel();
+		if (cambio.isEmpty()) {
 			throw new IllegalStateException("câmbio BNB/U nunca medido: pool WBNB/U ainda não está no catálogo");
 		}
-
-		return valorBnb.multiply(ultimo);
+		return valorBnb.multiply(cambio.get());
 	}
 
 }

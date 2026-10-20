@@ -136,14 +136,18 @@ public final class Autopsia implements Closeable {
 		publicar(hash, resultado);
 	}
 
-	// Roda o laudo, compara com o modelo, registra e aplica a correção. Chamado da thread de autópsia.
 	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
 			String desfecho, String veredito) {
-		examinar(operador, contrato, achado, chamada, desfecho, veredito, null);
+		examinar(operador, contrato, achado, chamada, desfecho, veredito, null, null);
 	}
 
 	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
 			String desfecho, String veredito, String hashEnviado) {
+		examinar(operador, contrato, achado, chamada, desfecho, veredito, hashEnviado, null);
+	}
+
+	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
+			String desfecho, String veredito, String hashEnviado, Map<String, Object> extras) {
 
 		examinadas.incrementAndGet();
 
@@ -178,6 +182,9 @@ public final class Autopsia implements Closeable {
 				}
 			}
 
+			if (extras != null) {
+				registro.putAll(extras);
+			}
 			escrever(registro);
 			publicar(hashEnviado, registro);
 			return;
@@ -238,6 +245,9 @@ public final class Autopsia implements Closeable {
 		Map<String, Object> registro = comparar(achado, chamada, laudo.get());
 		registro.put("desfecho", desfecho);
 		registro.put("veredito", veredito);
+		if (extras != null) {
+			registro.putAll(extras);
+		}
 
 		escrever(registro);
 		gravarImpostosDasPernas(registro);
@@ -653,6 +663,18 @@ public final class Autopsia implements Closeable {
 
 	static boolean overflow(String motivo) {
 		return motivo.toLowerCase(java.util.Locale.ROOT).contains("overflow");
+	}
+
+	// Rejeição por gás insuficiente do nosso lado — culpa nossa, não da pool. Pena mínima.
+	static boolean gasInsuficiente(String motivo) {
+		String m = motivo.toLowerCase(java.util.Locale.ROOT);
+		return m.contains("out of gas") || m.contains("gas limit") || m.contains("intrinsic gas")
+				|| m.contains("gas required") || m.contains("gas too low");
+	}
+
+	// A tx-alvo do bundle falhou na simulação do relay — problema de timing/bundle, não da pool.
+	static boolean txAlvoFalhou(String motivo) {
+		return motivo.toLowerCase(java.util.Locale.ROOT).contains("non-reverting tx in bundle failed");
 	}
 
 	// "header not found" é o nodereal (RPC_LOGS) sem o bloco AINDA: vemos o bloco antes dele. Medido em 27/09: ele

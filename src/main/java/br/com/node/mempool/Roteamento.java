@@ -137,6 +137,8 @@ public final class Roteamento {
 	// do que inventar uma pool que não existe no catálogo.
 	// A factory de cada roteador V2 conhecido — perguntada ao próprio contrato (`factory()`) em 24/09.
 	// O roteador só troca nos pares DELA, e o endereço do par sai por CREATE2: não há o que escolher.
+	private static final java.util.HexFormat HEX = java.util.HexFormat.of();
+
 	private static final java.util.Map<String, byte[]> FACTORY_DO_ROTEADOR = java.util.Map.of(
 			"10ed43c718714eb63d5aa57b78b54704e256024e", hexa("ca143ce32fe78f1f7019d7d551a6402fc5350c73"), // PancakeSwap V2
 			"05ff2b0db69458a0750badebc4f9e13add608c7f", hexa("bcfccbde45ce874adcb698cc183debcf17952812"), // PancakeSwap V1
@@ -146,7 +148,7 @@ public final class Roteamento {
 			"1b02da8cb0d097eb8d57a175b88c7d8b47997506", hexa("c35dadb65012ec5796536bd9864ed8773abc74c4")); // SushiSwap
 
 	private static byte[] hexa(String hex) {
-		return java.util.HexFormat.of().parseHex(hex);
+		return HEX.parseHex(hex);
 	}
 
 	// Sem saber o roteador: só pools declaradas no swap, ou a ÚNICA pool do par no catálogo.
@@ -185,7 +187,7 @@ public final class Roteamento {
 		}
 
 		byte[] factory = roteador == null ? null
-				: FACTORY_DO_ROTEADOR.get(java.util.HexFormat.of().formatHex(roteador));
+				: FACTORY_DO_ROTEADOR.get(HEX.formatHex(roteador));
 
 		List<byte[]> pools = new ArrayList<>();
 
@@ -199,10 +201,20 @@ public final class Roteamento {
 				pool = br.com.node.catalogo.Fabricas.parV2(factory, token0, token1)
 						.filter(endereco -> catalogo.par(endereco).map(par -> pareia(par, token0, token1)).orElse(false));
 			} else {
-				// Pelo índice par → pools (antes: varredura do catálogo inteiro por swap pendente).
 				List<byte[]> candidatas = catalogo.poolsDoPar(token0, token1).stream()
 						.filter(endereco -> catalogo.conhece(endereco)).limit(2).toList();
-				pool = candidatas.size() == 1 ? Optional.of(candidatas.get(0)) : Optional.empty();
+				if (candidatas.size() == 1) {
+					pool = Optional.of(candidatas.get(0));
+				} else if (!candidatas.isEmpty()) {
+					List<Optional<byte[]>> porFactory = FACTORY_DO_ROTEADOR.values().stream()
+							.map(f -> br.com.node.catalogo.Fabricas.parV2(f, token0, token1)
+									.filter(addr -> catalogo.par(addr).map(par -> pareia(par, token0, token1)).orElse(false)))
+							.filter(Optional::isPresent)
+							.limit(2).toList();
+					pool = porFactory.size() == 1 ? porFactory.get(0) : Optional.empty();
+				} else {
+					pool = Optional.empty();
+				}
 			}
 
 			if (pool.isEmpty()) {
@@ -320,6 +332,6 @@ public final class Roteamento {
 	}
 
 	private static String hex(byte[] bytes, int inicio, int quantos) {
-		return java.util.HexFormat.of().formatHex(bytes, inicio, inicio + quantos);
+		return HEX.formatHex(bytes, inicio, inicio + quantos);
 	}
 }

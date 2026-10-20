@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.HexFormat;
 import java.util.logging.Logger;
 
 import com.google.gson.JsonArray;
@@ -27,9 +28,9 @@ import com.google.gson.JsonObject;
 public final class VencedorDoLeilao {
 
 	private static final Logger LOG = Logger.getLogger(VencedorDoLeilao.class.getName());
-	private static final BigInteger SEM_VALOR = BigInteger.ZERO;
 	// Quantas posições ao redor da transação vencedora olhamos para achar o pagamento dela.
 	static final int JANELA_POSICAO = 3;
+	static final String ENDERECO_48CLUB = HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB);
 
 	private VencedorDoLeilao() {
 	}
@@ -55,15 +56,20 @@ public final class VencedorDoLeilao {
 		JsonObject tx = txs.getAsJsonArray().get(posicao).getAsJsonObject();
 		BigInteger valor = hexParaInteiro(texto(tx, "value"));
 		BigInteger precoDoGas = hexParaInteiro(texto(tx, "gasPrice"));
+		BigInteger limiteGas = hexParaInteiro(texto(tx, "gas"));
 
 		r.addProperty("hash_vencedor", texto(tx, "hash"));
 		r.addProperty("de", semPrefixo(texto(tx, "from")));
 		r.addProperty("para", semPrefixo(texto(tx, "to")));
-		r.addProperty("valor_wei", valor.toString());
-		r.addProperty("gas_price_wei", precoDoGas.toString());
+		r.addProperty("valor_wei", valor == null ? null : valor.toString());
+		r.addProperty("gas_price_wei", precoDoGas == null ? null : precoDoGas.toString());
+		r.addProperty("gas_limit_vencedor", limiteGas == null ? null : limiteGas.toString());
+		r.addProperty("tipo_transacao_vencedor", texto(tx, "type"));
 		r.addProperty("direto_a_builder", enderecosDeBuilder.contains(semPrefixo(texto(tx, "to"))));
 
 		JsonArray pagamentos = new JsonArray();
+		JsonArray pagamentos48Club = new JsonArray();
+		BigInteger pagamento48Club = BigInteger.ZERO;
 		for (PagamentosDeBloco.Pagamento p : PagamentosDeBloco.interpretar(bloco, enderecosDeBuilder)) {
 			JsonObject linha = new JsonObject();
 			linha.addProperty("posicao", p.posicao());
@@ -72,8 +78,16 @@ public final class VencedorDoLeilao {
 			linha.addProperty("valor_wei", p.valorWei().toString());
 			linha.addProperty("hash", p.hash());
 			pagamentos.add(linha);
+			if (ENDERECO_48CLUB.equals(p.para()) && deMesmoRemetenteNaJanela(texto(tx, "from"), p, posicao)) {
+				pagamentos48Club.add(linha.deepCopy());
+				pagamento48Club = pagamento48Club.add(p.valorWei());
+			}
 		}
 		r.add("pagamentos_a_builder_no_bloco", pagamentos);
+		r.add("pagamentos_48club_no_bloco", pagamentos48Club);
+		r.addProperty("pagamento_48club_bnb_wei", pagamento48Club.toString());
+		r.addProperty("pagamento_48club_status", pagamento48Club.signum() > 0
+				? "direto_medido_trace_pendente" : "direto_nao_detectado_trace_pendente");
 
 		// O pagamento do VENCEDOR: BNB que o remetente dele mandou a uma builder, na própria tx ou numa tx vizinha
 		// (o lance costuma ser uma transferência separada, do mesmo remetente, logo depois da arbitragem).
@@ -85,6 +99,12 @@ public final class VencedorDoLeilao {
 			}
 		}
 		r.addProperty("pagamento_do_vencedor_wei", pagoPeloVencedor.toString());
+		r.addProperty("pagamento_direto_builder_status",
+				pagoPeloVencedor.signum() > 0 ? "detectado" : "nao_detectado");
+		r.addProperty("pagamento_direto_builder_escopo",
+				"bnb_nativo_para_enderecos_conhecidos_mesmo_remetente_janela_3");
+		r.add("pagamento_total_builder_wei", com.google.gson.JsonNull.INSTANCE);
+		r.addProperty("pagamento_total_builder_status", "nao_verificado_sem_trace");
 
 		// TODAS as transferências de valor do bloco, sem filtro de destino nem de posição. O filtro acima só olha
 		// o remetente exato e três builders conhecidas: se o lance foi para outro endereço (payout, coinbase,
@@ -94,7 +114,7 @@ public final class VencedorDoLeilao {
 		for (int i = 0; i < todas.size(); i++) {
 			JsonObject t = todas.get(i).getAsJsonObject();
 			BigInteger v = hexParaInteiro(texto(t, "value"));
-			if (v.signum() > 0) {
+			if (v != null && v.signum() > 0) {
 				JsonObject linha = new JsonObject();
 				linha.addProperty("posicao", i);
 				linha.addProperty("de", semPrefixo(texto(t, "from")));
@@ -106,6 +126,33 @@ public final class VencedorDoLeilao {
 		}
 		r.add("transferencias_de_valor_no_bloco", valores);
 		return r;
+	}
+
+	public static void medirPagamento48Club(JsonObject linha) {
+		BigInteger total = big(linha, "pagamento_48club_bnb_wei");
+		if (total == null) {
+			total = BigInteger.ZERO;
+		}
+		String deVencedor = semPrefixo(texto(linha, "de"));
+		JsonElement internas = linha.get("transferencias_internas");
+		boolean traceCompleto = internas != null && internas.isJsonArray()
+				&& linha.has("sucesso_vencedor") && linha.get("sucesso_vencedor").getAsBoolean()
+				&& linha.has("fonte_transferencias_internas");
+		if (traceCompleto) {
+			for (JsonElement elemento : internas.getAsJsonArray()) {
+				JsonObject transferencia = elemento.getAsJsonObject();
+				if (ENDERECO_48CLUB.equals(semPrefixo(texto(transferencia, "para")))
+						&& !java.util.Objects.equals(deVencedor, semPrefixo(texto(transferencia, "de")))) {
+					BigInteger valor = big(transferencia, "valor_wei");
+					if (valor != null && valor.signum() > 0) {
+						total = total.add(valor);
+					}
+				}
+			}
+		}
+		linha.addProperty("pagamento_48club_bnb_wei", total.toString());
+		linha.addProperty("pagamento_48club_status", traceCompleto ? "medido_no_escopo_com_trace"
+				: total.signum() > 0 ? "limite_inferior_sem_trace" : "nao_detectado_sem_trace");
 	}
 
 	// Acrescenta uma linha. Chamado de uma thread de fundo: a escrita é serializada para não misturar linhas.
@@ -138,8 +185,20 @@ public final class VencedorDoLeilao {
 
 	private static BigInteger hexParaInteiro(String hex) {
 		if (hex == null) {
-			return SEM_VALOR;
+			return null;
 		}
-		return new BigInteger(hex.startsWith("0x") ? hex.substring(2) : hex, 16);
+		String valor = hex.startsWith("0x") || hex.startsWith("0X") ? hex.substring(2) : hex;
+		return valor.isEmpty() ? null : new BigInteger(valor, 16);
+	}
+
+	private static boolean deMesmoRemetenteNaJanela(String remetente, PagamentosDeBloco.Pagamento pagamento,
+			int posicao) {
+		return remetente != null && semPrefixo(remetente).equalsIgnoreCase(pagamento.de())
+				&& Math.abs(pagamento.posicao() - posicao) <= JANELA_POSICAO;
+	}
+
+	private static BigInteger big(JsonObject o, String campo) {
+		JsonElement e = o == null ? null : o.get(campo);
+		return e == null || e.isJsonNull() ? null : new BigInteger(e.getAsString());
 	}
 }

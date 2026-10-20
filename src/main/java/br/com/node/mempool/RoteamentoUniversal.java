@@ -20,6 +20,7 @@ import br.com.node.vo.SwapPendente;
 
 public final class RoteamentoUniversal {
 
+	private static final HexFormat HEX = HexFormat.of();
 	private static final String SELETOR = "24856bc3";
 	// execute(bytes,bytes[],uint256) — variante com deadline; layout dos dois primeiros parâmetros é idêntico.
 	private static final String SELETOR_COM_DEADLINE = "3593564c";
@@ -69,7 +70,7 @@ public final class RoteamentoUniversal {
 
 			try {
 				Passo passo = v3.aplicar(direcao, carregando);
-				overlay.put(HexFormat.of().formatHex(pool.get()), passo.depois());
+				overlay.put(HEX.formatHex(pool.get()), passo.depois());
 				carregando = passo.saida();
 			} catch (IllegalArgumentException cruzaOuSemLiquidez) {
 				return Map.of();
@@ -94,6 +95,12 @@ public final class RoteamentoUniversal {
 	private static boolean pareia(Par par, byte[] a, byte[] b) {
 		return (Arrays.equals(par.token0(), a) && Arrays.equals(par.token1(), b))
 				|| (Arrays.equals(par.token0(), b) && Arrays.equals(par.token1(), a));
+	}
+
+	static boolean ehUniversalRouter(byte[] calldata) {
+		if (calldata == null || calldata.length < 4) return false;
+		String sel = HEX.formatHex(calldata, 0, 4);
+		return SELETOR.equals(sel) || SELETOR_COM_DEADLINE.equals(sel);
 	}
 
 	public static Optional<SwapV3> decodificar(byte[] calldata) {
@@ -287,6 +294,6 @@ public final class RoteamentoUniversal {
 	}
 
 	private static String hex(byte[] bytes, int inicio, int quantos) {
-		return java.util.HexFormat.of().formatHex(bytes, inicio, inicio + quantos);
+		return HEX.formatHex(bytes, inicio, inicio + quantos);
 	}
 }

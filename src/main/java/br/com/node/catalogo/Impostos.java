@@ -99,8 +99,10 @@ public final class Impostos {
 	}
 
 	// O imposto de VENDA de `token` ao entrar em `pool`, em bps, ou vazio quando a perna não pode ser feita:
-	// honeypot, suspeito, ou token que já vimos taxado e cuja venda POR ESTA POOL ninguém mediu — não se chuta
-	// um número para imposto desconhecido; a sonda mede e a perna volta.
+	// honeypot, suspeito.
+	// Token visto com imposto e sem medida nesta pool: cobra-se o maior visto (conservador). Excluir a pool
+	// tirava rota viável do grafo; o preço mais alto deixa a simulação do relay decidir — rejeição de bundle
+	// não tem custo com revertingTxHashes vazio.
 	public java.util.OptionalInt venda(byte[] pool, byte[] token) {
 
 		Integer forte = provado.get(chave(pool, token));
@@ -112,7 +114,8 @@ public final class Impostos {
 		Long fraco = maiorRetido.get(HexFormat.of().formatHex(token));
 
 		if (fraco != null && fraco > 0) {
-			return java.util.OptionalInt.empty();
+			vendaConservadora.incrementAndGet();
+			return java.util.OptionalInt.of(Math.toIntExact(fraco));
 		}
 
 		// ASSUMIDO, não medido: zero é o que se aposta até a sonda ou a autópsia medirem, e a simulação do relay é
@@ -122,11 +125,14 @@ public final class Impostos {
 	}
 
 	private final java.util.concurrent.atomic.AtomicLong vendaAssumida = new java.util.concurrent.atomic.AtomicLong();
+	private final java.util.concurrent.atomic.AtomicLong vendaConservadora = new java.util.concurrent.atomic.AtomicLong();
 	private final java.util.concurrent.atomic.AtomicLong compraAssumida = new java.util.concurrent.atomic.AtomicLong();
+	private final java.util.concurrent.atomic.AtomicLong compraConservadora = new java.util.concurrent.atomic.AtomicLong();
 
 	// Quantas consultas de imposto responderam com zero ASSUMIDO (sem medida nem evidência), por direção.
 	public Map<String, Long> assumidos() {
-		return Map.of("venda_assumida_zero", vendaAssumida.get(), "compra_assumida_zero", compraAssumida.get());
+		return Map.of("venda_assumida_zero", vendaAssumida.get(), "compra_assumida_zero", compraAssumida.get(),
+				"venda_pelo_maior_visto", vendaConservadora.get(), "compra_pelo_maior_visto", compraConservadora.get());
 	}
 
 	// O imposto de COMPRA de `token` ao sair de `pool`, em bps, ou vazio se o token é honeypot/suspeito por esta
@@ -155,12 +161,12 @@ public final class Impostos {
 			return java.util.OptionalInt.of(Math.max(fraco == null ? 0 : Math.toIntExact(fraco), estado));
 		}
 
-		// Imposto VISTO em terceiros e nunca medido por nós: fora até a sonda ou a autópsia medirem. CICATRIZ de
-		// 27/09: usar o valor visto deixou entrar no grafo as pools de todo token com imposto, que o portão antigo
-		// barrava — o grafo foi de ~7,6 mil para ~13,8 mil pools e a busca de 39 para 158 ms (mediana) numa noite,
-		// para quase nada de valor pela cauda. A sonda mede com o grafo DELA, então isto não a impede de medir.
+		// Imposto VISTO em terceiros e nunca medido por nós: cobra-se o maior visto (conservador).
+		// A rejeição do relay por simulação não tem custo (revertingTxHashes vazio) e é preferível
+		// a excluir a pool e perder a rota inteira.
 		if (fraco != null && fraco > 0) {
-			return java.util.OptionalInt.empty();
+			compraConservadora.incrementAndGet();
+			return java.util.OptionalInt.of(Math.toIntExact(fraco));
 		}
 
 		compraAssumida.incrementAndGet();

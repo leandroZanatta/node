@@ -1,7 +1,6 @@
 package br.com.node.nucleo;
 
 import java.util.Arrays;
-import java.util.HexFormat;
 
 // Os dois tokens de uma pool, por ENDEREÇO.
 //
@@ -16,7 +15,7 @@ public record Par(byte[] token0, byte[] token1) {
 
 	public Par {
 
-		if (HexFormat.of().formatHex(token0).compareTo(HexFormat.of().formatHex(token1)) > 0) {
+		if (Arrays.compareUnsigned(token0, token1) > 0) {
 			byte[] troca = token0;
 			token0 = token1;
 			token1 = troca;

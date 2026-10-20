@@ -19,6 +19,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import br.com.node.RelatorioExecucao;
+import br.com.node.catalogo.Quarentena;
 import br.com.node.ensaio.AutopsiaDoMercado;
 import br.com.node.ensaio.Disputa;
 
@@ -32,11 +33,19 @@ public final class HttpApi {
 	@SuppressWarnings("unchecked")
 	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado,
 			Path arquivoDespachos, Path arquivoPagamentos, Path arquivoVencedores, Path arquivoFendas,
-			Supplier<Map<String, Object>> pools) throws IOException {
+			Supplier<Map<String, Object>> pools, Quarentena quarentena) throws IOException {
 		servidor = HttpServer.create(new InetSocketAddress(porta), 0);
 		servidor.createContext("/status", troca -> responder(troca, () -> resumo(relatorio)));
 		servidor.createContext("/relatorio", troca -> responder(troca, relatorio::snapshot));
 		servidor.createContext("/mercado", troca -> responder(troca, () -> mercadoFiltrado(mercado, troca.getRequestURI().getQuery())));
+		servidor.createContext("/quarentena", troca -> {
+			if ("POST".equals(troca.getRequestMethod()) && "/quarentena/limpar".equals(troca.getRequestURI().getPath())) {
+				int removidas = quarentena.limparPenas();
+				responder(troca, () -> Map.of("penas_removidas", removidas, "ok", true));
+			} else {
+				responder(troca, quarentena::statusHttp);
+			}
+		});
 		servidor.createContext("/despachos", troca -> {
 			try {
 				responder(troca, () -> {

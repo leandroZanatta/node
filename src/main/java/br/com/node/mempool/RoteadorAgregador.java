@@ -32,10 +32,9 @@ public final class RoteadorAgregador {
 
 	static final String SELETOR = "27772d13";
 
-	private static final byte[] BNB_NATIVO =
-			HexFormat.of().parseHex("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
-	private static final byte[] WBNB =
-			HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c");
+	private static final HexFormat HEX = HexFormat.of();
+	private static final byte[] BNB_NATIVO = HEX.parseHex("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+	private static final byte[] WBNB = HEX.parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c");
 
 	private static final int W = 32;
 	private static final int SEL = 4;
@@ -53,7 +52,7 @@ public final class RoteadorAgregador {
 		if (calldata == null || calldata.length < OFF_ROUTES_BASE + W) {
 			return Optional.empty();
 		}
-		if (!SELETOR.equals(HexFormat.of().formatHex(calldata, 0, SEL))) {
+		if (!SELETOR.equals(HEX.formatHex(calldata, 0, SEL))) {
 			return Optional.empty();
 		}
 

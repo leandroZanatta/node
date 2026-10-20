@@ -456,8 +456,11 @@ traduzir). As constantes saíram de swaps reais da BSC, medidos numa janela de ~
 `exactInputSingle` V3 = ~117k de mediana (n=14, p90 ~150k). O par antigo 150k/200k **dobrava** o gás
 de uma rota de 3 pernas (600k) e inflava junto o piso e o teto de gasto por tx. *Por quê teto e não
 mediana:* superestimar o piso só recusa fenda boa (perder oportunidade não custa gas); subestimar
-faz entrar em fenda que não paga o próprio gas. *Como se prova:* `CustoDeGasTest` fixa a estrutura
-por perna/tipo, o `gasDaCalldata` byte a byte e o piso como `gás × preço vigente × 3/2`.
+faz entrar em fenda que não paga o próprio gas. O piso-base padrão cobre o gás calibrado da arbitragem,
+eventual taxa de empréstimo e 1 wei de sobra líquida; `PISO_MARGEM` pode adicionar margem a partir
+de 1,00×. Se houver pagamento direto ao builder, o custo de gás de sua transferência (21.000) também
+é reservado e o pagamento é limitado ao excedente menos 1 wei. *Como se prova:* `CustoDeGasTest`
+fixa estrutura, calldata e custos; `PagamentoAoBuilderTest` prova a reserva positiva.
 
 **P30 — O `eth_estimateGas` vira o oráculo do gás no despacho, com `from`/`to`/`data` e em
 `pending`.** É o único ponto que mede imposto, tick cruzado e slot frio de uma vez — três coisas que
@@ -490,15 +493,19 @@ fenda fina cai no piso), e o `PortaoDePisoTest` prova que o portão morde dos do
   muito, o piso em USDT fica baixo e entra arb fina demais; se cair, o piso fica alto e recusa
   fenda boa. O caminho bom (razão de reservas da canônica) já existe; falta medir se o fallback
   chega a ser usado com a canônica no catálogo.
-**P36 — A gorjeta parte de ZERO: o preço vigente É o `eth_gasPrice`, sem tip fixo somado.** Havia
+**P36 — A gorjeta parte de ZERO; o preço vigente é o `eth_gasPrice`, sem tip fixo somado.** Havia
 um 0,1 gwei fixo em cima do mercado: o piso cobrava 0,15 sobre um mercado de 0,05 (3x) e a tx
 assinada pagava 0,1 onde a moda do bloco paga 0,05 (2x) — MEDIDO em recibos reais
 (`effectiveGasPrice == maxPriorityFeePerGas` em 5 de 5 txs tipo-2, com `baseFeePerGas` = 0 em 12 de
-12 blocos: na BSC a tx paga exatamente a gorjeta). A gorjeta sobe via `gorjeta()` SOMENTE quando
-o bloco pedir (inclusão disputada); o placar de `abaixo_piso` e o resíduo da inclusão dizem
-quando. O `maxFee` assinado é 2x o preço vigente — cobre subida sem pagar 3x o mercado parado.
-*Como se prova:* `CustoDeGasTest.gorjetaSobeSobDemanda` (zero inicial, sobe, nulo/negativo voltam
-a zero).
+12 blocos: na BSC a tx paga exatamente a gorjeta. Não elevamos a prioridade automaticamente ao
+perder: no 48club, a fórmula publicada soma 90% das taxas de gás das transações únicas e 100% do BNB
+enviado ao Builder Control EOA; além disso, subir o preço de gás aumenta o piso e pode reduzir o BNB
+direto sem melhorar a pontuação total. Os 90% da fórmula do 48club são distintos da fração do lucro
+que definimos para o pagamento: `LANCE_FRACAO_MILHA` agora aceita até 1000 e o padrão é 1000,
+enquanto o piso e o limite do pagamento preservam pelo menos 1 wei de sobra prevista. O valor efetivo
+da margem e a fração inicial aparecem no `/status`. O `maxFee` assinado é 2x o preço vigente.
+*Como se prova:* `CustoDeGasTest.gorjetaSobeSobDemanda` e
+`DesfechosELancesTest.rivalNoPrazoDobraAFracao`.
 - **O portão do `Backrun` usa o teto, não a medição** (não há RPC por fenda no caminho em massa).
   Isso é deliberado: o teto grande erra para o lado de recusar. O número a acompanhar é `abaixo_piso`
   contra `recebidos` — se o teto barra demais, a resposta é calibrar, não pôr RPC no caminho quente.
@@ -593,5 +600,3 @@ de V3) mantém o contador antigo em 1.
 
 O que estes quatro itens NÃO resolvem, e continua em aberto no §13: a **taxa do flash loan**, que
 segue fora do modelo de lucro e é a única hipótese capaz de derrubar uma rota que o modelo aprovou.
-
-

@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.LongSupplier;
 import java.util.logging.Logger;
 
 import com.google.gson.JsonArray;
@@ -22,6 +23,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import br.com.node.catalogo.Eventos;
 import br.com.node.vo.Log;
 
 // Dá ao caderno de layouts o RÓTULO que faltava: o efeito da tx que nenhum decodificador leu.
@@ -44,21 +46,26 @@ public final class Simulador implements Closeable {
 	private static final Logger LOG = Logger.getLogger(Simulador.class.getName());
 
 	private static final int RITMO = 4;
+	private static final int DESCONHECIDAS_POR_SEGUNDO = 3;
+	private static final int DECODIFICADAS_POR_SEGUNDO = 1;
 	private static final int POR_ASSINATURA = 10;
 	private static final long JANELA_MS = 600_000;
 	private static final int EM_VOO_MAXIMO = 16;
 
+	private static final HexFormat HEX = HexFormat.of();
 	private static final Set<String> DE_TOKEN = Set.of("a9059cbb", "095ea7b3", "23b872dd");
-	private static final String SYNC = "1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1";
 
 	private final BiFunction<String, JsonArray, Optional<String>> rpc;
 	private final BiConsumer<String, List<Log>> aprender;
+	private final LongSupplier relogio;
 	private final ExecutorService laco = Executors.newVirtualThreadPerTaskExecutor();
 
 	private final Map<String, long[]> porAssinatura = new ConcurrentHashMap<>();
 	private final AtomicInteger emVoo = new AtomicInteger();
 	private long segundo;
 	private int nesteSegundo;
+	private int desconhecidasNesteSegundo;
+	private int decodificadasNesteSegundo;
 
 	private final AtomicLong simuladas = new AtomicLong();
 	private final AtomicLong comEfeito = new AtomicLong();
@@ -66,13 +73,31 @@ public final class Simulador implements Closeable {
 	private final AtomicLong reverteram = new AtomicLong();
 	private final AtomicLong falhas = new AtomicLong();
 	private final AtomicLong contidas = new AtomicLong();
+	private final AtomicLong simuladasDesconhecidas = new AtomicLong();
+	private final AtomicLong simuladasDecodificadas = new AtomicLong();
+	private final AtomicLong contidasDesconhecidas = new AtomicLong();
+	private final AtomicLong contidasDecodificadas = new AtomicLong();
 
 	public Simulador(BiFunction<String, JsonArray, Optional<String>> rpc, BiConsumer<String, List<Log>> aprender) {
+		this(rpc, aprender, System::currentTimeMillis);
+	}
+
+	Simulador(BiFunction<String, JsonArray, Optional<String>> rpc, BiConsumer<String, List<Log>> aprender,
+			LongSupplier relogio) {
 		this.rpc = rpc;
 		this.aprender = aprender;
+		this.relogio = relogio;
 	}
 
 	public void talvez(String hash, byte[] crua) {
+		simularSeCabe(hash, crua, true);
+	}
+
+	public void validar(String hash, byte[] crua) {
+		simularSeCabe(hash, crua, false);
+	}
+
+	private void simularSeCabe(String hash, byte[] crua, boolean desconhecida) {
 
 		Optional<TransacaoPendente> tx = TransacaoPendente.decodificar(crua);
 
@@ -80,16 +105,17 @@ public final class Simulador implements Closeable {
 			return;
 		}
 
-		String seletor = HexFormat.of().formatHex(tx.get().entrada(), 0, 4);
+		String seletor = HEX.formatHex(tx.get().entrada(), 0, 4);
 
 		if (DE_TOKEN.contains(seletor)) {
 			return;
 		}
 
-		String assinatura = seletor + "@" + HexFormat.of().formatHex(tx.get().destino());
+		String assinatura = seletor + "@" + HEX.formatHex(tx.get().destino());
 
-		if (!cabe(assinatura)) {
+		if (!cabe(assinatura, desconhecida)) {
 			contidas.incrementAndGet();
+			(desconhecida ? contidasDesconhecidas : contidasDecodificadas).incrementAndGet();
 			return;
 		}
 
@@ -102,6 +128,7 @@ public final class Simulador implements Closeable {
 		emVoo.incrementAndGet();
 		laco.execute(() -> {
 			try {
+				(desconhecida ? simuladasDesconhecidas : simuladasDecodificadas).incrementAndGet();
 				simular(hash, tx.get(), remetente.get());
 			} catch (RuntimeException e) {
 				falhas.incrementAndGet();
@@ -112,9 +139,9 @@ public final class Simulador implements Closeable {
 		});
 	}
 
-	private synchronized boolean cabe(String assinatura) {
+	synchronized boolean cabe(String assinatura, boolean desconhecida) {
 
-		long agora = System.currentTimeMillis();
+		long agora = relogio.getAsLong();
 
 		if (emVoo.get() >= EM_VOO_MAXIMO) {
 			return false;
@@ -123,9 +150,19 @@ public final class Simulador implements Closeable {
 		if (agora / 1_000 != segundo) {
 			segundo = agora / 1_000;
 			nesteSegundo = 0;
+			desconhecidasNesteSegundo = 0;
+			decodificadasNesteSegundo = 0;
 		}
 
 		if (nesteSegundo >= RITMO) {
+			return false;
+		}
+
+		if (desconhecida && desconhecidasNesteSegundo >= DESCONHECIDAS_POR_SEGUNDO) {
+			return false;
+		}
+
+		if (!desconhecida && decodificadasNesteSegundo >= DECODIFICADAS_POR_SEGUNDO) {
 			return false;
 		}
 
@@ -146,6 +183,11 @@ public final class Simulador implements Closeable {
 
 		janela[1]++;
 		nesteSegundo++;
+		if (desconhecida) {
+			desconhecidasNesteSegundo++;
+		} else {
+			decodificadasNesteSegundo++;
+		}
 		return true;
 	}
 
@@ -154,9 +196,9 @@ public final class Simulador implements Closeable {
 		simuladas.incrementAndGet();
 
 		JsonObject chamada = new JsonObject();
-		chamada.addProperty("from", "0x" + HexFormat.of().formatHex(remetente));
-		chamada.addProperty("to", "0x" + HexFormat.of().formatHex(tx.destino()));
-		chamada.addProperty("input", "0x" + HexFormat.of().formatHex(tx.entrada()));
+		chamada.addProperty("from", "0x" + HEX.formatHex(remetente));
+		chamada.addProperty("to", "0x" + HEX.formatHex(tx.destino()));
+		chamada.addProperty("input", "0x" + HEX.formatHex(tx.entrada()));
 		chamada.addProperty("value", "0x" + tx.valor().toString(16));
 
 		JsonArray chamadas = new JsonArray();
@@ -187,8 +229,8 @@ public final class Simulador implements Closeable {
 			return;
 		}
 
-		boolean mexeuEmPool = logs.get().stream().anyMatch(log -> !log.topicos().isEmpty()
-				&& HexFormat.of().formatHex(log.topicos().get(0)).equals(SYNC) || ehSwapV3(log));
+		boolean mexeuEmPool = logs.get().stream().anyMatch(log ->
+				log.assinadoPor(Eventos.SYNC_V2) || ehSwapV3(log));
 
 		if (!mexeuEmPool) {
 			semEfeito.incrementAndGet();
@@ -234,7 +276,7 @@ public final class Simulador implements Closeable {
 
 	private static byte[] hex(String texto) {
 		String limpo = texto.startsWith("0x") ? texto.substring(2) : texto;
-		return HexFormat.of().parseHex(limpo.length() % 2 == 0 ? limpo : "0" + limpo);
+		return HEX.parseHex(limpo.length() % 2 == 0 ? limpo : "0" + limpo);
 	}
 
 	public Map<String, Object> resumo() {
@@ -245,6 +287,10 @@ public final class Simulador implements Closeable {
 		resumo.put("reverteram", reverteram.get());
 		resumo.put("falhas", falhas.get());
 		resumo.put("contidas_pelo_ritmo", contidas.get());
+		resumo.put("simuladas_desconhecidas", simuladasDesconhecidas.get());
+		resumo.put("simuladas_decodificadas", simuladasDecodificadas.get());
+		resumo.put("contidas_desconhecidas", contidasDesconhecidas.get());
+		resumo.put("contidas_decodificadas", contidasDecodificadas.get());
 		return resumo;
 	}
 

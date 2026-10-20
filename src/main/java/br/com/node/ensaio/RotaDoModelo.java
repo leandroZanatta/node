@@ -32,11 +32,9 @@ import br.com.node.nucleo.PoolV3;
 //  - `montante`: a ENTRADA. É a `Oportunidade.entrada` do achado, em wei do token
 //    de partida. O contrato lê o saldo que a primeira perna deixa, então o
 //    montante do flash tem de ser exatamente o que o modelo dimensionou.
-//  - `lucroMinimo`: o PISO com a TOLERÂNCIA do modelo em cima — `max(piso, lucro bruto − piso)`. O
-//    que NÃO se faz mais: mandar `lucro bruto − piso` PURO, a conta antiga. Ela aceitava qualquer
-//    lucro acima de `lucro − piso`, e quando a fenda encolhia até perto do piso o contrato podia
-//    fechar uma arb que NÃO pagava o próprio gás. Exigir só o piso mataria a folga que absorve o
-//    estado andar; o máximo dos dois preserva a folga E a promessa "INCLUÍDO ⟹ LUCROU acima do gás".
+//  - `lucroMinimo`: o piso econômico calculado pelo chamador, incluindo custo estimado do gás,
+//    pagamento ao builder e a reserva líquida positiva. Não é o lucro previsto inteiro: a arb pode
+//    encolher e ainda ser incluída se cobrir todos os custos exigidos.
 //
 // Vazio quando o modelo não tem o que o contrato exige: pool sem par no catálogo,
 // sem taxa no tarifário, ou direção que não casa com nenhum dos dois tokens do par.
@@ -81,12 +79,8 @@ public final class RotaDoModelo {
 			return Optional.empty();
 		}
 
-		// O `lucroMinimo` é o CHÃO que chega (piso + pagamento ao builder) — nada acima dele.
-		//
-		// CICATRIZ: era `max(piso, lucro − piso)`. Numa fenda de lucro 10× o piso, o contrato exigia 9× o
-		// piso: se o estado andasse e a arb rendesse 3×, ela revertia e o bundle caía — perdendo uma
-		// execução que pagava o gás com sobra. A "folga" apertava em vez de folgar. O contrato só precisa
-		// garantir que a arb se paga; qualquer lucro acima do chão é ganho, não motivo para reverter.
+		// O chamador fornece o chão econômico (piso + pagamento ao builder, quando houver), não o lucro
+		// inteiro previsto. Qualquer lucro acima desse chão permanece líquido para a arbitragem.
 		BigInteger lucroMinimo = pisoEmWei.max(BigInteger.ZERO);
 
 		return Optional.of(new Chamada(List.copyOf(rota), montante, lucroMinimo));

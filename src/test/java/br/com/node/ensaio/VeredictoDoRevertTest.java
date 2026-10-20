@@ -10,13 +10,6 @@ import java.util.HexFormat;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// O veredicto do revert, sem rede — a leitura que o `run-armado` provou estar jogando fora.
-//
-// MEDIDO: 5 dos 7 envios do run armado caíram em `0x08c379a0`, que é `Error(string)`, o revert COM
-// mensagem — e a mensagem (`Pancake: TRANSFER_FAILED`) era descartada, deixando cinco reverts
-// idênticos reduzidos a um seletor opaco. Sem a frase não há como saber que o token não se move; e
-// sem sabê-lo a MESMA rota de token travado voltou 76 s depois, porque nada do que a cadeia
-// respondeu virou conhecimento.
 class VeredictoDoRevertTest {
 
 	private static final String TRANSFER_FAILED = "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32000,"
@@ -30,7 +23,7 @@ class VeredictoDoRevertTest {
 
 		assertEquals("revert_sem_dado", veredicto.seletor(), "sem `data` no erro do relay não há seletor a ler");
 		assertEquals("Pancake: TRANSFER_FAILED", veredicto.texto());
-		assertTrue(Disparo.naoSeMove(veredicto.texto()),
+		assertTrue(VereditorDoContrato.naoSeMove(veredicto.texto()),
 				"a frase sozinha basta para saber que o token não se move");
 	}
 
@@ -45,7 +38,7 @@ class VeredictoDoRevertTest {
 
 		assertEquals("08c379a0", veredicto.seletor());
 		assertEquals("UniSaveV2: TRANSFER_FAILED", veredicto.texto());
-		assertTrue(Disparo.naoSeMove(veredicto.texto()));
+		assertTrue(VereditorDoContrato.naoSeMove(veredicto.texto()));
 	}
 
 	@Test
@@ -57,7 +50,7 @@ class VeredictoDoRevertTest {
 						+ "\"message\":\"[0x56d5..7205] execution reverted\",\"data\":\"0x7978d88b\"}}");
 
 		assertEquals("7978d88b", veredicto.seletor());
-		assertFalse(Disparo.naoSeMove(veredicto.texto()),
+		assertFalse(VereditorDoContrato.naoSeMove(veredicto.texto()),
 				"a ponta V3 é conta nossa; condenar token por ela seria jogar a culpa no inocente");
 	}
 
@@ -70,7 +63,7 @@ class VeredictoDoRevertTest {
 
 		assertEquals("revert_sem_dado", veredicto.seletor());
 		assertEquals("", veredicto.texto());
-		assertFalse(Disparo.naoSeMove(veredicto.texto()));
+		assertFalse(VereditorDoContrato.naoSeMove(veredicto.texto()));
 	}
 
 	@Test

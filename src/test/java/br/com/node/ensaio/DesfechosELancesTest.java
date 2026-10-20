@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,6 +37,19 @@ class DesfechosELancesTest {
 
 	@TempDir
 	Path pasta;
+
+	@Test
+	@DisplayName("resumo expõe o lance inicial, máximo e frações ativas nas rotas")
+	void resumoExpoeLimitesDaFracao() {
+
+		Lances lances = new Lances(pasta.resolve("lances.json"), 1000);
+		Map<String, Object> resumo = lances.resumo();
+
+		assertEquals(1000, resumo.get("fracao_inicial_milha"));
+		assertEquals(1000, resumo.get("fracao_maxima_milha"));
+		assertEquals(1000, resumo.get("fracao_minima_rota_milha"));
+		assertEquals(1000, resumo.get("fracao_maxima_rota_milha"));
+	}
 
 	@Test
 	@DisplayName("rival no N+1 com a gente no prazo: desfecho rival_n1, folga medida, fração dobra")
@@ -127,6 +141,22 @@ class DesfechosELancesTest {
 	}
 
 	@Test
+	@DisplayName("perda sem margem econômica não aumenta pagamento direto nem gorjeta")
+	void perdaLimitadaPorLucroNaoMudaLance() {
+
+		Lances lances = new Lances(pasta.resolve("lances.json"), FRACAO);
+		Desfechos.Envio envio = envioComDetalhes("0x07",
+				Map.of("lance", Map.of("limitado_por_lucro", true)));
+		Desfechos.Desfecho perda = new Desfechos.Desfecho(envio, "rival_n1", 200L, 1, "rival",
+				null, null, null);
+
+		lances.aprender(perda);
+
+		assertEquals(FRACAO, lances.fracaoPara("rota"));
+		assertEquals(FRACAO, new Lances(pasta.resolve("lances.json"), FRACAO).fracaoPara("rota"));
+	}
+
+	@Test
 	@DisplayName("chegamos depois do bloco: fração NÃO muda (é tempo, não lance)")
 	void atrasadoNaoMexeNaFracao() {
 
@@ -177,8 +207,14 @@ class DesfechosELancesTest {
 				chegadaMs, "cauda", "rota", FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE);
 	}
 
+	private static Desfechos.Envio envioComDetalhes(String hash, Map<String, Object> detalhes) {
+		return new Desfechos.Envio(hash, 100, Set.of(HexFormat.of().formatHex(POOL_A), HexFormat.of().formatHex(POOL_B)),
+				1_000, "cauda", "rota", FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE, detalhes);
+	}
+
 	private static Arbitragem arbitragem(byte[] executor) {
 		return new Arbitragem(List.of(POOL_A, POOL_B), HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"),
 				BigInteger.TEN, 2, 0, executor);
 	}
+
 }

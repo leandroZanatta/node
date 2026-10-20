@@ -148,6 +148,13 @@ public final class Main {
 		DiarioDeEnsaio diarioDeEnsaio = new DiarioDeEnsaio(Path.of("target", "ensaio.jsonl"));
 
 		RpcDoEnsaio rpcEnsaio = new RpcDoEnsaio();
+		RpcDoEnsaio rpcTrace = java.util.Optional.ofNullable(System.getenv("RPC_TRACE"))
+				.map(String::trim).filter(u -> !u.isBlank())
+				.map(urls -> java.util.Arrays.stream(urls.split(",")).map(String::trim).filter(u -> !u.isBlank()).toList())
+				.filter(urls -> !urls.isEmpty()).map(RpcDoEnsaio::new).orElse(rpcEnsaio);
+		LOG.info(() -> rpcTrace == rpcEnsaio
+				? "trace de pagamentos internos: usando RPC de execução (RPC_TRACE não configurado)"
+				: "trace de pagamentos internos: usando RPC_TRACE dedicado");
 		tarifario.porChamada(new br.com.node.catalogo.EspacamentoPorChamada(pool -> tickSpacing(rpcEnsaio, pool)));
 		// Os mapas de ticks: a pool de liquidez concentrada cota ATRAVESSANDO ticks, não só até o primeiro.
 		br.com.node.catalogo.Ticks ticks = new br.com.node.catalogo.Ticks((para, dados, bloco) -> ethCall(rpcEnsaio, para, dados, bloco));
@@ -193,7 +200,7 @@ public final class Main {
 		desfechos.aoDecidir(desfecho -> {
 			// QUEM GANHOU, em toda perda para rival ou pool mexida: a transação vencedora e o pagamento dela às builders.
 			if (ganhouOutro(desfecho) && desfecho.posicao() != null) {
-				bidLookup.submit(() -> registrarVencedor(desfecho, rpcEnsaio, arquivoVencedores));
+				bidLookup.submit(() -> registrarVencedor(desfecho, rpcEnsaio, rpcTrace, arquivoVencedores));
 			}
 			boolean deveEnriquecer = (desfecho.classe().equals("pool_mexida_n1") || desfecho.classe().equals("rival_n1"))
 					&& desfecho.folgaMs() != null && desfecho.folgaMs() > 0
@@ -201,11 +208,15 @@ public final class Main {
 			if (deveEnriquecer) {
 				bidLookup.submit(() -> {
 					java.util.Optional<BigInteger> bidOpt = bidRealDoRival(desfecho, rpcEnsaio);
-					lances.aprender(desfecho, bidOpt.orElse(null));
+					synchronized (lances) {
+						lances.aprender(desfecho, bidOpt.orElse(null));
+					}
 					diarioDeEnsaio.desfecho(desfecho, lances.fracaoPara(desfecho.envio().rota()), bidOpt.isPresent());
 				});
 			} else {
-				lances.aprender(desfecho);
+				synchronized (lances) {
+					lances.aprender(desfecho);
+				}
 				diarioDeEnsaio.desfecho(desfecho, lances.fracaoPara(desfecho.envio().rota()));
 			}
 		});
@@ -233,7 +244,7 @@ public final class Main {
 				(overlay, crua) -> cauda.projetar(overlay, cabeca.alvo())
 						.ifPresent(achado -> backrun.considerar(List.of(achado), crua)));
 		Gatilhos gatilhos = new Gatilhos(rpcEnsaio, mempool::etapas, mempool::primeiraVisaoMs,
-				arbitragem -> custoDeGas.paraBnb(arbitragem.token(), arbitragem.sobra()));
+				arbitragem -> custoDeGas.paraBnbSeDisponivel(arbitragem.token(), arbitragem.sobra()));
 		gatilhos.gravarFendasGrandesEm(Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
 				.orElse("fendas_grandes.jsonl")));
 		br.com.node.ensaio.AutopsiaDoMercado mercado = new br.com.node.ensaio.AutopsiaDoMercado(catalogo, cotador,
@@ -259,6 +270,7 @@ public final class Main {
 		});
 		Simulador simulador = new Simulador(rpcEnsaio::chamar, mempool::aprenderDe);
 		mempool.aoNaoDecodificar(simulador::talvez);
+		mempool.aoValidarDecodificado(simulador::validar);
 		mempool.aoBlocoComPrecos(desfechos::precos);
 		ObservatorioArbitragem observatorio = new ObservatorioArbitragem(catalogo,
 				(ObservatorioArbitragem.AoConfirmar) (arbitragem, altura, indice, gatilho) -> {
@@ -300,7 +312,8 @@ public final class Main {
 				cabeca, cursor, catalogo, lotacao::quedas, lotacao::naoTratadas, observatorio::resumo, mempool::resumo,
 				() -> {
 					Map<String, Object> resumo = ensaioResumo(cauda, backrun, disparo, gabarito, gatilhos, simulador, impostos,
-							desfechos, lances);
+							desfechos, lances, custoDeGas, rpcTrace,
+							rpcTrace == rpcEnsaio ? "RPC de execucao padrao" : "RPC_TRACE");
 					resumo.put("frente", frente.resumo());
 					resumo.put("peers", lotacao.resumoDePeers());
 					varredor.ifPresent(v -> resumo.put("varredura_de_gerentes", v.resumo()));
@@ -389,7 +402,7 @@ public final class Main {
 					p.put("pares_conhecidos", catalogo.paresConhecidos());
 					p.put("descartadas", catalogo.poolsDescartadas());
 					return p;
-				});
+				}, quarentena);
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("não foi possível iniciar HTTP API na porta " + apiPorta, e);
 		}
@@ -462,16 +475,18 @@ public final class Main {
 	}
 
 	// Lê o bloco do vencedor e grava quem ganhou e quanto levou, ligado à nossa tentativa pelo hash.
-	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
+	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc,
+			RpcDoEnsaio rpcTrace, Path arquivo) {
 		try {
-			gravarVencedor(desfecho, rpc, arquivo);
+			gravarVencedor(desfecho, rpc, rpcTrace, arquivo);
 		} catch (RuntimeException e) {
 			// O executor engole exceção de tarefa: sem este registro, a perda some sem nenhum sinal.
 			LOG.warning(() -> "vencedor do leilão não lido para " + desfecho.envio().hash() + ": " + e);
 		}
 	}
 
-	private static void gravarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, Path arquivo) {
+	private static void gravarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc,
+			RpcDoEnsaio rpcTrace, Path arquivo) {
 
 		int saltos = desfecho.classe().endsWith("n2") ? 2 : 1;
 		long alturaDoVencedor = desfecho.envio().altura() + saltos;
@@ -489,12 +504,22 @@ public final class Main {
 					br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 			if (linha.has("hash_vencedor")) {
 				// Quem recebeu BNB DENTRO da transação vencedora (o trace, ou a API do BscScan).
-				br.com.node.ensaio.TransferenciasInternas.anexar(rpc, linha.get("hash_vencedor").getAsString(),
+				br.com.node.ensaio.TransferenciasInternas.anexar(rpcTrace, linha.get("hash_vencedor").getAsString(),
 						System.getenv("BSCSCAN_API_KEY"), linha);
 				rpc.recibo(linha.get("hash_vencedor").getAsString()).ifPresent(r -> {
 					linha.addProperty("sucesso_vencedor", r.sucesso());
 					linha.addProperty("gas_usado_vencedor", r.gasUsado().toString());
+					if (r.precoEfetivoGas() != null) {
+						linha.addProperty("gas_preco_efetivo_wei", r.precoEfetivoGas().toString());
+					}
+					BigInteger precoGas = r.precoEfetivoGas();
+					if (precoGas == null && linha.has("gas_price_wei") && !linha.get("gas_price_wei").isJsonNull()) {
+						precoGas = new BigInteger(linha.get("gas_price_wei").getAsString());
+					}
+					BigInteger taxaGas = br.com.node.ensaio.Lance48Club.taxaGas(r.gasUsado(), precoGas);
+					linha.addProperty("taxa_gas_vencedor_wei", taxaGas == null ? null : taxaGas.toString());
 				});
+				br.com.node.ensaio.VencedorDoLeilao.medirPagamento48Club(linha);
 			}
 		}
 		br.com.node.ensaio.VencedorDoLeilao.gravar(arquivo, linha);
@@ -558,10 +583,13 @@ public final class Main {
 
 	private static Map<String, Object> ensaioResumo(Cauda cauda, Backrun backrun, Disparo disparo, Gabarito gabarito,
 			Gatilhos gatilhos, Simulador simulador, Impostos impostos, br.com.node.ensaio.Desfechos desfechos,
-			br.com.node.ensaio.Lances lances) {
+			br.com.node.ensaio.Lances lances, CustoDeGas custoDeGas, RpcDoEnsaio rpcTrace, String origemRpcTrace) {
 
 		Map<String, Object> resumo = new LinkedHashMap<>();
 		resumo.put("garimpo_disparado", GARIMPO_POR_TX ? "por_tx (antigo)" : "por_bloco");
+		resumo.put("economia", Map.of("piso_margem_centimos", custoDeGas.margemDoPisoCentimos(),
+				"gas_tx_pagamento_builder", CustoDeGas.GAS_TX_PAGAMENTO_BUILDER, "sobra_liquida_minima_wei", "1"));
+		resumo.put("trace_rpc", Map.of("origem", origemRpcTrace, "hosts", rpcTrace.hosts()));
 		resumo.put("falhas", br.com.node.util.Falhas.resumo());
 		resumo.put("impostos_assumidos", impostos.assumidos());
 		resumo.put("desfechos", desfechos.resumo());

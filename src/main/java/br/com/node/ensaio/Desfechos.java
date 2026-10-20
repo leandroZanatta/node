@@ -89,7 +89,6 @@ public final class Desfechos implements Closeable {
 			});
 	private final Amostras topoMwei = new Amostras(5_000);
 	private final Amostras naFrenteMwei = new Amostras(5_000);
-	private final Amostras ofertadoMwei = new Amostras(5_000);
 
 	// A posição da tx no bloco, contada como o `ObservatorioArbitragem` conta: uma chamada por tx, na ordem.
 	private long alturaCorrente = -1;
@@ -264,8 +263,6 @@ public final class Desfechos implements Closeable {
 		if (naFrente != null) {
 			naFrenteMwei.anotar(naFrente.divide(MWEI).longValue());
 		}
-		ofertadoMwei.anotar(envio.ofertadoWeiPorGas().divide(MWEI).longValue());
-
 		porClasse.merge(classe, 1L, Long::sum);
 		if (folga != null) {
 			folgaPorClasse.computeIfAbsent(classe, k -> new Amostras(5_000)).anotar(folga);
@@ -295,7 +292,6 @@ public final class Desfechos implements Closeable {
 		registro.put("quem", desfecho.quem());
 		registro.put("chegada_ms", envio.chegadaMs());
 		registro.put("fracao_milha", envio.fracaoMilha());
-		registro.put("ofertado_wei_por_gas", envio.ofertadoWeiPorGas().toString());
 		registro.put("preco_gas_tx_na_frente_wei_por_gas",
 				desfecho.naFrente() == null ? null : desfecho.naFrente().toString());
 		registro.put("mediana_gas_tx_top5_n1_wei_por_gas", desfecho.topo() == null ? null : desfecho.topo().toString());
@@ -323,8 +319,6 @@ public final class Desfechos implements Closeable {
 		folgaPorClasse.forEach((classe, amostras) -> folgas.put(classe, amostras.resumo()));
 		resumo.put("folga_ms_por_classe", folgas);
 		resumo.put("posicao_do_rival_n1", new java.util.TreeMap<>(posicaoDoRivalN1));
-		// Em Mwei por gás: nosso lance equivalente e preços de gás por transação; estes últimos não são bids completos.
-		resumo.put("ofertado_mwei_por_gas", ofertadoMwei.resumo());
 		resumo.put("preco_gas_tx_na_frente_mwei_por_gas", naFrenteMwei.resumo());
 		resumo.put("mediana_gas_tx_top5_n1_mwei_por_gas", topoMwei.resumo());
 		resumo.put("arquivo", arquivo == null ? "integrado ao diario de ensaio" : arquivo.toString());

@@ -105,6 +105,21 @@ class CustoDeGasTest {
 	}
 
 	@Test
+	@DisplayName("sem_loan exclui os 60k do empréstimo relâmpago da estimativa")
+	void semLoanExcluiGasDoEmprestimo() {
+
+		CustoDeGas custo = custo();
+		List<Salto> rota = List.of(salto(false), new Salto(P2, B, A, true, 30));
+		byte[] calldata = AbiDoExecutor.executarV2(rota, BigInteger.TEN.pow(18), BigInteger.valueOf(5_000));
+
+		BigInteger comLoan = custo.estimarGas(rota, calldata, false);
+		BigInteger semLoan = custo.estimarGas(rota, calldata, true);
+
+		assertEquals(BigInteger.valueOf(60_000L), comLoan.subtract(semLoan),
+				"a diferença deve ser exatamente GAS_EMPRESTIMO");
+	}
+
+	@Test
 	@DisplayName("calldata: zero custa 4 e não-zero custa 16")
 	void gasDaCalldataEhEip2028() {
 
@@ -114,24 +129,28 @@ class CustoDeGasTest {
 	}
 
 	@Test
-	@DisplayName("o piso em WBNB é o gás × preço × 3/2 MAIS a taxa do empréstimo relâmpago")
-	void pisoEmWbnbEhMargemSobreOPrecoEfetivo() {
+	@DisplayName("piso-base padrão cobre o gás da arbitragem e preserva 1 wei líquido")
+	void pisoEmWbnbCobreCustosEDeixaSobraPositiva() {
 
 		CustoDeGas custo = custo(); // sem `atualizar()`: o preço medido é informado (1 gwei), não herdado
 
 		BigInteger gas = BigInteger.valueOf(300_000L);
-		BigInteger gasComMargem = BASE.add(TIP).multiply(gas).multiply(BigInteger.valueOf(3))
-				.divide(BigInteger.valueOf(2));
-		BigInteger esperado = gasComMargem.add(TAXA_POR_ENTRADA);
+		assertEquals(100, custo.margemDoPisoCentimos(), "o padrão é 1,00×");
+		BigInteger preco = BASE.add(TIP);
+		BigInteger gasComMargem = preco.multiply(gas)
+				.multiply(BigInteger.valueOf(custo.margemDoPisoCentimos())).divide(BigInteger.valueOf(100));
+		BigInteger esperado = gasComMargem.add(TAXA_POR_ENTRADA).add(BigInteger.ONE);
 
 		assertEquals(esperado, custo.piso(WBNB, MONTANTE, gas).orElseThrow());
+		assertEquals(BASE.multiply(gas), custo.custoDoGas(WBNB, gas));
+		assertEquals(BASE.multiply(BigInteger.valueOf(21_000L)), custo.custoDaTransferenciaBuilder(WBNB));
 		assertEquals(TAXA_POR_ENTRADA, custo.taxaDoEmprestimo(MONTANTE));
 		assertEquals(BASE.multiply(BigInteger.TWO), custo.maxTaxa());
 		assertEquals(BASE, custo.precoEfetivo());
 		assertEquals(BASE, custo.prioridade(), "base zero na BSC: a prioridade é o preço inteiro, não 0");
 
 		// Sem montante conhecido a taxa é zero — mas o gás continua exigido: o piso não desaparece.
-		assertEquals(gasComMargem, custo.piso(WBNB, null, gas).orElseThrow());
+		assertEquals(gasComMargem.add(BigInteger.ONE), custo.piso(WBNB, null, gas).orElseThrow());
 		assertEquals(BigInteger.ZERO, custo.taxaDoEmprestimo(BigInteger.ZERO));
 		assertEquals(BigInteger.ZERO, custo.taxaDoEmprestimo(null));
 	}
@@ -148,8 +167,11 @@ class CustoDeGasTest {
 		assertEquals(BASE.add(BigInteger.valueOf(100_000_000L)), custo.prioridade());
 		assertEquals(BASE.add(BigInteger.valueOf(100_000_000L)), custo.precoEfetivo());
 		assertEquals(BASE.add(BigInteger.valueOf(100_000_000L)).multiply(BigInteger.TWO), custo.maxTaxa());
-		assertEquals(BASE.add(BigInteger.valueOf(100_000_000L)).multiply(gas).multiply(BigInteger.valueOf(3))
-				.divide(BigInteger.valueOf(2)).add(TAXA_POR_ENTRADA), custo.piso(WBNB, MONTANTE, gas).orElseThrow());
+		BigInteger preco = BASE.add(BigInteger.valueOf(100_000_000L));
+		BigInteger gasComMargem = preco.multiply(gas)
+				.multiply(BigInteger.valueOf(custo.margemDoPisoCentimos())).divide(BigInteger.valueOf(100));
+		assertEquals(gasComMargem.add(TAXA_POR_ENTRADA).add(BigInteger.ONE),
+				custo.piso(WBNB, MONTANTE, gas).orElseThrow());
 
 		custo.gorjeta(null);
 		custo.gorjeta(BigInteger.valueOf(-1));
@@ -164,11 +186,11 @@ class CustoDeGasTest {
 		CustoDeGas semPool = custo();
 
 		BigInteger gas = BigInteger.valueOf(300_000L);
-		BigInteger pisoBnb = BASE.add(TIP).multiply(gas).multiply(BigInteger.valueOf(3))
-				.divide(BigInteger.valueOf(2));
+		BigInteger pisoBnb = BASE.add(TIP).multiply(gas)
+				.multiply(BigInteger.valueOf(comPool.margemDoPisoCentimos())).divide(BigInteger.valueOf(100));
 
 		// 100 WBNB e 60.000 USDT na canônica: a razão é 600, e é ela que converte.
-		assertEquals(pisoBnb.multiply(BigInteger.valueOf(600)).add(TAXA_POR_ENTRADA),
+		assertEquals(pisoBnb.multiply(BigInteger.valueOf(600)).add(TAXA_POR_ENTRADA).add(BigInteger.ONE),
 				comPool.piso(USDT, MONTANTE, gas).orElseThrow());
 
 		// Sem a canônica no catálogo e sem NUNCA ter medido, ESTOURA. Até 27/09 saía um valor frio (2.000),
@@ -214,6 +236,18 @@ class CustoDeGasTest {
 		assertEquals(umBnb, comPool.paraBnb(USDT, umBnb.multiply(BigInteger.valueOf(600))).orElseThrow());
 		assertTrue(comPool.paraBnb(MOEDA, umBnb).isEmpty());
 		assertTrue(comPool.deBnb(MOEDA, umBnb).isEmpty());
+	}
+
+	@Test
+	@DisplayName("conversão observacional fica indisponível até haver preço, sem derrubar a observação")
+	void conversaoObservacionalSemPrecoRetornaVazio() {
+
+		CustoDeGas semPool = custo();
+		BigInteger umBnb = BigInteger.TEN.pow(18);
+
+		assertTrue(semPool.paraBnbSeDisponivel(USDT, umBnb).isEmpty());
+		assertEquals(umBnb, semPool.paraBnbSeDisponivel(WBNB, umBnb).orElseThrow());
+		assertTrue(semPool.paraBnbSeDisponivel(MOEDA, umBnb).isEmpty());
 	}
 
 	@Test

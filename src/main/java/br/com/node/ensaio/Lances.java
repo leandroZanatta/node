@@ -16,7 +16,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// O LANCE ao builder por ROTA, como FRAÇÃO DO LUCRO (por mille, 0–950), aprendida com o desfecho.
+// O LANCE ao builder por ROTA, como FRAÇÃO DO LUCRO (por mille, 0–1000), aprendida com o desfecho.
 //
 // Por que fração do lucro e não gwei/gás fixo: para arbs gordas o rival paga em BNB direto ao
 // coinbase, não via taxa de gás. Uma fração do lucro escala automaticamente — se o rival paga 30%
@@ -24,15 +24,16 @@ import com.google.gson.JsonParser;
 // no máximo $0,82, menos que o rival.
 //
 // Aprendizado:
-//   - incluída → fração desce 10% (pagamos talvez mais que o preciso);
+//   - incluída → recua 10% na fração BNB;
 //   - perdeu no N+1 chegando antes, bid real do rival conhecido → fração vai a rival + 5%;
-//   - perdeu no N+1 chegando antes, bid desconhecido → fração dobra (converge em ~5 derrotas);
+//   - perdeu no N+1 chegando antes, bid desconhecido → fração dobra se houver folga econômica;
+//   - pagamento direto limitado pelo lucro → não aumenta prioridade nem reduz o piso econômico;
 //   - pool mexida sem coinbase identificado → não aprende (provável swap de usuário);
 //   - chegou depois do bloco, ou ninguém levou → não mexe (é tempo, não lance).
 public final class Lances {
 
-	static final int FRACAO_MIN = 50;  // 5 %
-	static final int FRACAO_MAX = 950; // 95 % — mantém margem mínima de 5 %
+	static final int FRACAO_MIN = 50;   // 5 %
+	static final int FRACAO_MAX = 1000; // 100 % — o piso e o limite por lucro preservam sobra positiva
 	private static final BigInteger MWEI = BigInteger.valueOf(1_000_000);
 
 	public record Estado(int fracaoMilha, long vitorias, long derrotasNoPrazo, long derrotasAtrasado) {
@@ -55,17 +56,17 @@ public final class Lances {
 		carregar();
 	}
 
-	// Lê `LANCE_FRACAO_MILHA` do ambiente (padrão 900 = 90 %).
+	// Lê `LANCE_FRACAO_MILHA` do ambiente (padrão 1000 = até todo o excedente disponível).
 	// `PAGAMENTO_BUILDER_BPS` estoura: foi substituído. `LANCE_GWEI` e `ALVO_GLOBAL_MWEI` são ignorados
 	// (o lance deixou de ser em gwei/gás e passou a ser uma fração do lucro).
 	public static int inicialDoAmbiente() {
 		String bps = System.getenv("PAGAMENTO_BUILDER_BPS");
 		if (bps != null && !bps.isBlank()) {
-			throw new IllegalStateException("PAGAMENTO_BUILDER_BPS não existe mais: use LANCE_FRACAO_MILHA (padrão 900)");
+			throw new IllegalStateException("PAGAMENTO_BUILDER_BPS não existe mais: use LANCE_FRACAO_MILHA (padrão 1000)");
 		}
 		String milha = System.getenv("LANCE_FRACAO_MILHA");
 		if (milha == null || milha.isBlank()) {
-			return 900;
+			return 1000;
 		}
 		try {
 			int v = Integer.parseInt(milha.trim());
@@ -91,7 +92,7 @@ public final class Lances {
 
 	// `pagamentoDoRivalBnb`: o total em BNB (wei) que o rival enviou ao builder, lido on-chain no bloco dele
 	// (`PagamentosDeBloco`). Nulo quando não se mediu.
-	public void aprender(Desfechos.Desfecho desfecho, BigInteger pagamentoDoRivalBnb) {
+	public synchronized void aprender(Desfechos.Desfecho desfecho, BigInteger pagamentoDoRivalBnb) {
 
 		Desfechos.Envio envio = desfecho.envio();
 		String rota = envio.rota();
@@ -117,6 +118,9 @@ public final class Lances {
 				nova = Math.min(FRACAO_MAX, rivalFracao + 50);
 			} else if (desfecho.classe().equals("pool_mexida_n1")) {
 				// Provável swap de usuário sem coinbase — não aprende.
+				nova = antes.fracaoMilha();
+			} else if (limitadoPorLucro(envio) || antes.fracaoMilha() == FRACAO_MAX) {
+				// Não há mais margem para elevar o pagamento direto sem reduzir o piso econômico.
 				nova = antes.fracaoMilha();
 			} else {
 				// Bid desconhecido: dobra a fração para convergir em ~5 derrotas.
@@ -180,11 +184,21 @@ public final class Lances {
 		Map<String, Object> resumo = new LinkedHashMap<>();
 		resumo.put("rotas", porRota.size());
 		resumo.put("fracao_inicial_milha", inicial);
+		resumo.put("fracao_maxima_milha", FRACAO_MAX);
+		resumo.put("fracao_minima_rota_milha",
+				porRota.values().stream().mapToInt(Estado::fracaoMilha).min().orElse(inicial));
+		resumo.put("fracao_maxima_rota_milha",
+				porRota.values().stream().mapToInt(Estado::fracaoMilha).max().orElse(inicial));
 		resumo.put("vitorias", porRota.values().stream().mapToLong(Estado::vitorias).sum());
 		resumo.put("derrotas_no_prazo", porRota.values().stream().mapToLong(Estado::derrotasNoPrazo).sum());
 		resumo.put("derrotas_atrasado", porRota.values().stream().mapToLong(Estado::derrotasAtrasado).sum());
 		resumo.put("bid_rival_mwei_por_gas", bidRivalMwei.resumo());
 		resumo.put("arquivo", arquivo.toString());
 		return resumo;
+	}
+
+	private static boolean limitadoPorLucro(Desfechos.Envio envio) {
+		Object lance = envio.detalhes().get("lance");
+		return lance instanceof Map<?, ?> mapa && Boolean.TRUE.equals(mapa.get("limitado_por_lucro"));
 	}
 }

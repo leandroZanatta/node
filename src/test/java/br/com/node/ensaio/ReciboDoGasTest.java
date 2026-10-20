@@ -30,6 +30,16 @@ class ReciboDoGasTest {
 	}
 
 	@Test
+	@DisplayName("preserva o preço efetivo do recibo, inclusive zero")
+	void precoEfetivoDoGas() {
+		Optional<RpcDoEnsaio.Recibo> recibo = RpcDoEnsaio.interpretarRecibo(
+				"{\"result\":{\"status\":\"0x1\",\"gasUsed\":\"0x493e0\",\"effectiveGasPrice\":\"0x0\"}}");
+
+		assertTrue(recibo.isPresent());
+		assertEquals(BigInteger.ZERO, recibo.get().precoEfetivoGas());
+	}
+
+	@Test
 	@DisplayName("status 0x0 é revert — e o gás gasto vem junto, porque ele foi pago")
 	void revert() {
 

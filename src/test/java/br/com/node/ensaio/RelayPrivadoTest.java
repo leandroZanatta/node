@@ -89,9 +89,9 @@ class RelayPrivadoTest {
 		// Dois builders com eth_sendBundle (mevSendBid=false): pagamento vai dentro do bundle.
 		RelayPrivado relay = new RelayPrivado(List.of(
 				new RelayPrivado.Builder("a", "http://127.0.0.1:1/", "eth_sendBundle", java.util.Optional.empty(),
-						RelayPrivado.PAGAMENTO_48CLUB, false),
+						RelayPrivado.PAGAMENTO_48CLUB, false, false, null, null),
 				new RelayPrivado.Builder("b", "http://127.0.0.1:1/", "eth_sendBundle", java.util.Optional.empty(),
-						RelayPrivado.PAGAMENTO_BLOCKRAZOR, false)));
+						RelayPrivado.PAGAMENTO_BLOCKRAZOR, false, false, null, null)));
 		java.util.List<String> destinos = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
 		// bid=null: sem builders mevSendBid, o parâmetro é ignorado.

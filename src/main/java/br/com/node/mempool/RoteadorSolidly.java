@@ -34,7 +34,8 @@ final class RoteadorSolidly {
 			"67ffb66a",  // swapExactETHForTokens(uint256,(address,address,bool)[],address,uint256)
 			"76c72751"); // swapExactETHForTokensSupportingFeeOnTransferTokens(...)
 
-	private static final byte[] FACTORY = HexFormat.of().parseHex("afd89d21bdb66d00817d4153e055830b1c2b3970");
+	private static final HexFormat HEX = HexFormat.of();
+	private static final byte[] FACTORY = HEX.parseHex("afd89d21bdb66d00817d4153e055830b1c2b3970");
 	private static final int PALAVRA = 32;
 	private static final int SELETOR_LEN = 4;
 
@@ -48,7 +49,7 @@ final class RoteadorSolidly {
 			return Optional.empty();
 		}
 
-		String sel = HexFormat.of().formatHex(calldata, 0, SELETOR_LEN);
+		String sel = HEX.formatHex(calldata, 0, SELETOR_LEN);
 
 		if (SELECOES_TOKEN.contains(sel)) {
 			BigInteger amountIn = palavraCd(calldata, 0);

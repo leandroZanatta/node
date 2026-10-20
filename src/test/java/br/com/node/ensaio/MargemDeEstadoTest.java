@@ -14,23 +14,22 @@ class MargemDeEstadoTest {
 
 	@Test
 	void margemZeroDeixaOLucroInteiroParaOLance() {
-		assertEquals(LUCRO, Disparo.lucroParaLance(LUCRO, PISO, 0));
+		assertEquals(LUCRO, CalculadorDeLance.lucroParaLance(LUCRO, PISO, 0));
 	}
 
 	@Test
 	void margemTiraSoOPercentualDoExcedenteNaoDoLucro() {
-		// excedente = 1.000.000 − 200.000 = 800.000; 10% dele (80.000) fica de folga; o lance enxerga 920.000.
-		assertEquals(BigInteger.valueOf(920_000L), Disparo.lucroParaLance(LUCRO, PISO, 100));
+		assertEquals(BigInteger.valueOf(920_000L), CalculadorDeLance.lucroParaLance(LUCRO, PISO, 100));
 	}
 
 	@Test
 	void lucroAbaixoDoPisoNaoGeraExcedente() {
-		assertEquals(PISO, Disparo.lucroParaLance(BigInteger.valueOf(50_000L), PISO, 300));
+		assertEquals(PISO, CalculadorDeLance.lucroParaLance(BigInteger.valueOf(50_000L), PISO, 300));
 	}
 
 	@Test
 	void margemForaDoIntervaloEErro() {
-		assertThrows(IllegalStateException.class, () -> Disparo.lucroParaLance(LUCRO, PISO, 901));
-		assertThrows(IllegalStateException.class, () -> Disparo.lucroParaLance(LUCRO, PISO, -1));
+		assertThrows(IllegalStateException.class, () -> CalculadorDeLance.lucroParaLance(LUCRO, PISO, 901));
+		assertThrows(IllegalStateException.class, () -> CalculadorDeLance.lucroParaLance(LUCRO, PISO, -1));
 	}
 }

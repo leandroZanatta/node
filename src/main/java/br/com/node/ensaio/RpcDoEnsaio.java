@@ -1,5 +1,6 @@
 package br.com.node.ensaio;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -20,6 +22,9 @@ import com.google.gson.JsonParser;
 // envio da tx assinada. Próprio e não o `sondagem.Rpc` porque aqui o corpo do erro precisa sobreviver
 // inteiro (o envio lê o motivo da recusa dele), e o rodízio de nós espalha a carga.
 public final class RpcDoEnsaio {
+
+	public record RespostaRpc(String host, int statusHttp, String corpo, String erro) {
+	}
 
 	// Sem o publicnode: ele recusa `eth_getTransactionReceipt` sem token pago (HTTP 403, visto em 27/09).
 	private static final List<String> NOS = List.of("https://bsc-dataseed.bnbchain.org",
@@ -46,6 +51,10 @@ public final class RpcDoEnsaio {
 			throw new IllegalArgumentException("RpcDoEnsaio sem nó");
 		}
 		this.nos = List.copyOf(nos);
+	}
+
+	public List<String> hosts() {
+		return nos.stream().map(RpcDoEnsaio::host).distinct().toList();
 	}
 
 	// Rodízio simples: o próximo nó leva a próxima chamada, para espalhar a carga.
@@ -169,7 +178,10 @@ public final class RpcDoEnsaio {
 	// número que fecha a conta da estimativa. `sucesso` separa incluída-e-fechou de
 	// incluída-e-reverteu; o gás deste último também é gasto de verdade (só acontece no envio
 	// público, onde revert paga), e por isso também ensina.
-	public record Recibo(boolean sucesso, BigInteger gasUsado) {
+	public record Recibo(boolean sucesso, BigInteger gasUsado, BigInteger precoEfetivoGas) {
+		public Recibo(boolean sucesso, BigInteger gasUsado) {
+			this(sucesso, gasUsado, null);
+		}
 	}
 
 	// Vazio quando o nó ainda não tem o recibo — pendente, ou bundle que não foi incluído. Isso é
@@ -202,17 +214,26 @@ public final class RpcDoEnsaio {
 
 		// Recibo que VEIO sem gás ou status não é "ainda não incluída": é resposta torta, e confundir as duas
 		// fazia um envio incluído parecer perdido.
-		if (!recibo.has("gasUsed") || !recibo.has("status")) {
+		if (!recibo.has("gasUsed") || recibo.get("gasUsed").isJsonNull()
+				|| !recibo.has("status") || recibo.get("status").isJsonNull()) {
 			throw new IllegalStateException("recibo sem gasUsed/status: " + recibo);
 		}
 
 		try {
-			BigInteger gas = new BigInteger(recibo.get("gasUsed").getAsString().substring(2), 16);
+			BigInteger gas = inteiroHexadecimal(recibo.get("gasUsed").getAsString());
+			BigInteger precoEfetivo = recibo.has("effectiveGasPrice") && !recibo.get("effectiveGasPrice").isJsonNull()
+					? inteiroHexadecimal(recibo.get("effectiveGasPrice").getAsString()) : null;
 			boolean sucesso = "0x1".equalsIgnoreCase(recibo.get("status").getAsString());
-			return Optional.of(new Recibo(sucesso, gas));
+			return Optional.of(new Recibo(sucesso, gas, precoEfetivo));
 		} catch (RuntimeException e) {
 			throw new IllegalStateException("recibo ilegível: " + recibo, e);
 		}
+	}
+
+	private static BigInteger inteiroHexadecimal(String hexadecimal) {
+		String valor = hexadecimal.startsWith("0x") || hexadecimal.startsWith("0X")
+				? hexadecimal.substring(2) : hexadecimal;
+		return new BigInteger(valor, 16);
 	}
 
 	// O VEREDITO do contrato para esta chamada, via eth_call — para SABER por que
@@ -403,6 +424,41 @@ public final class RpcDoEnsaio {
 		return corpoDe(metodo, parametros);
 	}
 
+	public List<RespostaRpc> chamarComFallback(String metodo, JsonArray parametros) {
+		JsonObject corpo = new JsonObject();
+		corpo.addProperty("jsonrpc", "2.0");
+		corpo.addProperty("id", 1);
+		corpo.addProperty("method", metodo);
+		corpo.add("params", parametros);
+		String texto = corpo.toString();
+		List<RespostaRpc> respostas = new java.util.ArrayList<>();
+
+		for (int tentativa = 0; tentativa < nos.size(); tentativa++) {
+			String no = nos.get(Math.floorMod(proximo++, nos.size()));
+			String host = host(no);
+			try {
+				HttpResponse<String> resposta = http.send(
+						HttpRequest.newBuilder(URI.create(no)).timeout(Duration.ofSeconds(20))
+								.header("Content-Type", "application/json")
+								.POST(HttpRequest.BodyPublishers.ofString(texto)).build(),
+						HttpResponse.BodyHandlers.ofString());
+				RespostaRpc rpcResposta = new RespostaRpc(host, resposta.statusCode(), resposta.body(),
+						resposta.statusCode() / 100 == 2 ? null : "HTTP " + resposta.statusCode());
+				respostas.add(rpcResposta);
+				if (rpcResposta.erro() == null && temResultadoJsonRpc(rpcResposta.corpo())) {
+					break;
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				respostas.add(new RespostaRpc(host, 0, null, "interrompido"));
+				break;
+			} catch (IOException | RuntimeException e) {
+				respostas.add(new RespostaRpc(host, 0, null, e.getClass().getSimpleName()));
+			}
+		}
+		return List.copyOf(respostas);
+	}
+
 	public long cabeca() {
 
 		return corpoDe("eth_blockNumber", new JsonArray()).map(texto -> JsonParser.parseString(texto).getAsJsonObject())
@@ -450,5 +506,24 @@ public final class RpcDoEnsaio {
 		}
 
 		return Optional.empty();
+	}
+
+	private static String host(String no) {
+		try {
+			String host = URI.create(no).getHost();
+			return host == null ? "endpoint-invalido" : host;
+		} catch (IllegalArgumentException e) {
+			return "endpoint-invalido";
+		}
+	}
+
+	private static boolean temResultadoJsonRpc(String corpo) {
+		try {
+			JsonElement elemento = JsonParser.parseString(corpo);
+			return elemento.isJsonObject() && elemento.getAsJsonObject().has("result")
+					&& !elemento.getAsJsonObject().get("result").isJsonNull();
+		} catch (com.google.gson.JsonParseException | IllegalStateException e) {
+			return false;
+		}
 	}
 }

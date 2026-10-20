@@ -440,9 +440,15 @@ public final class ObservatorioMempool implements Closeable {
 	// mempool para devolver o efeito); sem ele, a tx indecifrável só é contada, como antes.
 	private volatile java.util.function.BiConsumer<String, byte[]> aoNaoDecodificar = (hash, crua) -> {
 	};
+	private volatile java.util.function.BiConsumer<String, byte[]> aoValidarDecodificado = (hash, crua) -> {
+	};
 
 	public void aoNaoDecodificar(java.util.function.BiConsumer<String, byte[]> simulador) {
 		this.aoNaoDecodificar = simulador;
+	}
+
+	public void aoValidarDecodificado(java.util.function.BiConsumer<String, byte[]> simulador) {
+		this.aoValidarDecodificado = simulador;
 	}
 
 	public void blocoFechado(Map<String, List<Log>> logsPorTx) {
@@ -847,6 +853,48 @@ public final class ObservatorioMempool implements Closeable {
 		if (swap.isEmpty()) {
 			swap = RoteadorAgregador.decodificar(tx.get().entrada());
 		}
+		// bStocks DEX (seletor 42e3dcf3): buy exact tokenOut de pool V3 compatível.
+		// Se o pool estiver no catálogo como V3 e a taxa for conhecida, promove para o path V3
+		// (RoteamentoUniversal.projetar usa catalogo.estado; o path V2 usa reservas e falha para V3).
+		if (swap.isEmpty()) {
+			Optional<SwapPendente> bstocks = RoteadorBStocks.decodificar(tx.get().entrada(), catalogo::par);
+			if (bstocks.isPresent() && !bstocks.get().pools().isEmpty()) {
+				byte[] bPool = bstocks.get().pools().get(0);
+				Optional<Integer> bFee = catalogo.estado(bPool).isPresent() ? taxaDaPool.apply(bPool) : Optional.empty();
+				if (bFee.isPresent()) {
+					RoteamentoUniversal.SwapV3 swapV3bS = new RoteamentoUniversal.SwapV3(
+							bstocks.get().entra(), bstocks.get().caminho(), List.of(bFee.get()));
+					swapsDecodificados.incrementAndGet();
+					swapsVistos.add(hash);
+					marcar(hash, SWAP);
+					aoValidarDecodificado.accept(hash, crua);
+					Map<String, Pool> overlayBs = RoteamentoUniversal.projetar(swapV3bS, catalogo, taxaDaPool, espacamentoDaPool);
+					if (!overlayBs.isEmpty()) {
+						List<byte[]> poolsBs = overlayBs.keySet().stream().map(HEX::parseHex).toList();
+						projecoes.incrementAndGet();
+						marcar(hash, PROJETADO);
+						Projecao projecaoBs = new Projecao(hash, agora, poolsBs, swapV3bS.entra(), java.math.BigInteger.ZERO);
+						poolsBs.forEach(p -> ultimaProjecaoPorPool.put(hex(p), projecaoBs));
+						long projetadoEmBs = System.nanoTime();
+						try {
+							aoProjetar.accept(overlayBs, crua);
+						} catch (RuntimeException e) {
+							br.com.node.util.Falhas.anotar("projeção bStocks V3", e);
+						}
+						projecaoAteDespacho.anotar((System.nanoTime() - projetadoEmBs) / 1_000_000);
+					}
+					return;
+				}
+				// V3 com taxa ainda desconhecida ou pool não-V3: conta como decodificado sem projetar.
+				if (catalogo.estado(bPool).isPresent()) {
+					swapsDecodificados.incrementAndGet();
+					swapsVistos.add(hash);
+					marcar(hash, SWAP);
+					return;
+				}
+			}
+			swap = bstocks; // pool não no catálogo: conta como decodificado, path V2 retornará vazio
+		}
 		// Universal Router (execute(bytes,bytes[]), seletor 24856bc3): V3_SWAP_EXACT_IN.
 		// Projeta diretamente para overlay — caminho separado do SwapPendente porque o tipo de retorno é diferente.
 		if (swap.isEmpty()) {
@@ -855,11 +903,11 @@ public final class ObservatorioMempool implements Closeable {
 				swapsDecodificados.incrementAndGet();
 				swapsVistos.add(hash);
 				marcar(hash, SWAP);
-				aoNaoDecodificar.accept(hash, crua);
+				aoValidarDecodificado.accept(hash, crua);
 				Map<String, Pool> overlayV3 = RoteamentoUniversal.projetar(swapV3.get(), catalogo, taxaDaPool,
 						espacamentoDaPool);
 				if (!overlayV3.isEmpty()) {
-					List<byte[]> poolsV3 = overlayV3.keySet().stream().map(HexFormat.of()::parseHex).toList();
+					List<byte[]> poolsV3 = overlayV3.keySet().stream().map(HEX::parseHex).toList();
 					projecoes.incrementAndGet();
 					marcar(hash, PROJETADO);
 					Projecao projecao = new Projecao(hash, agora, poolsV3, swapV3.get().entra(),
@@ -886,7 +934,7 @@ public final class ObservatorioMempool implements Closeable {
 
 		// Decodificada também vai ao simulador, por amostra (o teto por contrato+seletor segura o volume):
 		// é o que CONFERE o projetor contra o que a tx faz — sem isto o roteamento nunca era medido.
-		aoNaoDecodificar.accept(hash, crua);
+		aoValidarDecodificado.accept(hash, crua);
 		Optional<List<Passo>> passos = Roteamento.projetar(swap.get(), catalogo, taxaDaPool, roteador, solidlyStableFn);
 		if (passos.isEmpty()) {
 			return;
@@ -905,6 +953,15 @@ public final class ObservatorioMempool implements Closeable {
 		Map<String, Pool> overlay = new LinkedHashMap<>();
 		for (int i = 0; i < pools.size(); i++) {
 			overlay.put(hex(pools.get(i)), passos.get().get(i).depois());
+		}
+		if (RoteamentoUniversal.ehUniversalRouter(tx.get().entrada())) {
+			RoteamentoUniversal.decodificar(tx.get().entrada()).ifPresent(swapV3 -> {
+				Map<String, Pool> overlayV3 = RoteamentoUniversal.projetar(swapV3, catalogo, taxaDaPool, espacamentoDaPool);
+				overlayV3.forEach((p, estado) -> {
+					overlay.put(p, estado);
+					ultimaProjecaoPorPool.put(p, projecao);
+				});
+			});
 		}
 		long projetadoEm = System.nanoTime();
 		// Borda: a exceção de quem avalia a projeção (conta, câmbio, unidade) é registrada com a pilha e não
@@ -958,7 +1015,9 @@ public final class ObservatorioMempool implements Closeable {
 						.comparingLong(projecao -> Math.abs(Duration.between(projecao.instante(), agora).toMillis())));
 	}
 
+	private static final HexFormat HEX = HexFormat.of();
+
 	private static String hex(byte[] bytes) {
-		return HexFormat.of().formatHex(bytes);
+		return HEX.formatHex(bytes);
 	}
 }

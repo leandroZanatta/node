@@ -20,11 +20,7 @@ import br.com.node.nucleo.Perna;
 
 public final class Backrun implements Closeable {
 
-	// A MARGEM NÃO MORA AQUI. Ela já está dentro do `piso` (3/2 sobre o gás, o `MARGEM_NUM/DEN` do
-	// `CustoDeGas`), e aqui havia um `MARGEM = 1` multiplicando-o: sem efeito nenhum, mas lido como
-	// se DOIS lugares decidissem a margem — e aí mexer num e não no outro pareceria funcionar. O
-	// número que fica é o do `piso`, porque é o MESMO que o `Disparo` manda ao contrato como
-	// `lucroMinimo`: é o que impede o portão e o contrato de divergirem.
+	// A margem mora só em `CustoDeGas.piso`, o mesmo valor que `Disparo` exige no contrato.
 
 	// Janela de dedup: a MESMA oportunidade (mesmas pools, mesma entrada, mesmo lucro previsto) não se
 	// reenvia nesse intervalo.
@@ -75,9 +71,7 @@ public final class Backrun implements Closeable {
 	// assim que "0,0133 vs 0,0168" foi lido como BNB quando era USDT — 600× de erro na leitura.
 	private final AtomicReference<String> melhorRaiz = new AtomicReference<>("");
 
-	// Recusadas que PAGARIAM o gás (lucro ≥ 1× o custo), barradas SÓ pela margem de 3/2. São as
-	// únicas em que mexer na margem muda o desfecho — o resto não paga nem o próprio gás. Sem esta
-	// separação, "16 abaixo do piso" não diz se perdemos 16 fendas boas ou 16 poeiras.
+	// Recusadas cujo lucro cobre estritamente o gás estimado, incluindo a transferência ao builder.
 	private final AtomicLong pagariaOGas = new AtomicLong();
 
 	// AUTÓPSIA SOMBRA: o melhor recusado que paga o gás vai à autópsia por `eth_call`, sem envio. Sem
@@ -152,7 +146,7 @@ public final class Backrun implements Closeable {
 			if (piso.isEmpty() || lucro.compareTo(piso.get()) < 0) {
 				abaixoPiso.incrementAndGet();
 				anotarRecusa(fenda, gasDaCauda, lucro, piso.orElse(null));
-				boolean pagaOGas = piso.isPresent() && lucro.compareTo(custoDeGas.custoDoGas(raiz, gasDaCauda)) >= 0;
+				boolean pagaOGas = piso.isPresent() && lucro.compareTo(custoDeGas.custoDoGas(raiz, gasDaCauda)) > 0;
 				if (pagaOGas && (melhorRecusada == null || emBnb(fenda).compareTo(emBnb(melhorRecusada)) > 0)) {
 					melhorRecusada = fenda;
 				}
@@ -190,7 +184,7 @@ public final class Backrun implements Closeable {
 	// A CONTA da recusa, escrita uma vez por melhora. Só na melhora, e isso é deliberado: a corrida
 	// de 9 h recusou 16.538 fendas, e registrar cada uma trocaria um silêncio por uma inundação. O
 	// que se quer ver é a MELHOR delas — a única que decidiria alguma coisa —, e ela aparece com
-	// todos os números que a decisão usou: gás, custo (1×), piso (1,5×), lucro, e a fração do piso.
+	// todos os números que a decisão usou: gás, custo completo, piso, lucro e fração do piso.
 	//
 	// `piso` nulo é a recusa por FALTA de piso (raiz que não é numerário): não há fração a medir,
 	// só o fato, e ele já está contado no `abaixo_piso`.
@@ -203,7 +197,7 @@ public final class Backrun implements Closeable {
 		BigInteger custo = custoDeGas.custoDoGas(fenda.ciclo().pernas().get(0).entra(), gas);
 		BigInteger bps = lucro.multiply(BigInteger.valueOf(10_000)).divide(piso);
 
-		if (lucro.compareTo(custo) >= 0) {
+		if (lucro.compareTo(custo) > 0) {
 			pagariaOGas.incrementAndGet();
 		}
 
@@ -242,7 +236,7 @@ public final class Backrun implements Closeable {
 					+ " — custo, piso, lucro e líquido em wei DO TOKEN DA RAIZ) · raiz "
 					+ HexFormat.of().formatHex(fenda.ciclo().pernas().get(0).entra()) + " · "
 					+ fenda.ciclo().pernas().size() + " pernas · entrada " + fenda.oportunidade().entrada()
-					+ (lucro.compareTo(custo) >= 0 ? " · PAGARIA o gás: barrada só pela margem" : " · não paga nem o gás")
+					+ (lucro.compareTo(custo) > 0 ? " · cobre o gás com sobra" : " · não cobre o gás com sobra")
 					+ " · pools " + String.join(",", pools));
 		}
 	}
