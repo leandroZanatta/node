@@ -570,6 +570,7 @@ public final class Autopsia implements AnalisadorDeTransacao {
 			List<String> saltos = chamada.rota().stream().map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList();
 			String chaveRota = Quarentena.chaveRota(saltos);
 			registro.put("rota_em_quarentena", chaveRota);
+			quarentena.condenarRota(saltos, PENA, "TF sem perna identificada em " + registro.get("instante"));
 			porClasse.computeIfAbsent("TRANSFERENCIA_SEM_PERNA", k -> new AtomicLong()).incrementAndGet();
 		}
 
