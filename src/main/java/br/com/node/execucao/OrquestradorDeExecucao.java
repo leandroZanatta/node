@@ -42,6 +42,7 @@ public final class OrquestradorDeExecucao {
 
 	private final List<Consumer<Desfechos.Envio>> ouvintesDeEnvio = new CopyOnWriteArrayList<>();
 	private final List<BiConsumer<String, Map<String, Object>>> ouvintesDeRecusa = new CopyOnWriteArrayList<>();
+	private final List<Consumer<Desfechos.Desfecho>> ouvintesDeDecisao = new CopyOnWriteArrayList<>();
 
 	private final Cabeca cabeca;
 	private final RelayPrivado relay;
@@ -87,6 +88,12 @@ public final class OrquestradorDeExecucao {
 			ouvintesDeEnvio.forEach(ouvinte -> ouvinte.accept(envio));
 		});
 		disparo.aoRecusarTentativa((hash, detalhes) -> ouvintesDeRecusa.forEach(ouvinte -> ouvinte.accept(hash, detalhes)));
+		desfechos.aoDecidir(desfecho -> {
+			synchronized (lances) {
+				lances.aprender(desfecho);
+			}
+			ouvintesDeDecisao.forEach(ouvinte -> ouvinte.accept(desfecho));
+		});
 		disparo.aoVeredito(desfechos::veredito);
 		disparo.vereditoPor(rpcDaAutopsia);
 		disparo.medirCom(cabeca::momentos);
@@ -175,7 +182,7 @@ public final class OrquestradorDeExecucao {
 	}
 
 	public void aoDecidir(Consumer<Desfechos.Desfecho> ouvinte) {
-		desfechos.aoDecidir(ouvinte);
+		ouvintesDeDecisao.add(ouvinte);
 	}
 
 	public void aoConcluirAutopsia(BiConsumer<String, Map<String, Object>> ouvinte) {
