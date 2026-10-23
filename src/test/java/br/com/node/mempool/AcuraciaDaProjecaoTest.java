@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,17 +22,17 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Fabricas;
-import br.com.node.catalogo.Impostos;
-import br.com.node.catalogo.Tarifario;
-import br.com.node.catalogo.Taxas;
-import br.com.node.sincronizacao.Cabeca;
-import br.com.node.sincronizacao.Cursor;
-import br.com.node.sincronizacao.Frente;
-import br.com.node.sondagem.Rpc;
-import br.com.node.sondagem.Sondagem;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Fabricas;
+import br.com.node.transformacao.catalogo.Impostos;
+import br.com.node.transformacao.catalogo.Tarifario;
+import br.com.node.transformacao.catalogo.Taxas;
+import br.com.node.baixa.sync.Cabeca;
+import br.com.node.baixa.sync.Cursor;
+import br.com.node.baixa.sync.Frente;
+import br.com.node.baixa.rpc.Rpc;
+import br.com.node.transformacao.sondagem.Sondagem;
 import br.com.node.util.Resources;
 
 class AcuraciaDaProjecaoTest {

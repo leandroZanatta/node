@@ -1,4 +1,7 @@
 package br.com.node.sondagem;
+import br.com.node.baixa.rpc.*;
+import br.com.node.transformacao.sondagem.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

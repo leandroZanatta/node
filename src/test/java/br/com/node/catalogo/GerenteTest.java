@@ -1,4 +1,7 @@
 package br.com.node.catalogo;
+import br.com.node.transformacao.catalogo.*;
+import br.com.node.execucao.bundle.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -12,9 +15,9 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.EstadoV3;
-import br.com.node.nucleo.PoolV3;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.EstadoV3;
+import br.com.node.transformacao.nucleo.PoolV3;
 import br.com.node.vo.Log;
 
 class GerenteTest {

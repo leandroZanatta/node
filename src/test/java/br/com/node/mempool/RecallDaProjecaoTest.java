@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,7 +24,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import br.com.node.catalogo.Eventos;
+import br.com.node.transformacao.catalogo.Eventos;
 
 class RecallDaProjecaoTest {
 

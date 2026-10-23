@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,7 +16,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.mempool.TransacaoPendente;
+import br.com.node.transformacao.mempool.TransacaoPendente;
 import br.com.node.util.Keccak;
 import br.com.node.util.Secp256k1;
 

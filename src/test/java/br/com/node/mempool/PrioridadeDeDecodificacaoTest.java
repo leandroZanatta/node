@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

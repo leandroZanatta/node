@@ -1,4 +1,8 @@
 package br.com.node.conferencia;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.rpc.*;
+import br.com.node.transformacao.catalogo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

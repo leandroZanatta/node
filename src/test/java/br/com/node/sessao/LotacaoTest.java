@@ -1,4 +1,7 @@
 package br.com.node.sessao;
+import br.com.node.baixa.p2p.*;
+import br.com.node.baixa.protocolo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -6,7 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
+import br.com.node.baixa.sync.Crivo;
 
 class LotacaoTest {
 

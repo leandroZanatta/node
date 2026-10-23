@@ -1,4 +1,7 @@
 package br.com.node.repository;
+import br.com.node.baixa.persistencia.*;
+import br.com.node.baixa.persistencia.postgres.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,8 +14,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.ChaveDaPool;
-import br.com.node.repository.postgres.Postgres;
+import br.com.node.transformacao.catalogo.ChaveDaPool;
+import br.com.node.baixa.persistencia.postgres.Postgres;
 
 class PoolsNoGerenteRepositoryTest {
 

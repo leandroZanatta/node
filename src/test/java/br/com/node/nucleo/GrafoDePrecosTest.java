@@ -1,4 +1,6 @@
 package br.com.node.nucleo;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;

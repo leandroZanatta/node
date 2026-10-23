@@ -1,4 +1,7 @@
 package br.com.node.catalogo;
+import br.com.node.transformacao.catalogo.*;
+import br.com.node.execucao.bundle.*;
+
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -13,10 +16,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.sincronizacao.Cabeca;
-import br.com.node.sincronizacao.Cursor;
-import br.com.node.sincronizacao.Frente;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.baixa.sync.Cabeca;
+import br.com.node.baixa.sync.Cursor;
+import br.com.node.baixa.sync.Frente;
 import br.com.node.util.Resources;
 import br.com.node.vo.Log;
 

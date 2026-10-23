@@ -1,4 +1,6 @@
 package br.com.node.rede;
+import br.com.node.baixa.protocolo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;

@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,9 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonObject;
 
-import br.com.node.catalogo.Catalogo;
-import br.com.node.mempool.ObservatorioMempool;
-import br.com.node.nucleo.Arbitragem;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.mempool.ObservatorioMempool;
+import br.com.node.transformacao.nucleo.Arbitragem;
 
 class GatilhosTest {
 

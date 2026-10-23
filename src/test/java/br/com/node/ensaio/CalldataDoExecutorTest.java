@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -162,8 +167,8 @@ class CalldataDoExecutorTest {
 	@DisplayName("a calldata da versão 2, com a chave de uma pool de gerente, bate byte a byte com a do cast")
 	void versao2BateComOCast() {
 
-		br.com.node.catalogo.ChaveDaPool chave = new br.com.node.catalogo.ChaveDaPool(
-				br.com.node.catalogo.Eventos.GERENTE_INFINITY_CL,
+		br.com.node.transformacao.catalogo.ChaveDaPool chave = new br.com.node.transformacao.catalogo.ChaveDaPool(
+				br.com.node.transformacao.catalogo.Eventos.GERENTE_INFINITY_CL,
 				java.util.HexFormat.of().parseHex("d37aa0f0d66ad670279f6b89325c88bdff17d0265144762fb01f54fca9779944"),
 				new byte[20], java.util.HexFormat.of().parseHex("55d398326f99059ff775485246999027b3197955"), 67, 1,
 				new byte[20], 0, 1L);

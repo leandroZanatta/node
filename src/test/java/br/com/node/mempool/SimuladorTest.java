@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,7 +18,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import br.com.node.ensaio.RpcDoEnsaio;
+import br.com.node.baixa.rpc.RpcDoEnsaio;
 import br.com.node.vo.Log;
 
 class SimuladorTest {

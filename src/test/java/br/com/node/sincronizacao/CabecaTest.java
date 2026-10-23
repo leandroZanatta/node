@@ -1,4 +1,7 @@
 package br.com.node.sincronizacao;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.p2p.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,9 +14,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.sessao.Lotacao;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.baixa.p2p.Lotacao;
 import br.com.node.util.Resources;
 
 class CabecaTest {

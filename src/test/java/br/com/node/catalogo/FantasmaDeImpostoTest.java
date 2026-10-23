@@ -1,4 +1,7 @@
 package br.com.node.catalogo;
+import br.com.node.transformacao.catalogo.*;
+import br.com.node.execucao.bundle.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,8 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.sondagem.CadeiaDeConferencia;
-import br.com.node.sondagem.Medida;
-import br.com.node.sondagem.Sonda;
+import br.com.node.transformacao.sondagem.Medida;
+import br.com.node.transformacao.sondagem.Sonda;
 
 class FantasmaDeImpostoTest {
 

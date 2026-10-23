@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,10 +14,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Catalogo;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.Passo;
-import br.com.node.nucleo.PoolV2;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.Passo;
+import br.com.node.transformacao.nucleo.PoolV2;
 import br.com.node.vo.Log;
 import br.com.node.vo.SwapPendente;
 

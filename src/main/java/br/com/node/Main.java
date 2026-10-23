@@ -1,60 +1,84 @@
 package br.com.node;
+import br.com.node.auditoria.relatorio.RelatorioExecucao;
 
+
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-import br.com.node.cadeia.Crivo;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Cauda;
-import br.com.node.catalogo.Cotador;
-import br.com.node.catalogo.Fabricas;
-import br.com.node.catalogo.Impostos;
-import br.com.node.catalogo.ObservatorioArbitragem;
-import br.com.node.catalogo.Quarentena;
-import br.com.node.catalogo.Tarifario;
-import br.com.node.catalogo.Taxas;
-import br.com.node.descoberta.Descoberta;
-import br.com.node.descoberta.Sementes;
-import br.com.node.ensaio.Autopsia;
-import br.com.node.ensaio.Backrun;
-import br.com.node.ensaio.CustoDeGas;
-import br.com.node.ensaio.DiarioDeEnsaio;
-import br.com.node.ensaio.Disparo;
-import br.com.node.ensaio.Gabarito;
-import br.com.node.ensaio.Gatilhos;
-import br.com.node.ensaio.RelayPrivado;
-import br.com.node.ensaio.RpcDoEnsaio;
-import br.com.node.kademlia.TabelaDeRotas;
-import br.com.node.mempool.ObservatorioMempool;
-import br.com.node.mempool.Simulador;
-import br.com.node.rede.Discv4;
-import br.com.node.rede.Envelope;
-import br.com.node.rede.PortaUdp;
-import br.com.node.repository.ImpostosRepository;
-import br.com.node.repository.PeersRepository;
-import br.com.node.repository.PoolsNoGerenteRepository;
-import br.com.node.repository.ProvasDeTaxaRepository;
-import br.com.node.repository.postgres.Postgres;
-import br.com.node.sessao.Lotacao;
-import br.com.node.sessao.Sessoes;
-import br.com.node.sincronizacao.Cabeca;
-import br.com.node.sincronizacao.Cursor;
-import br.com.node.sincronizacao.Frente;
-import br.com.node.sincronizacao.Sincronizacao;
-import br.com.node.sincronizacao.VarredorDeGerentes;
-import br.com.node.sondagem.Rpc;
-import br.com.node.sondagem.Sondagem;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import br.com.node.auditoria.api.HttpApi;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.execucao.garimpo.Cauda;
+import br.com.node.transformacao.catalogo.Cotador;
+import br.com.node.transformacao.catalogo.EspacamentoPorChamada;
+import br.com.node.transformacao.catalogo.Fabricas;
+import br.com.node.transformacao.catalogo.Impostos;
+import br.com.node.transformacao.catalogo.ObservatorioArbitragem;
+import br.com.node.transformacao.catalogo.Quarentena;
+import br.com.node.transformacao.catalogo.Quentes;
+import br.com.node.transformacao.catalogo.Tarifario;
+import br.com.node.transformacao.catalogo.Taxas;
+import br.com.node.transformacao.catalogo.Ticks;
+import br.com.node.baixa.p2p.Descoberta;
+import br.com.node.baixa.p2p.Sementes;
+import br.com.node.auditoria.registro.Autopsia;
+import br.com.node.auditoria.mercado.AutopsiaDoMercado;
+import br.com.node.execucao.disparo.Backrun;
+import br.com.node.execucao.disparo.CustoDeGas;
+import br.com.node.execucao.disparo.Desfechos;
+import br.com.node.auditoria.registro.DiarioDeEnsaio;
+import br.com.node.execucao.disparo.Disparo;
+import br.com.node.execucao.disparo.Gabarito;
+import br.com.node.execucao.disparo.Gatilhos;
+import br.com.node.execucao.bundle.Lance48Club;
+import br.com.node.execucao.disparo.Lances;
+import br.com.node.auditoria.pagamentos.PagamentosDeBloco;
+import br.com.node.execucao.disparo.RelayPrivado;
+import br.com.node.baixa.rpc.RpcDoEnsaio;
+import br.com.node.auditoria.pagamentos.TransferenciasInternas;
+import br.com.node.auditoria.pagamentos.VencedorDoLeilao;
+import br.com.node.baixa.protocolo.TabelaDeRotas;
+import br.com.node.transformacao.mempool.ObservatorioMempool;
+import br.com.node.transformacao.mempool.Simulador;
+import br.com.node.baixa.protocolo.Discv4;
+import br.com.node.baixa.protocolo.Envelope;
+import br.com.node.baixa.protocolo.PortaUdp;
+import br.com.node.baixa.persistencia.ImpostosRepository;
+import br.com.node.baixa.persistencia.PeersRepository;
+import br.com.node.baixa.persistencia.PoolsNoGerenteRepository;
+import br.com.node.baixa.persistencia.ProvasDeTaxaRepository;
+import br.com.node.baixa.persistencia.postgres.Postgres;
+import br.com.node.baixa.p2p.Lotacao;
+import br.com.node.baixa.p2p.Sessoes;
+import br.com.node.baixa.sync.Cabeca;
+import br.com.node.baixa.sync.Cursor;
+import br.com.node.baixa.sync.Frente;
+import br.com.node.baixa.sync.Sincronizacao;
+import br.com.node.baixa.sync.VarredorDeGerentes;
+import br.com.node.baixa.rpc.Rpc;
+import br.com.node.transformacao.sondagem.Sondagem;
 import br.com.node.util.Diario;
+import br.com.node.util.Falhas;
 import br.com.node.util.Identidade;
 import br.com.node.util.NodeKey;
 import br.com.node.util.Resources;
@@ -92,7 +116,7 @@ public final class Main {
 		Catalogo catalogo = new Catalogo();
 
 		PoolsNoGerenteRepository poolsNoGerente = new PoolsNoGerenteRepository(banco);
-		java.util.concurrent.ExecutorService chavesDeGerente = Executors.newSingleThreadExecutor(tarefa -> {
+		ExecutorService chavesDeGerente = Executors.newSingleThreadExecutor(tarefa -> {
 			Thread thread = new Thread(tarefa, "chaves-de-gerente");
 			thread.setDaemon(true);
 			return thread;
@@ -111,7 +135,7 @@ public final class Main {
 				LOG.warning(() -> "pool de gerente nascida ao vivo não gravou: " + falhou.getMessage());
 			}
 		}));
-		java.util.Optional<VarredorDeGerentes> varredor = VarredorDeGerentes.urlDoAmbiente()
+		Optional<VarredorDeGerentes> varredor = VarredorDeGerentes.urlDoAmbiente()
 				.map(url -> new VarredorDeGerentes(url, poolsNoGerente, catalogo::liberarPedidas));
 		LOG.info(() -> varredor.isPresent() ? "varredura de gerentes: ativa (RPC_LOGS)"
 				: "varredura de gerentes: DESLIGADA (sem RPC_LOGS) — só pools que nascerem ao vivo terão chave");
@@ -140,38 +164,35 @@ public final class Main {
 		DiarioDeEnsaio diarioDeEnsaio = new DiarioDeEnsaio(Path.of("target", "ensaio.jsonl"));
 
 		RpcDoEnsaio rpcEnsaio = new RpcDoEnsaio();
-		RpcDoEnsaio rpcTrace = java.util.Optional.ofNullable(System.getenv("RPC_TRACE")).map(String::trim)
+		RpcDoEnsaio rpcTrace = Optional.ofNullable(System.getenv("RPC_TRACE")).map(String::trim)
 				.filter(u -> !u.isBlank()).map(urls -> java.util.Arrays.stream(urls.split(",")).map(String::trim)
 						.filter(u -> !u.isBlank()).toList())
 				.filter(urls -> !urls.isEmpty()).map(RpcDoEnsaio::new).orElse(rpcEnsaio);
 		LOG.info(() -> rpcTrace == rpcEnsaio
 				? "trace de pagamentos internos: usando RPC de execução (RPC_TRACE não configurado)"
 				: "trace de pagamentos internos: usando RPC_TRACE dedicado");
-		tarifario.porChamada(new br.com.node.catalogo.EspacamentoPorChamada(pool -> tickSpacing(rpcEnsaio, pool)));
-		br.com.node.catalogo.Ticks ticks = new br.com.node.catalogo.Ticks(
-				(para, dados, bloco) -> ethCall(rpcEnsaio, para, dados, bloco));
+		tarifario.porChamada(new EspacamentoPorChamada(pool -> tickSpacing(rpcEnsaio, pool)));
+		Ticks ticks = new Ticks((para, dados, bloco) -> ethCall(rpcEnsaio, para, dados, bloco));
 		catalogo.aoMudarLiquidez(ticks::aoMudarLiquidez);
 		cotador.ticks(ticks);
 		RelayPrivado relay = new RelayPrivado();
 		CustoDeGas custoDeGas = new CustoDeGas(rpcEnsaio, catalogo);
 		custoDeGas.atualizar();
-		RpcDoEnsaio rpcDaAutopsia = java.util.Optional.ofNullable(System.getenv("RPC_LOGS")).map(String::trim)
+		RpcDoEnsaio rpcDaAutopsia = Optional.ofNullable(System.getenv("RPC_LOGS")).map(String::trim)
 				.filter(u -> !u.isBlank()).map(u -> new RpcDoEnsaio(List.of(u))).orElse(rpcEnsaio);
 		Autopsia autopsia = new Autopsia(rpcDaAutopsia, quarentena, impostos, null);
 		autopsia.aoConcluir(diarioDeEnsaio::autopsia);
 		Disparo disparo = new Disparo(rpcEnsaio, relay, catalogo, tarifario, custoDeGas, impostos, autopsia,
 				quarentena);
 		disparo.atualizarNonce();
-		br.com.node.ensaio.Desfechos desfechos = new br.com.node.ensaio.Desfechos(br.com.node.ensaio.Disparo.executor(),
-				cabeca::momentos, null);
+		Desfechos desfechos = new Desfechos(Disparo.executor(), cabeca::momentos, null);
 		Path arquivoPagamentos = Path
-				.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
+				.of(Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
 		Path arquivoVencedores = Path
-				.of(java.util.Optional.ofNullable(System.getenv("VENCEDORES_LOG")).orElse("vencedores.jsonl"));
-		br.com.node.ensaio.PagamentosDeBloco pagamentos = new br.com.node.ensaio.PagamentosDeBloco(rpcEnsaio,
-				arquivoPagamentos, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
-		br.com.node.ensaio.Lances lances = new br.com.node.ensaio.Lances(Path.of("lances.json"),
-				br.com.node.ensaio.Lances.inicialDoAmbiente());
+				.of(Optional.ofNullable(System.getenv("VENCEDORES_LOG")).orElse("vencedores.jsonl"));
+		PagamentosDeBloco pagamentos = new PagamentosDeBloco(rpcEnsaio, arquivoPagamentos,
+				PagamentosDeBloco.enderecosPadrao());
+		Lances lances = new Lances(Path.of("lances.json"), Lances.inicialDoAmbiente());
 		disparo.lancesDe(lances);
 		disparo.aoEnviar(envio -> {
 			desfechos.registrar(envio);
@@ -180,7 +201,7 @@ public final class Main {
 		disparo.aoRecusarTentativa(diarioDeEnsaio::recusa);
 		disparo.aoVeredito(desfechos::veredito);
 		disparo.vereditoPor(rpcDaAutopsia);
-		java.util.concurrent.ExecutorService bidLookup = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		ExecutorService bidLookup = Executors.newSingleThreadExecutor(r -> {
 			Thread t = new Thread(r, "bid-lookup");
 			t.setDaemon(true);
 			return t;
@@ -215,42 +236,41 @@ public final class Main {
 		cauda.quarentena(quarentena);
 		cauda.pontaLivre(disparo.versaoDoExecutor() >= 3);
 		cauda.aoSemFlashAchar(achado -> gabarito.anotar(achado, false));
-		br.com.node.catalogo.Quentes quentes = new br.com.node.catalogo.Quentes(Path.of("quentes.json"));
+		Quentes quentes = new Quentes(Path.of("quentes.json"));
 		if (!"1".equals(System.getenv("CAUDA_UMA_CAMADA"))) {
 			cauda.quentesDe(quentes);
 		}
 		cauda.valorarCom(
 				achado -> custoDeGas.paraBnb(achado.ciclo().pernas().get(0).entra(), achado.oportunidade().lucro())
 						.orElseThrow(() -> new IllegalStateException("fenda da cauda sem câmbio BNB para a raiz "
-								+ java.util.HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()))));
+								+ HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()))));
 
 		ObservatorioMempool mempool = new ObservatorioMempool(catalogo, tarifario::taxa, tarifario::espacamento,
 				tarifario::solidlyStable, (overlay, crua) -> cauda.projetar(overlay, cabeca.alvo())
 						.ifPresent(achado -> backrun.considerar(List.of(achado), crua)));
 		Gatilhos gatilhos = new Gatilhos(rpcEnsaio, mempool::etapas, mempool::primeiraVisaoMs,
 				arbitragem -> custoDeGas.paraBnbSeDisponivel(arbitragem.token(), arbitragem.sobra()));
-		gatilhos.gravarFendasGrandesEm(Path
-				.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG")).orElse("fendas_grandes.jsonl")));
-		br.com.node.ensaio.AutopsiaDoMercado mercado = new br.com.node.ensaio.AutopsiaDoMercado(catalogo, cotador,
-				tarifario, custoDeGas, gabarito, Path.of("target", "mercado-" + carimbo + ".jsonl"));
+		gatilhos.gravarFendasGrandesEm(
+				Path.of(Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG")).orElse("fendas_grandes.jsonl")));
+		AutopsiaDoMercado mercado = new AutopsiaDoMercado(catalogo, cotador, tarifario, custoDeGas,
+				gabarito, Path.of("target", "mercado-" + carimbo + ".jsonl"));
 		mercado.versaoDoExecutor(disparo.versaoDoExecutor());
-		mercado.verificarCom(new br.com.node.ensaio.AutopsiaDoMercado.Saldos() {
+		mercado.verificarCom(new AutopsiaDoMercado.Saldos() {
 			@Override
-			public java.util.Optional<java.math.BigInteger> bnb(byte[] conta, long bloco) {
-				com.google.gson.JsonArray parametros = new com.google.gson.JsonArray();
-				parametros.add("0x" + java.util.HexFormat.of().formatHex(conta));
+			public Optional<BigInteger> bnb(byte[] conta, long bloco) {
+				JsonArray parametros = new JsonArray();
+				parametros.add("0x" + HexFormat.of().formatHex(conta));
 				parametros.add("0x" + Long.toHexString(bloco));
-				return rpcEnsaio.chamar("eth_getBalance", parametros).map(com.google.gson.JsonParser::parseString)
-						.map(com.google.gson.JsonElement::getAsJsonObject).filter(o -> o.has("result"))
-						.map(o -> new java.math.BigInteger(o.get("result").getAsString().substring(2), 16));
+				return rpcEnsaio.chamar("eth_getBalance", parametros).map(JsonParser::parseString)
+						.map(JsonElement::getAsJsonObject).filter(o -> o.has("result"))
+						.map(o -> new BigInteger(o.get("result").getAsString().substring(2), 16));
 			}
 
 			@Override
-			public java.util.Optional<java.math.BigInteger> token(byte[] token, byte[] conta, long bloco) {
-				String dados = "70a08231" + "0".repeat(24) + java.util.HexFormat.of().formatHex(conta);
-				return ethCall(rpcEnsaio, java.util.HexFormat.of().formatHex(token), dados,
-						"0x" + Long.toHexString(bloco)).filter(r -> r.length() >= 66)
-						.map(r -> new java.math.BigInteger(r.substring(2, 66), 16));
+			public Optional<BigInteger> token(byte[] token, byte[] conta, long bloco) {
+				String dados = "70a08231" + "0".repeat(24) + HexFormat.of().formatHex(conta);
+				return ethCall(rpcEnsaio, HexFormat.of().formatHex(token), dados, "0x" + Long.toHexString(bloco))
+						.filter(r -> r.length() >= 66).map(r -> new java.math.BigInteger(r.substring(2, 66), 16));
 			}
 		});
 		Simulador simulador = new Simulador(rpcEnsaio::chamar, mempool::aprenderDe);
@@ -368,10 +388,10 @@ public final class Main {
 
 		int apiPorta = Integer.parseInt(System.getenv().getOrDefault("API_PORTA", "8080"));
 		Path arquivoDespachos = Path.of("target", "ensaio.jsonl");
-		br.com.node.api.HttpApi httpApi;
+		HttpApi httpApi;
 		try {
-			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos,
-					arquivoVencedores, Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
+			httpApi = new HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, arquivoVencedores,
+					Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
 							.orElse("fendas_grandes.jsonl")),
 					() -> {
 						Map<String, Object> p = new LinkedHashMap<>();
@@ -381,7 +401,7 @@ public final class Main {
 						p.put("descartadas", catalogo.poolsDescartadas());
 						return p;
 					}, quarentena);
-		} catch (java.io.IOException e) {
+		} catch (IOException e) {
 			throw new IllegalStateException("não foi possível iniciar HTTP API na porta " + apiPorta, e);
 		}
 		httpApi.iniciar();
@@ -391,57 +411,55 @@ public final class Main {
 		Thread.currentThread().join();
 	}
 
-	private static java.util.Optional<String> ethCall(RpcDoEnsaio rpc, String para, String dados, String bloco) {
+	private static Optional<String> ethCall(RpcDoEnsaio rpc, String para, String dados, String bloco) {
 
 		try {
 
-			com.google.gson.JsonObject chamada = new com.google.gson.JsonObject();
+			JsonObject chamada = new JsonObject();
 			chamada.addProperty("to", "0x" + para);
 			chamada.addProperty("data", "0x" + dados);
-			com.google.gson.JsonArray parametros = new com.google.gson.JsonArray();
+			JsonArray parametros = new JsonArray();
 			parametros.add(chamada);
 			parametros.add(bloco == null ? "latest" : bloco);
 
-			return rpc.chamar("eth_call", parametros).map(com.google.gson.JsonParser::parseString)
-					.map(com.google.gson.JsonElement::getAsJsonObject).filter(o -> o.has("result"))
-					.map(o -> o.get("result").getAsString());
+			return rpc.chamar("eth_call", parametros).map(JsonParser::parseString).map(JsonElement::getAsJsonObject)
+					.filter(o -> o.has("result")).map(o -> o.get("result").getAsString());
 
 		} catch (RuntimeException e) {
-			return java.util.Optional.empty();
+			return Optional.empty();
 		}
 	}
 
-	private static java.util.OptionalInt tickSpacing(RpcDoEnsaio rpc, byte[] pool) {
+	private static OptionalInt tickSpacing(RpcDoEnsaio rpc, byte[] pool) {
 
 		try {
 
-			com.google.gson.JsonObject chamada = new com.google.gson.JsonObject();
-			chamada.addProperty("to", "0x" + java.util.HexFormat.of().formatHex(pool));
+			JsonObject chamada = new JsonObject();
+			chamada.addProperty("to", "0x" + HexFormat.of().formatHex(pool));
 			chamada.addProperty("data", "0xd0c93a7c");
-			com.google.gson.JsonArray parametros = new com.google.gson.JsonArray();
+			JsonArray parametros = new JsonArray();
 			parametros.add(chamada);
 			parametros.add("latest");
 
-			return rpc.chamar("eth_call", parametros).map(com.google.gson.JsonParser::parseString)
-					.map(com.google.gson.JsonElement::getAsJsonObject).filter(o -> o.has("result"))
-					.map(o -> o.get("result").getAsString()).filter(r -> r.length() == 66)
-					.map(r -> java.util.OptionalInt.of(new java.math.BigInteger(r.substring(2), 16).intValue()))
-					.orElse(java.util.OptionalInt.empty());
+			return rpc.chamar("eth_call", parametros).map(JsonParser::parseString).map(JsonElement::getAsJsonObject)
+					.filter(o -> o.has("result")).map(o -> o.get("result").getAsString()).filter(r -> r.length() == 66)
+					.map(r -> OptionalInt.of(new BigInteger(r.substring(2), 16).intValue()))
+					.orElse(OptionalInt.empty());
 
 		} catch (RuntimeException e) {
-			return java.util.OptionalInt.empty();
+			return OptionalInt.empty();
 		}
 	}
 
-	private static boolean ganhouOutro(br.com.node.ensaio.Desfechos.Desfecho desfecho) {
+	private static boolean ganhouOutro(Desfechos.Desfecho desfecho) {
 		return switch (desfecho.classe()) {
 		case "rival_n1", "rival_n2", "pool_mexida_n1", "pool_mexida_n2" -> true;
 		default -> false;
 		};
 	}
 
-	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc,
-			RpcDoEnsaio rpcTrace, Path arquivo) {
+	private static void registrarVencedor(Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, RpcDoEnsaio rpcTrace,
+			Path arquivo) {
 		try {
 			gravarVencedor(desfecho, rpc, rpcTrace, arquivo);
 		} catch (RuntimeException e) {
@@ -449,25 +467,24 @@ public final class Main {
 		}
 	}
 
-	private static void gravarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc,
-			RpcDoEnsaio rpcTrace, Path arquivo) {
+	private static void gravarVencedor(Desfechos.Desfecho desfecho, RpcDoEnsaio rpc, RpcDoEnsaio rpcTrace,
+			Path arquivo) {
 
 		int saltos = desfecho.classe().endsWith("n2") ? 2 : 1;
 		long alturaDoVencedor = desfecho.envio().altura() + saltos;
 
-		com.google.gson.JsonObject linha;
-		com.google.gson.JsonObject bloco = rpc.bloco(alturaDoVencedor).orElse(null);
+		JsonObject linha;
+		JsonObject bloco = rpc.bloco(alturaDoVencedor).orElse(null);
 		if (bloco == null) {
-			linha = new com.google.gson.JsonObject();
+			linha = new JsonObject();
 			linha.addProperty("nosso_hash", desfecho.envio().hash());
 			linha.addProperty("classe", desfecho.classe());
 			linha.addProperty("erro", "bloco do vencedor indisponível no RPC");
 		} else {
-			linha = br.com.node.ensaio.VencedorDoLeilao.extrair(desfecho.envio().hash(), desfecho.classe(),
-					alturaDoVencedor, desfecho.posicao(), bloco,
-					br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
+			linha = VencedorDoLeilao.extrair(desfecho.envio().hash(), desfecho.classe(), alturaDoVencedor,
+					desfecho.posicao(), bloco, PagamentosDeBloco.enderecosPadrao());
 			if (linha.has("hash_vencedor")) {
-				br.com.node.ensaio.TransferenciasInternas.anexar(rpcTrace, linha.get("hash_vencedor").getAsString(),
+				TransferenciasInternas.anexar(rpcTrace, linha.get("hash_vencedor").getAsString(),
 						System.getenv("BSCSCAN_API_KEY"), linha);
 				rpc.recibo(linha.get("hash_vencedor").getAsString()).ifPresent(r -> {
 					linha.addProperty("sucesso_vencedor", r.sucesso());
@@ -479,33 +496,31 @@ public final class Main {
 					if (precoGas == null && linha.has("gas_price_wei") && !linha.get("gas_price_wei").isJsonNull()) {
 						precoGas = new BigInteger(linha.get("gas_price_wei").getAsString());
 					}
-					BigInteger taxaGas = br.com.node.ensaio.Lance48Club.taxaGas(r.gasUsado(), precoGas);
+					BigInteger taxaGas = Lance48Club.taxaGas(r.gasUsado(), precoGas);
 					linha.addProperty("taxa_gas_vencedor_wei", taxaGas == null ? null : taxaGas.toString());
 				});
-				br.com.node.ensaio.VencedorDoLeilao.medirPagamento48Club(linha);
+				VencedorDoLeilao.medirPagamento48Club(linha);
 			}
 		}
-		br.com.node.ensaio.VencedorDoLeilao.gravar(arquivo, linha);
+		VencedorDoLeilao.gravar(arquivo, linha);
 	}
 
-	private static java.util.Optional<BigInteger> bidRealDoRival(br.com.node.ensaio.Desfechos.Desfecho desfecho,
-			RpcDoEnsaio rpc) {
+	private static Optional<BigInteger> bidRealDoRival(Desfechos.Desfecho desfecho, RpcDoEnsaio rpc) {
 
 		long alturaN1 = desfecho.envio().altura() + 1;
 		int posArb = desfecho.posicao();
 
-		com.google.gson.JsonObject bloco = rpc.bloco(alturaN1).orElse(null);
+		JsonObject bloco = rpc.bloco(alturaN1).orElse(null);
 		if (bloco == null || !bloco.has("transactions"))
-			return java.util.Optional.empty();
-		com.google.gson.JsonArray txs = bloco.getAsJsonArray("transactions");
+			return Optional.empty();
+		JsonArray txs = bloco.getAsJsonArray("transactions");
 		if (posArb < 0 || posArb >= txs.size())
-			return java.util.Optional.empty();
+			return Optional.empty();
 
-		com.google.gson.JsonObject txArb = txs.get(posArb).getAsJsonObject();
+		JsonObject txArb = txs.get(posArb).getAsJsonObject();
 
-		BigInteger bnbPagamento = br.com.node.ensaio.PagamentosDeBloco
-				.pagamentoAoBuilder(bloco, posArb, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao())
-				.orElse(BigInteger.ZERO);
+		BigInteger bnbPagamento = PagamentosDeBloco
+				.pagamentoAoBuilder(bloco, posArb, PagamentosDeBloco.enderecosPadrao()).orElse(BigInteger.ZERO);
 
 		if (bnbPagamento.signum() <= 0)
 			return java.util.Optional.empty();
@@ -535,15 +550,15 @@ public final class Main {
 		try {
 			observador.run();
 		} catch (RuntimeException e) {
-			br.com.node.util.Falhas.anotar(origem, e);
+			Falhas.anotar(origem, e);
 		}
 	}
 
 	private static final boolean GARIMPO_POR_TX = "1".equals(System.getenv("GARIMPO_POR_TX"));
 
 	private static Map<String, Object> ensaioResumo(Cauda cauda, Backrun backrun, Disparo disparo, Gabarito gabarito,
-			Gatilhos gatilhos, Simulador simulador, Impostos impostos, br.com.node.ensaio.Desfechos desfechos,
-			br.com.node.ensaio.Lances lances, CustoDeGas custoDeGas, RpcDoEnsaio rpcTrace, String origemRpcTrace) {
+			Gatilhos gatilhos, Simulador simulador, Impostos impostos, Desfechos desfechos, Lances lances,
+			CustoDeGas custoDeGas, RpcDoEnsaio rpcTrace, String origemRpcTrace) {
 
 		Map<String, Object> resumo = new LinkedHashMap<>();
 		resumo.put("garimpo_disparado", GARIMPO_POR_TX ? "por_tx (antigo)" : "por_bloco");

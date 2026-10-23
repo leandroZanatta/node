@@ -1,4 +1,7 @@
 package br.com.node.descoberta;
+import br.com.node.baixa.p2p.*;
+import br.com.node.baixa.protocolo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

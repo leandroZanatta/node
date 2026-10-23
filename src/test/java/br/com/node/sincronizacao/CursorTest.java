@@ -1,4 +1,7 @@
 package br.com.node.sincronizacao;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.p2p.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,16 +16,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Eventos;
-import br.com.node.catalogo.Transicao;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.Grafo;
-import br.com.node.nucleo.Pool;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.ReservasV2;
-import br.com.node.nucleo.TickMath;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Eventos;
+import br.com.node.transformacao.catalogo.Transicao;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.Grafo;
+import br.com.node.transformacao.nucleo.Pool;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.ReservasV2;
+import br.com.node.transformacao.nucleo.TickMath;
 import br.com.node.util.Resources;
 
 class CursorTest {
@@ -193,7 +196,7 @@ class CursorTest {
 
 		for (Map.Entry<String, byte[]> numerario : numerarios.entrySet()) {
 
-			List<br.com.node.nucleo.Ciclo> ciclos = grafo.ciclos(numerario.getValue(), 3);
+			List<br.com.node.transformacao.nucleo.Ciclo> ciclos = grafo.ciclos(numerario.getValue(), 3);
 
 			long duas = ciclos.stream().filter(c -> c.pernas().size() == 2).count();
 			long tres = ciclos.stream().filter(c -> c.pernas().size() == 3).count();

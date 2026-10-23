@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,17 +16,17 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Achado;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Fabricas;
-import br.com.node.catalogo.Tarifario;
-import br.com.node.catalogo.Taxas;
-import br.com.node.nucleo.Ciclo;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.Oportunidade;
-import br.com.node.nucleo.Perna;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.Travessia;
+import br.com.node.transformacao.catalogo.Achado;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Fabricas;
+import br.com.node.transformacao.catalogo.Tarifario;
+import br.com.node.transformacao.catalogo.Taxas;
+import br.com.node.transformacao.nucleo.Ciclo;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.Oportunidade;
+import br.com.node.transformacao.nucleo.Perna;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.Travessia;
 import br.com.node.vo.Log;
 
 class RotaDoModeloTest {
@@ -64,7 +69,7 @@ class RotaDoModeloTest {
 		assertEquals(GAS, chamada.get().lucroMinimo(), "o contrato exige o chão, não o lucro previsto");
 		assertTrue(chamada.get().lucroMinimo().compareTo(GAS) >= 0, "e nunca cai abaixo do piso");
 
-		List<br.com.node.ensaio.Salto> rota = chamada.get().rota();
+		List<br.com.node.execucao.bundle.Salto> rota = chamada.get().rota();
 		assertEquals(2, rota.size());
 		assertEquals(hex(TOKEN_A), rota.get(0).entra());
 		assertEquals(hex(TOKEN_B), rota.get(0).sai());

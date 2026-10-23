@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -14,15 +19,15 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Achado;
-import br.com.node.catalogo.Impostos;
-import br.com.node.catalogo.Quarentena;
-import br.com.node.nucleo.Ciclo;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.Oportunidade;
-import br.com.node.nucleo.Perna;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.Travessia;
+import br.com.node.transformacao.catalogo.Achado;
+import br.com.node.transformacao.catalogo.Impostos;
+import br.com.node.transformacao.catalogo.Quarentena;
+import br.com.node.transformacao.nucleo.Ciclo;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.Oportunidade;
+import br.com.node.transformacao.nucleo.Perna;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.Travessia;
 
 class AutopsiaTest {
 

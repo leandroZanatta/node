@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -17,8 +22,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import br.com.node.nucleo.Arbitragem;
-import br.com.node.sincronizacao.Cabeca;
+import br.com.node.transformacao.nucleo.Arbitragem;
+import br.com.node.baixa.sync.Cabeca;
 
 class DesfechosELancesTest {
 

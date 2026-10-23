@@ -1,4 +1,8 @@
 package br.com.node.conferencia;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.rpc.*;
+import br.com.node.transformacao.catalogo.*;
+
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;

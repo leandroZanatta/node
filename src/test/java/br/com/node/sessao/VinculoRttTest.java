@@ -1,4 +1,7 @@
 package br.com.node.sessao;
+import br.com.node.baixa.p2p.*;
+import br.com.node.baixa.protocolo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

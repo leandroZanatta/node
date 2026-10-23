@@ -1,4 +1,7 @@
 package br.com.node.catalogo;
+import br.com.node.transformacao.catalogo.*;
+import br.com.node.execucao.bundle.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,13 +19,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.Pool;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.ReservasV2;
-import br.com.node.sincronizacao.Cursor;
-import br.com.node.sincronizacao.Frente;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.Pool;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.ReservasV2;
+import br.com.node.baixa.sync.Cursor;
+import br.com.node.baixa.sync.Frente;
 import br.com.node.util.Resources;
 import br.com.node.vo.ProvaDeTaxa;
 

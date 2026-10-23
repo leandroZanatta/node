@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,8 +14,8 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Catalogo;
-import br.com.node.ensaio.AssinadorDeTransacao;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.execucao.bundle.AssinadorDeTransacao;
 import br.com.node.vo.Transactions;
 
 class TransacaoSemChamadaTest {

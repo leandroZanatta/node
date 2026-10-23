@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -9,11 +14,11 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Achado;
-import br.com.node.nucleo.Arbitragem;
-import br.com.node.nucleo.Ciclo;
-import br.com.node.nucleo.Oportunidade;
-import br.com.node.nucleo.Perna;
+import br.com.node.transformacao.catalogo.Achado;
+import br.com.node.transformacao.nucleo.Arbitragem;
+import br.com.node.transformacao.nucleo.Ciclo;
+import br.com.node.transformacao.nucleo.Oportunidade;
+import br.com.node.transformacao.nucleo.Perna;
 
 class GabaritoTest {
 

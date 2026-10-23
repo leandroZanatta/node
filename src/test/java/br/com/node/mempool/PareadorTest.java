@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,8 +17,8 @@ import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Eventos;
-import br.com.node.nucleo.Par;
+import br.com.node.transformacao.catalogo.Eventos;
+import br.com.node.transformacao.nucleo.Par;
 import br.com.node.vo.Log;
 
 class PareadorTest {

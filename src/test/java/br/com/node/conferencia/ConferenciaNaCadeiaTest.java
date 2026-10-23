@@ -1,4 +1,8 @@
 package br.com.node.conferencia;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.rpc.*;
+import br.com.node.transformacao.catalogo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,20 +20,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
-import br.com.node.cadeia.Crivo;
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Fabricas;
-import br.com.node.catalogo.Origem;
-import br.com.node.catalogo.Tarifario;
-import br.com.node.catalogo.Taxas;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.EstadoV3;
-import br.com.node.nucleo.Par;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.ReservasV2;
-import br.com.node.sincronizacao.Cabeca;
-import br.com.node.sincronizacao.Cursor;
-import br.com.node.sincronizacao.Frente;
+import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Fabricas;
+import br.com.node.transformacao.catalogo.Origem;
+import br.com.node.transformacao.catalogo.Tarifario;
+import br.com.node.transformacao.catalogo.Taxas;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.EstadoV3;
+import br.com.node.transformacao.nucleo.Par;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.ReservasV2;
+import br.com.node.baixa.sync.Cabeca;
+import br.com.node.baixa.sync.Cursor;
+import br.com.node.baixa.sync.Frente;
 import br.com.node.util.Resources;
 
 class ConferenciaNaCadeiaTest {

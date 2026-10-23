@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +13,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import br.com.node.nucleo.Par;
+import br.com.node.transformacao.nucleo.Par;
 import br.com.node.vo.SwapPendente;
 
 class RoteadorBStocksTest {

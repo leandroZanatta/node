@@ -1,4 +1,7 @@
 package br.com.node.mempool;
+import br.com.node.transformacao.mempool.*;
+import br.com.node.transformacao.nucleo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,9 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Catalogo;
-import br.com.node.catalogo.Eventos;
-import br.com.node.rlp.Rlp;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Eventos;
+import br.com.node.baixa.protocolo.Rlp;
 import br.com.node.util.Keccak;
 import br.com.node.vo.Log;
 import br.com.node.vo.SwapPendente;

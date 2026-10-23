@@ -1,4 +1,7 @@
 package br.com.node.catalogo;
+import br.com.node.transformacao.catalogo.*;
+import br.com.node.execucao.bundle.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,8 +22,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import br.com.node.nucleo.MapaDeTicks;
-import br.com.node.sincronizacao.VarredorDeGerentes;
+import br.com.node.transformacao.nucleo.MapaDeTicks;
+import br.com.node.baixa.sync.VarredorDeGerentes;
 
 class TicksTest {
 

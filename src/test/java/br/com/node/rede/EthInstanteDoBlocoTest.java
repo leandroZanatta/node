@@ -1,4 +1,6 @@
 package br.com.node.rede;
+import br.com.node.baixa.protocolo.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -7,8 +9,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.rlp.Rlp;
-import br.com.node.rlp.RlpItem;
+import br.com.node.baixa.protocolo.Rlp;
+import br.com.node.baixa.protocolo.RlpItem;
 
 class EthInstanteDoBlocoTest {
 

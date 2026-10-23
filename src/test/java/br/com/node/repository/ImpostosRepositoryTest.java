@@ -1,4 +1,7 @@
 package br.com.node.repository;
+import br.com.node.baixa.persistencia.*;
+import br.com.node.baixa.persistencia.postgres.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -11,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.exception.BancoException;
-import br.com.node.repository.postgres.Postgres;
+import br.com.node.baixa.persistencia.postgres.Postgres;
 import br.com.node.vo.ProvaDeImposto;
 
 class ImpostosRepositoryTest {

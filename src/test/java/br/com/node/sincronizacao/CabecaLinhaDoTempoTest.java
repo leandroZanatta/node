@@ -1,4 +1,7 @@
 package br.com.node.sincronizacao;
+import br.com.node.baixa.sync.*;
+import br.com.node.baixa.p2p.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

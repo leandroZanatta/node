@@ -1,0 +1,385 @@
+package br.com.node.baixa.p2p;
+
+import java.io.Closeable;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.logging.Logger;
+
+import br.com.node.util.Resources;
+import br.com.node.vo.AnuncioBloco;
+import br.com.node.vo.Desconhecida;
+import br.com.node.vo.ForkId;
+import br.com.node.vo.MensagemRlpx;
+import br.com.node.vo.NewBlock;
+import br.com.node.vo.NewBlockHashes;
+import br.com.node.vo.NewPooledTransactionHashes;
+import br.com.node.vo.Status;
+import br.com.node.vo.Transactions;
+
+public final class Lotacao implements Closeable {
+
+	private static final Logger LOG = Logger.getLogger(Lotacao.class.getName());
+
+	private static final int ALVO = Resources.inteiro("rlpx.sessoes.ativas");
+
+	private static final int TENTATIVAS = Resources.inteiro("rlpx.tentativas.simultaneas");
+
+	private static final Duration RODADA = Duration.ofSeconds(Resources.inteiro("rlpx.rodada.segundos"));
+
+	private static final Duration PENALIDADE = Duration.ofSeconds(Resources.inteiro("rlpx.penalidade.segundos"));
+
+	private static final int EXCESSO = 4;
+
+	private final Sessoes sessoes;
+	private final Predicate<ForkId> criterio;
+
+	private final Set<String> tentando = ConcurrentHashMap.newKeySet();
+	private final Map<String, Instant> penalizados = new ConcurrentHashMap<>();
+
+	private final Map<Integer, Long> naoTratadas = new ConcurrentHashMap<>();
+
+	private volatile BiConsumer<Sessao, NewBlock> aoReceberBloco = (sessao, bloco) -> {
+	};
+
+	private volatile BiConsumer<Sessao, AnuncioBloco> aoAnunciarDe = (sessao, anuncio) -> {
+	};
+
+	public void aoAnunciarDe(BiConsumer<Sessao, AnuncioBloco> aoAnunciarDe) {
+		this.aoAnunciarDe = aoAnunciarDe;
+	}
+
+	public void aoReceberBloco(BiConsumer<Sessao, NewBlock> aoReceberBloco) {
+		this.aoReceberBloco = aoReceberBloco;
+	}
+
+	private final Map<String, Long> quedas = new ConcurrentHashMap<>();
+
+	private final ScheduledExecutorService laco = Executors
+			.newSingleThreadScheduledExecutor(tarefa -> new Thread(tarefa, "lotacao"));
+
+	private final ExecutorService aberturas = Executors.newFixedThreadPool(TENTATIVAS,
+			tarefa -> new Thread(tarefa, "lotacao-abre"));
+
+	private final ExecutorService leitores = Executors.newFixedThreadPool(ALVO,
+			tarefa -> new Thread(tarefa, "lotacao-le"));
+
+	public Lotacao(Sessoes sessoes, Predicate<ForkId> criterio) {
+		this.sessoes = sessoes;
+		this.criterio = criterio;
+	}
+
+	public void iniciar(Consumer<AnuncioBloco> aoAnunciar) {
+		iniciar(aoAnunciar, mensagem -> {
+		});
+	}
+
+	public void iniciar(Consumer<AnuncioBloco> aoAnunciar, Consumer<NewPooledTransactionHashes> aoAnunciarTransacoes) {
+		iniciar(aoAnunciar, (sessao, mensagem) -> aoAnunciarTransacoes.accept(mensagem), (sessao, mensagem) -> {
+		});
+	}
+
+	public void iniciar(Consumer<AnuncioBloco> aoAnunciar,
+			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
+			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
+		laco.scheduleWithFixedDelay(() -> rodada(aoAnunciar, aoAnunciarTransacoes, aoReceberTransacoes), 0,
+				RODADA.toMillis(), TimeUnit.MILLISECONDS);
+	}
+
+	public long ativas() {
+		return sessoes.todas().stream().filter(Sessao::ativa).count();
+	}
+
+	public Map<String, Long> quedas() {
+		return Map.copyOf(quedas);
+	}
+
+	public Map<Integer, Long> naoTratadas() {
+		return Map.copyOf(naoTratadas);
+	}
+
+	@Override
+	public void close() {
+
+		laco.shutdownNow();
+		aberturas.shutdownNow();
+		leitores.shutdownNow();
+
+		sessoes.todas().forEach(Sessao::desativar);
+	}
+
+	private void rodada(Consumer<AnuncioBloco> aoAnunciar,
+			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
+			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
+
+		try {
+
+			Instant agora = Instant.now();
+			trocarOMaisLento(agora);
+			trocarOMenosAdiantado(agora);
+
+			int faltam = ALVO - (int) ativas() - tentando.size();
+
+			if (faltam > 0) {
+				candidatos().stream().limit((long) faltam * EXCESSO)
+						.forEach(sessao -> abrir(sessao, aoAnunciar, aoAnunciarTransacoes, aoReceberTransacoes));
+			}
+
+			LOG.info(() -> "lotação: " + ativas() + "/" + ALVO + " ativas, " + tentando.size() + " abrindo, "
+					+ penalizados.size() + " penalizados, quedas: " + quedas + ", não tratados: " + naoTratadas);
+
+		} catch (RuntimeException e) {
+			br.com.node.util.Falhas.anotar("rodada de lotação", e);
+		}
+	}
+
+	private List<Sessao> candidatos() {
+
+		Instant agora = Instant.now();
+
+		return sessoes.todas().stream().filter(sessao -> !sessao.ativa())
+				.filter(sessao -> !tentando.contains(sessao.no().idHex()))
+				.filter(sessao -> livreDePenalidade(sessao, agora)).filter(Sessao::pronta)
+				.filter(this::naoDescartadoPeloEnr).filter(sessao -> sessao.no().portaTcp() > 0)
+				.sorted(java.util.Comparator.comparingDouble(Sessao::primeirosEntregues).reversed()
+						.thenComparingDouble(Sessao::distancia))
+				.toList();
+	}
+
+	private static final long TEMPO_DE_CASA_MS = 10 * 60_000L;
+	private static final double GANHO_MINIMO_PRIMEIROS = 1.0;
+
+	private boolean trocarOMenosAdiantado(Instant agora) {
+
+		if (ativas() < ALVO || ultimaTroca.plus(TROCA_A_CADA).isAfter(agora)) {
+			return false;
+		}
+
+		Sessao pior = sessoes.todas().stream().filter(Sessao::ativa).filter(s -> s.ativaHaMs() >= TEMPO_DE_CASA_MS)
+				.min(java.util.Comparator.comparingDouble(Sessao::primeirosEntregues)).orElse(null);
+
+		if (pior == null) {
+			return false;
+		}
+
+		Sessao melhor = candidatos().stream().findFirst().orElse(null);
+
+		if (melhor == null || melhor.primeirosEntregues() <= 2 * pior.primeirosEntregues() + GANHO_MINIMO_PRIMEIROS) {
+			return false;
+		}
+
+		ultimaTroca = agora;
+		trocadosPorPrimeiro.incrementAndGet();
+		penalizados.put(pior.no().idHex(), agora.plus(PENALIDADE_DE_LENTO));
+		LOG.info(() -> String.format(
+				"lotação: troco o peer que menos entrega primeiro (%.2f) por um que entrega mais (%.2f): %s",
+				pior.primeirosEntregues(), melhor.primeirosEntregues(), pior.no()));
+		pior.desativar();
+		return true;
+	}
+
+	private final java.util.concurrent.atomic.AtomicLong trocadosPorPrimeiro = new java.util.concurrent.atomic.AtomicLong();
+
+	private static final int AMOSTRAS_PARA_JULGAR = Sessao.AMOSTRAS_PARA_JULGAR;
+	private static final double LENTO_X = 2.0;
+	private static final double LENTO_MINIMO_MS = 400;
+	private static final Duration TROCA_A_CADA = Duration.ofSeconds(30);
+	private static final Duration PENALIDADE_DE_LENTO = Duration.ofMinutes(10);
+	private volatile Instant ultimaTroca = Instant.EPOCH;
+	private final java.util.concurrent.atomic.AtomicLong trocadosPorLentidao = new java.util.concurrent.atomic.AtomicLong();
+
+	private void trocarOMaisLento(Instant agora) {
+
+		if (ativas() < ALVO || ultimaTroca.plus(TROCA_A_CADA).isAfter(agora)) {
+			return;
+		}
+
+		List<Sessao> julgaveis = sessoes.todas().stream().filter(Sessao::ativa)
+				.filter(s -> s.amostrasDeLatencia() >= AMOSTRAS_PARA_JULGAR)
+				.sorted(java.util.Comparator.comparingDouble(Sessao::latenciaMs)).toList();
+
+		if (julgaveis.size() < ALVO / 2) {
+			return;
+		}
+
+		double mediana = julgaveis.get(julgaveis.size() / 2).latenciaMs();
+		Sessao maisLento = julgaveis.get(julgaveis.size() - 1);
+
+		if (maisLento.latenciaMs() < Math.max(LENTO_MINIMO_MS, mediana * LENTO_X)) {
+			return;
+		}
+
+		ultimaTroca = agora;
+		trocadosPorLentidao.incrementAndGet();
+		penalizados.put(maisLento.no().idHex(), agora.plus(PENALIDADE_DE_LENTO));
+		LOG.info(() -> String.format("lotação: troco o peer mais lento (%.0f ms, mediana %.0f ms): %s",
+				maisLento.latenciaMs(), mediana, maisLento.no()));
+		maisLento.desativar();
+	}
+
+	public Map<String, Object> resumoDePeers() {
+
+		List<Double> ativos = sessoes.todas().stream().filter(Sessao::ativa)
+				.filter(s -> s.amostrasDeLatencia() >= AMOSTRAS_PARA_JULGAR).map(Sessao::latenciaMs).sorted().toList();
+		List<Long> udp = sessoes.todas().stream().map(Sessao::rttUdpMs).filter(r -> r >= 0).sorted().toList();
+
+		Map<String, Object> resumo = new java.util.LinkedHashMap<>();
+		resumo.put("ativos_com_latencia", ativos.size());
+		resumo.put("latencia_ativos_mediana_ms", ativos.isEmpty() ? null : Math.round(ativos.get(ativos.size() / 2)));
+		resumo.put("latencia_ativos_max_ms", ativos.isEmpty() ? null : Math.round(ativos.get(ativos.size() - 1)));
+		resumo.put("ping_udp_conhecidos", udp.size());
+		resumo.put("ping_udp_mediana_ms", udp.isEmpty() ? null : udp.get(udp.size() / 2));
+		resumo.put("ping_udp_p10_ms", udp.isEmpty() ? null : udp.get(udp.size() / 10));
+		resumo.put("trocados_por_lentidao", trocadosPorLentidao.get());
+		resumo.put("trocados_por_primeiro_a_entregar", trocadosPorPrimeiro.get());
+		resumo.put("ativos_que_entregaram_primeiro",
+				sessoes.todas().stream().filter(Sessao::ativa).filter(s -> s.primeirosEntregues() >= 0.5).count());
+		return resumo;
+	}
+
+	private boolean naoDescartadoPeloEnr(Sessao sessao) {
+		return sessao.rede().map(criterio::test).orElse(true);
+	}
+
+	private boolean daNossaCadeia(Sessao sessao) {
+		return sessao.statusDoPar().map(Status::fork).filter(criterio).isPresent();
+	}
+
+	private boolean livreDePenalidade(Sessao sessao, Instant agora) {
+
+		Instant ate = penalizados.get(sessao.no().idHex());
+
+		return ate == null || ate.isBefore(agora);
+	}
+
+	private void abrir(Sessao sessao, Consumer<AnuncioBloco> aoAnunciar,
+			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
+			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
+
+		String id = sessao.no().idHex();
+
+		if (!tentando.add(id)) {
+			return;
+		}
+
+		aberturas.submit(() -> {
+
+			try {
+
+				sessao.ativar();
+
+				if (!daNossaCadeia(sessao)) {
+
+					sessao.desativar();
+
+					penalizados.put(id, Instant.now().plus(PENALIDADE));
+
+					anotarQueda("abertura", "outra cadeia no Status");
+
+					return;
+				}
+
+				leitores.submit(() -> atender(sessao, aoAnunciar, aoAnunciarTransacoes, aoReceberTransacoes));
+
+			} catch (RuntimeException e) {
+
+				penalizados.put(id, Instant.now().plus(PENALIDADE));
+
+				anotarQueda("abertura", motivoDe(e));
+
+			} finally {
+				tentando.remove(id);
+			}
+		});
+	}
+
+	private void atender(Sessao sessao, Consumer<AnuncioBloco> aoAnunciar,
+			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
+			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
+
+		String motivo = "mudez";
+
+		try {
+
+			while (sessao.ativa()) {
+
+				MensagemRlpx mensagem = sessao.atender();
+
+				if (mensagem instanceof NewBlockHashes anuncio) {
+					anuncio.anuncios().forEach(aoAnunciar);
+					anuncio.anuncios().forEach(um -> aoAnunciarDe.accept(sessao, um));
+				}
+
+				if (mensagem instanceof NewBlock bloco) {
+					aoAnunciar.accept(new AnuncioBloco(bloco.cabecalho().hash(), bloco.cabecalho().numero()));
+					aoReceberBloco.accept(sessao, bloco);
+				}
+
+				if (mensagem instanceof NewPooledTransactionHashes anuncio) {
+					aoAnunciarTransacoes.accept(sessao, anuncio);
+				}
+
+				if (mensagem instanceof Transactions transacoes) {
+					aoReceberTransacoes.accept(sessao, transacoes);
+				}
+
+				if (mensagem instanceof Desconhecida nova) {
+					naoTratadas.merge(nova.codigo(), 1L, Long::sum);
+				}
+			}
+
+		} catch (RuntimeException e) {
+
+			String qual = motivoDe(e);
+
+			LOG.info(() -> "conversa com " + sessao.no() + " terminou: " + qual);
+
+			motivo = qual;
+		}
+
+		anotarQueda("conversa", motivo);
+
+		sessao.desativar();
+
+		penalizados.put(sessao.no().idHex(), Instant.now().plus(PENALIDADE));
+	}
+
+	private void anotarQueda(String fase, String motivo) {
+		quedas.merge(fase + " · " + motivo, 1L, Long::sum);
+	}
+
+	private static String motivoDe(RuntimeException e) {
+
+		String texto = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+
+		if (texto.contains("derrubou")) {
+			return texto.substring(texto.indexOf("derrubou"));
+		}
+
+		if (texto.contains("não chegou")) {
+			return "mudo no aperto";
+		}
+
+		if (texto.contains("Falha ao conectar")) {
+			return "inalcançável";
+		}
+
+		if (texto.contains("Falha lendo") || texto.contains("fechou")) {
+			return "conexão caiu";
+		}
+
+		String semPar = texto.replaceAll("NoRemoto\\[[^\\]]*\\]", "par");
+
+		return semPar.length() > 80 ? semPar.substring(0, 80) : semPar;
+	}
+}

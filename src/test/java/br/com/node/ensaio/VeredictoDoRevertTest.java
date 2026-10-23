@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,8 +16,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Impostos;
-import br.com.node.catalogo.Quarentena;
+import br.com.node.transformacao.catalogo.Impostos;
+import br.com.node.transformacao.catalogo.Quarentena;
 import br.com.node.util.Keccak;
 
 class VeredictoDoRevertTest {

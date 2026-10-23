@@ -1,4 +1,9 @@
 package br.com.node.ensaio;
+import br.com.node.execucao.disparo.*;
+import br.com.node.execucao.bundle.*;
+import br.com.node.auditoria.registro.*;
+import br.com.node.baixa.rpc.*;
+
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,11 +15,11 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import br.com.node.catalogo.Catalogo;
-import br.com.node.nucleo.Direcao;
-import br.com.node.nucleo.PoolV2;
-import br.com.node.nucleo.PoolV3;
-import br.com.node.nucleo.Travessia;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.nucleo.Direcao;
+import br.com.node.transformacao.nucleo.PoolV2;
+import br.com.node.transformacao.nucleo.PoolV3;
+import br.com.node.transformacao.nucleo.Travessia;
 import br.com.node.vo.Log;
 
 class CustoDeGasTest {
