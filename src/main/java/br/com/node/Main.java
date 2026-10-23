@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
-import br.com.node.auditoria.OrquestradorDeAuditoria;
 import br.com.node.baixa.OrquestradorDeBaixa;
 import br.com.node.baixa.persistencia.postgres.Postgres;
 import br.com.node.baixa.rpc.RpcDoEnsaio;
@@ -38,7 +37,6 @@ public final class Main {
 		OrquestradorDeTransformacao mercado = new OrquestradorDeTransformacao(banco, rpcEnsaio);
 		OrquestradorDeBaixa baixa = new OrquestradorDeBaixa(chave, banco, cabeca, mercado.aplicador());
 		OrquestradorDeExecucao execucao = new OrquestradorDeExecucao(rpcEnsaio, rpcDaAutopsia, cabeca, mercado);
-		OrquestradorDeAuditoria auditoria = new OrquestradorDeAuditoria(baixa, mercado, execucao, rpcEnsaio);
 
 		baixa.aoReceberBloco((sessao, bloco) -> {
 			execucao.aoAplicarCabecalho(bloco.cabecalho());
@@ -46,11 +44,9 @@ public final class Main {
 		});
 		baixa.aoFecharBloco(altura -> {
 			execucao.aoFecharBloco(altura);
-			auditoria.aoFecharBloco(altura);
 		});
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			auditoria.fechar();
 			execucao.fechar();
 			mercado.fechar();
 			baixa.fechar();
@@ -60,9 +56,8 @@ public final class Main {
 		execucao.iniciar();
 		baixa.iniciar(mercado::observarHashes, mercado::observarTransacoes);
 		mercado.iniciar();
-		auditoria.iniciar();
 
-		LOG.info(() -> "node " + chave.idHex().substring(0, 16) + "… no ar; relatório em " + auditoria.arquivoDoRelatorio());
+		LOG.info(() -> "node " + chave.idHex().substring(0, 16) + "… no ar");
 
 		Thread.currentThread().join();
 	}
