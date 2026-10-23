@@ -54,3 +54,7 @@ operador.keystore
 quarentena.json
 quentes.json
 token_razor
+
+# dados de execucao (pagamentos a builders e fendas): nao versionar
+pagamentos.jsonl
+fendas_grandes.jsonl
