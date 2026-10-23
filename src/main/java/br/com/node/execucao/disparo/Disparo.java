@@ -147,6 +147,7 @@ public final class Disparo implements Closeable {
 	public void disparar(Achado achado, byte[] cruaPendente) {
 
 		if (!montador.temChave()) {
+			LOG.warning("disparo: DROP sem chave do operador — keystore ausente ou OPERADOR_SENHA vazia");
 			return;
 		}
 

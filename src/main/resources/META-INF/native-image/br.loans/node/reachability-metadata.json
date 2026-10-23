@@ -21,6 +21,9 @@
       "glob": "esquema.sql"
     },
     {
+      "glob": "auditoria.sql"
+    },
+    {
       "glob": "logging.properties"
     },
     {

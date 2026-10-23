@@ -154,6 +154,9 @@ public final class MontadorDeBundle {
 	private static Optional<BigInteger> carregarChave() {
 		String senha = System.getenv("OPERADOR_SENHA");
 		if (!Files.exists(KEYSTORE) || senha == null || senha.isBlank()) {
+			LOG.warning(() -> "montador: sem chave do operador — keystore em " + KEYSTORE.toAbsolutePath()
+					+ " (existe=" + Files.exists(KEYSTORE) + "), OPERADOR_SENHA "
+					+ (senha == null || senha.isBlank() ? "vazia" : "definida") + " — disparo fica inerte");
 			return Optional.empty();
 		}
 		try {
