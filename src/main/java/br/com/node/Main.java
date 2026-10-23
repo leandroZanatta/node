@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import br.com.node.auditoria.OrquestradorDeAuditoria;
 import br.com.node.baixa.OrquestradorDeBaixa;
 import br.com.node.baixa.persistencia.postgres.Postgres;
 import br.com.node.baixa.rpc.RpcDoEnsaio;
@@ -42,11 +43,13 @@ public final class Main {
 			execucao.aoAplicarCabecalho(bloco.cabecalho());
 			mercado.blocoAnunciado(bloco);
 		});
-		baixa.aoFecharBloco(altura -> {
-			execucao.aoFecharBloco(altura);
-		});
+		baixa.aoFecharBloco(execucao::aoFecharBloco);
+
+		OrquestradorDeAuditoria auditoria = new OrquestradorDeAuditoria(banco, baixa, mercado, execucao,
+				Integer.parseInt(System.getenv().getOrDefault("API_PORTA", "8080")));
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			auditoria.close();
 			execucao.fechar();
 			mercado.fechar();
 			baixa.fechar();
@@ -56,6 +59,7 @@ public final class Main {
 		execucao.iniciar();
 		baixa.iniciar(mercado::observarHashes, mercado::observarTransacoes);
 		mercado.iniciar();
+		auditoria.iniciar();
 
 		LOG.info(() -> "node " + chave.idHex().substring(0, 16) + "… no ar");
 
