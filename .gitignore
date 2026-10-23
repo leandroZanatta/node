@@ -47,3 +47,10 @@ rpclogs
 
 # logs de execucao do node (runtime, nao versionar)
 logs/
+
+# estado local e chaves do operador: nunca versionar
+nodereal
+operador.keystore
+quarentena.json
+quentes.json
+token_razor
