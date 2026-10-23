@@ -58,3 +58,6 @@ token_razor
 # dados de execucao (pagamentos a builders e fendas): nao versionar
 pagamentos.jsonl
 fendas_grandes.jsonl
+
+# saidas jsonl de execucao (target e raiz): nunca versionar
+*.jsonl
