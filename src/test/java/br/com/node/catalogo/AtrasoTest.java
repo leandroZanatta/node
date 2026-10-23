@@ -110,7 +110,7 @@ class AtrasoTest {
 			Cabeca cabeca, long partida, long fim) throws InterruptedException {
 
 		try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-				Cursor cursor = new Cursor(frente, catalogo, aoAplicar)) {
+				Cursor cursor = new Cursor(frente, NodeDeTeste.aplicador(catalogo, aoAplicar))) {
 
 			frente.abrir(cursor::montar, POOL_MINIMO);
 

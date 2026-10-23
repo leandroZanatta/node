@@ -14,6 +14,9 @@ import br.com.node.baixa.protocolo.PortaUdp;
 import br.com.node.baixa.p2p.Lotacao;
 import br.com.node.baixa.p2p.Sessao;
 import br.com.node.baixa.p2p.Sessoes;
+import br.com.node.transformacao.catalogo.AplicadorDeBloco;
+import br.com.node.transformacao.catalogo.Catalogo;
+import br.com.node.transformacao.catalogo.Transicao;
 import br.com.node.util.NodeKey;
 import br.com.node.util.Resources;
 import br.com.node.vo.AnuncioBloco;
@@ -177,5 +180,11 @@ public final class NodeDeTeste implements Closeable {
 
 		descoberta.close();
 		porta.close();
+	}
+
+	public static AplicadorDeBloco aplicador(Catalogo catalogo, Consumer<Transicao> aoAplicar) {
+		AplicadorDeBloco aplicador = new AplicadorDeBloco(catalogo);
+		aplicador.aoTransicao(aoAplicar);
+		return aplicador;
 	}
 }

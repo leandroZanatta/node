@@ -4,21 +4,13 @@ import java.io.Closeable;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-import br.com.node.transformacao.catalogo.Catalogo;
-import br.com.node.transformacao.catalogo.Eventos;
-import br.com.node.transformacao.catalogo.Transicao;
-import br.com.node.baixa.protocolo.Recibos;
 import br.com.node.util.Resources;
 import br.com.node.vo.Bloco;
-import br.com.node.vo.Log;
 
 public final class Cursor implements Closeable {
 
@@ -30,9 +22,7 @@ public final class Cursor implements Closeable {
 	private static final int PASSO_DE_REORG = Resources.inteiro("sincronizacao.reorg.passo");
 
 	private final Frente frente;
-	private final Catalogo catalogo;
-	private final Consumer<Transicao> aoAplicar;
-	private final BiConsumer<List<Log>, Long> aoAplicarTransacao;
+	private final Aplicador aplicador;
 
 	private final Map<Long, Bloco> montagem = new ConcurrentHashMap<>();
 
@@ -52,17 +42,9 @@ public final class Cursor implements Closeable {
 
 	private long nanosAplicando;
 
-	public Cursor(Frente frente, Catalogo catalogo, Consumer<Transicao> aoAplicar) {
-		this(frente, catalogo, aoAplicar, (transacao, altura) -> {
-		});
-	}
-
-	public Cursor(Frente frente, Catalogo catalogo, Consumer<Transicao> aoAplicar,
-			BiConsumer<List<Log>, Long> aoAplicarTransacao) {
+	public Cursor(Frente frente, Aplicador aplicador) {
 		this.frente = frente;
-		this.catalogo = catalogo;
-		this.aoAplicar = aoAplicar;
-		this.aoAplicarTransacao = aoAplicarTransacao;
+		this.aplicador = aplicador;
 	}
 
 	public long altura() {
@@ -159,13 +141,6 @@ public final class Cursor implements Closeable {
 
 		montagem.put(numero, bloco);
 		chegou.release();
-	}
-
-	private volatile BiConsumer<List<Log>, Long> antesDaTransacao = (logs, altura) -> {
-	};
-
-	public void antesDaTransacao(BiConsumer<List<Log>, Long> antesDaTransacao) {
-		this.antesDaTransacao = antesDaTransacao;
 	}
 
 	public void aoFecharBloco(java.util.function.LongConsumer aoFecharBloco) {
@@ -271,7 +246,7 @@ public final class Cursor implements Closeable {
 
 		long comecou = System.nanoTime();
 
-		aplicar(bloco.recibos(), altura);
+		aplicador.aplicar(bloco.recibos(), altura);
 
 		nanosAplicando += System.nanoTime() - comecou;
 
@@ -305,41 +280,4 @@ public final class Cursor implements Closeable {
 		return true;
 	}
 
-	private void aplicar(byte[] recibos, long emQueAltura) {
-
-		List<List<Log>> porTransacao = Recibos.porTransacao(recibos);
-
-		for (int transacao = 0; transacao < porTransacao.size(); transacao++) {
-
-			List<Log> logsDaTransacao = porTransacao.get(transacao);
-
-			antesDaTransacao.accept(logsDaTransacao, emQueAltura);
-
-			for (Log log : logsDaTransacao) {
-
-				Optional<br.com.node.transformacao.nucleo.ReservasV2> antes = Optional.empty();
-
-				if (log.assinadoPor(Eventos.SYNC_V2)) {
-					antes = catalogo.aplicarSync(log, emQueAltura);
-				} else if (Eventos.ehSwapV3(log)) {
-					catalogo.aplicarSwapV3(log, emQueAltura);
-				} else if ((log.assinadoPor(Eventos.MINT_V3) || log.assinadoPor(Eventos.BURN_V3))
-						&& log.topicos().size() >= 4) {
-					catalogo.aplicarLiquidezV3(log, emQueAltura);
-				} else if (Eventos.ehSwapDeGerente(log)) {
-					catalogo.aplicarSwapDeGerente(log, emQueAltura);
-				} else if (Eventos.ehLiquidezDeGerente(log)) {
-					catalogo.aplicarLiquidezDeGerente(log, emQueAltura);
-				} else if (Eventos.ehInicializacaoDeGerente(log)) {
-					catalogo.aplicarInicializacao(log, emQueAltura);
-				}
-
-				aoAplicar.accept(new Transicao(log, emQueAltura, transacao, antes));
-			}
-
-			aoAplicarTransacao.accept(logsDaTransacao, emQueAltura);
-		}
-
-		catalogo.inferirPares(porTransacao);
-	}
 }

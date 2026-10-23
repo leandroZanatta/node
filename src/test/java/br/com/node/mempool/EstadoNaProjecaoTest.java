@@ -90,10 +90,10 @@ class EstadoNaProjecaoTest {
 			long partida = cabeca.alvo() - RECUO_DE_PARTIDA;
 
 			try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-					Cursor cursor = new Cursor(frente, catalogo, transicao -> {
+					Cursor cursor = new Cursor(frente, NodeDeTeste.aplicador(catalogo, transicao -> {
 						taxas.observar(transicao);
 						impostos.observar(transicao);
-					})) {
+					}))) {
 
 				frente.abrir(cursor::montar, POOL_MINIMO);
 				int aprendidos = cursor.percorrer(partida, APRENDIZADO, POR_LOTE);

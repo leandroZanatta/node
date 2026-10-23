@@ -8,29 +8,19 @@
 # A ordem abaixo é a ordem das dependências: quem está em cima não conhece quem
 # está embaixo. O grafo tem de ser acíclico.
 #
-# CICATRIZ: `TabelaDeRotas` nasceu em `descoberta` e criou o ciclo
-# descoberta <-> sessao — a sessão precisava dela para responder FindNode, e a
-# descoberta precisava da sessão. Passou despercebido porque pacote não impõe
-# nada. A tabela é estrutura do protocolo, não política de varredura: desceu
-# para `kademlia`.
+# baixa: baixar blocos e transações da rede (p2p, protocolo, rpc, sync).
+# transformacao: aplicar esses dados ao catálogo e ao mercado.
+# execucao: decidir e disparar transações sobre o que o mercado mostra.
+# auditoria: registrar o que aconteceu (relatórios, diários, pagamentos, API).
+# raiz: Main, que apenas compõe os quatro orquestradores.
 
 exception:
 vo:
-rlp:        exception
-util:       exception
-cadeia:     vo
-kademlia:   vo, util
-rede:       vo, rlp, util, exception
-sessao:     vo, util, cadeia, kademlia, rede, exception
-descoberta: vo, util, kademlia, rede, sessao, exception
-api:        ensaio
-repository: vo, util, exception, catalogo
-nucleo:
-catalogo:   vo, util, nucleo
-sincronizacao: vo, util, nucleo, catalogo, rede, sessao, exception, repository
-sondagem:   util, nucleo, catalogo
-mempool:    vo, util, rlp, sessao, nucleo, catalogo
-ensaio:     util, vo, nucleo, catalogo, rlp, mempool, sincronizacao
+util:          exception
+baixa:         vo, util, exception
+transformacao: baixa, vo, util, exception
+execucao:      baixa, transformacao, vo, util, exception
+auditoria:     baixa, transformacao, execucao, vo, util, exception
 
 # A raiz compõe o node inteiro, então é a última: depende de todos e ninguém depende dela.
-raiz:       vo, util, cadeia, kademlia, rede, sessao, descoberta, repository, catalogo, sincronizacao, sondagem, mempool, ensaio
+raiz:          baixa, transformacao, execucao, auditoria, vo, util, exception

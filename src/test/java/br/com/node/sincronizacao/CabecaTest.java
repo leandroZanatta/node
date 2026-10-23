@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
 import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.AplicadorDeBloco;
 import br.com.node.transformacao.catalogo.Catalogo;
 import br.com.node.baixa.p2p.Lotacao;
 import br.com.node.util.Resources;
@@ -81,8 +82,7 @@ class CabecaTest {
 		int antes = cabeca.latenciasEmMilis().size();
 
 		try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-				Cursor cursor = new Cursor(frente, new Catalogo(), transicao -> {
-				})) {
+				Cursor cursor = new Cursor(frente, new AplicadorDeBloco(new Catalogo()))) {
 
 			frente.abrir(cursor::montar, EM_VOO);
 

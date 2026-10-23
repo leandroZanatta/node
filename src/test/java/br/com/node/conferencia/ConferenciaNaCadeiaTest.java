@@ -163,7 +163,7 @@ class ConferenciaNaCadeiaTest {
 	private int percorrer(NodeDeTeste node, Catalogo catalogo, Taxas taxas, long partida, int quantos) {
 
 		try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-				Cursor cursor = new Cursor(frente, catalogo, taxas::observar)) {
+				Cursor cursor = new Cursor(frente, NodeDeTeste.aplicador(catalogo, taxas::observar))) {
 
 			frente.abrir(cursor::montar, POOL_MINIMO);
 

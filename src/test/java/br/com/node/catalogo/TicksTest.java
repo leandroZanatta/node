@@ -23,7 +23,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import br.com.node.transformacao.nucleo.MapaDeTicks;
-import br.com.node.baixa.sync.VarredorDeGerentes;
 
 class TicksTest {
 

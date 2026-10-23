@@ -114,7 +114,7 @@ class TaxaSobSuspeitaTest {
 	private int percorrer(NodeDeTeste node, Catalogo catalogo, Consumer<Transicao> aoAplicar, long partida) {
 
 		try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-				Cursor cursor = new Cursor(frente, catalogo, aoAplicar)) {
+				Cursor cursor = new Cursor(frente, NodeDeTeste.aplicador(catalogo, aoAplicar))) {
 
 			frente.abrir(cursor::montar, POOL_MINIMO);
 

@@ -364,6 +364,25 @@ public final class RpcDoEnsaio {
 		return corpoDe(metodo, parametros);
 	}
 
+	public Optional<String> ethCall(String para, String dados, String bloco) {
+
+		try {
+
+			JsonObject chamada = new JsonObject();
+			chamada.addProperty("to", "0x" + para);
+			chamada.addProperty("data", "0x" + dados);
+			JsonArray parametros = new JsonArray();
+			parametros.add(chamada);
+			parametros.add(bloco == null ? "latest" : bloco);
+
+			return chamar("eth_call", parametros).map(JsonParser::parseString).map(JsonElement::getAsJsonObject)
+					.filter(o -> o.has("result")).map(o -> o.get("result").getAsString());
+
+		} catch (RuntimeException e) {
+			return Optional.empty();
+		}
+	}
+
 	public List<RespostaRpc> chamarComFallback(String metodo, JsonArray parametros) {
 		JsonObject corpo = new JsonObject();
 		corpo.addProperty("jsonrpc", "2.0");

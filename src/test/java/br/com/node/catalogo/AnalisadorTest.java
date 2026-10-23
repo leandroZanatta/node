@@ -85,8 +85,8 @@ class AnalisadorTest {
 			assertTrue(cabeca > 0, "nenhum par da BSC respondeu");
 
 			try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-					Cursor cursor = new Cursor(frente, catalogo, t -> porTransacao
-							.computeIfAbsent(t.altura() + ":" + t.transacao(), k -> new ArrayList<>()).add(t.log()))) {
+					Cursor cursor = new Cursor(frente, NodeDeTeste.aplicador(catalogo, t -> porTransacao
+							.computeIfAbsent(t.altura() + ":" + t.transacao(), k -> new ArrayList<>()).add(t.log())))) {
 
 				frente.abrir(cursor::montar, Resources.inteiro("sincronizacao.pedidos.em.voo"));
 

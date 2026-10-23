@@ -1,4 +1,4 @@
-package br.com.node.baixa.sync;
+package br.com.node.transformacao.catalogo;
 
 import java.io.Closeable;
 import java.net.URI;
@@ -19,9 +19,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import br.com.node.transformacao.catalogo.ChaveDaPool;
-import br.com.node.transformacao.catalogo.Eventos;
-import br.com.node.baixa.persistencia.PoolsNoGerenteRepository;
+import br.com.node.transformacao.persistencia.PoolsNoGerenteRepository;
 import br.com.node.vo.Log;
 
 public final class VarredorDeGerentes implements Closeable {

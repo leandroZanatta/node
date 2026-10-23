@@ -1,5 +1,6 @@
 package br.com.node.repository;
 import br.com.node.baixa.persistencia.*;
+import br.com.node.transformacao.persistencia.*;
 import br.com.node.baixa.persistencia.postgres.*;
 
 

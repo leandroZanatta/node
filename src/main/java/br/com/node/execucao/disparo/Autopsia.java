@@ -1,4 +1,4 @@
-package br.com.node.auditoria.registro;
+package br.com.node.execucao.disparo;
 import br.com.node.baixa.rpc.RpcDoEnsaio;
 import br.com.node.execucao.bundle.AbiDoExecutor;
 import br.com.node.execucao.bundle.Salto;
@@ -31,7 +31,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import br.com.node.execucao.disparo.AnalisadorDeTransacao;
 import br.com.node.transformacao.catalogo.Achado;
 import br.com.node.transformacao.catalogo.Impostos;
 import br.com.node.transformacao.catalogo.Quarentena;

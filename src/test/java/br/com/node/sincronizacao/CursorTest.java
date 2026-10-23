@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
 import br.com.node.baixa.sync.Crivo;
+import br.com.node.transformacao.catalogo.AplicadorDeBloco;
 import br.com.node.transformacao.catalogo.Catalogo;
 import br.com.node.transformacao.catalogo.Eventos;
 import br.com.node.transformacao.catalogo.Transicao;
@@ -82,8 +83,10 @@ class CursorTest {
 
 			partida = cabeca - RECUO;
 
+			AplicadorDeBloco aplicador = new AplicadorDeBloco(catalogo);
+			aplicador.aoTransicao(transicoes::add);
 			try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-					Cursor cursor = new Cursor(frente, catalogo, transicoes::add)) {
+					Cursor cursor = new Cursor(frente, aplicador)) {
 
 				frente.abrir(cursor::montar, EM_VOO);
 
