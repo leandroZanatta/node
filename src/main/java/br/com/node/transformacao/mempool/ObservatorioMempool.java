@@ -75,7 +75,13 @@ public final class ObservatorioMempool implements Closeable {
 	private final AtomicLong arbitragensWbnb = new AtomicLong();
 	private final AtomicLong adiantadas = new AtomicLong();
 	private final AtomicLong atrasadas = new AtomicLong();
-	private final Set<String> corposPedidos = ConcurrentHashMap.newKeySet();
+	private final Set<String> corposPedidos = java.util.Collections.synchronizedSet(
+			java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<>(4_096, 0.75f, false) {
+				@Override
+				protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> maisVelha) {
+					return size() > TETO_DEDUP;
+				}
+			}));
 	private final Map<String, Projecao> ultimaProjecaoPorPool = new ConcurrentHashMap<>();
 
 	private final CadernoDeLayouts caderno = new CadernoDeLayouts(3, 24);
@@ -163,31 +169,35 @@ public final class ObservatorioMempool implements Closeable {
 		anuncios.incrementAndGet();
 		hashes.addAndGet(mensagem.hashes().size());
 
-		if (corposPedidos.size() > TETO_DEDUP)
-			corposPedidos.clear();
-
 		if (sessao == null) {
 			return;
 		}
 
 		List<byte[]> pedir = new ArrayList<>();
 		List<byte[]> todos = mensagem.hashes();
-		todos.forEach(hash -> marcar(hex(hash), ANUNCIADO));
 		long agoraMs = System.currentTimeMillis();
-		todos.forEach(hash -> primeiraVisao(hex(hash), agoraMs, "anuncio", sessao));
 
-		for (int i = 0; i < todos.size() && pedir.size() < AMOSTRA_POR_ANUNCIO; i++) {
+		for (int i = 0; i < todos.size(); i++) {
+
+			String hexHash = hex(todos.get(i));
+
+			if (corposPedidos.contains(hexHash)) {
+				ignoradosJaConhecidos.incrementAndGet();
+				continue;
+			}
+
+			marcar(hexHash, ANUNCIADO);
+			primeiraVisao(hexHash, agoraMs, "anuncio", sessao);
+
+			if (pedir.size() >= AMOSTRA_POR_ANUNCIO) {
+				continue;
+			}
 
 			long tamanho = mensagem.tamanho(i);
 
 			if (tamanho >= 0 && tamanho < TAMANHO_MINIMO) {
 				ignoradosPequenos.incrementAndGet();
-				marcar(hex(todos.get(i)), PULADO_PEQUENO);
-				continue;
-			}
-
-			if (corposPedidos.contains(hex(todos.get(i)))) {
-				ignoradosJaConhecidos.incrementAndGet();
+				marcar(hexHash, PULADO_PEQUENO);
 				continue;
 			}
 
