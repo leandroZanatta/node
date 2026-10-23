@@ -9,7 +9,6 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,7 +59,6 @@ public final class Disparo implements Closeable {
 			.empty();
 	private volatile Cabecalho cabecalhoAtual;
 
-	private final long sequenciaDeDrops_counter_ref;
 	private final java.util.concurrent.atomic.AtomicLong sequenciaDeDrops = new java.util.concurrent.atomic.AtomicLong();
 
 	private final RpcDoEnsaio rpc;
@@ -79,7 +77,6 @@ public final class Disparo implements Closeable {
 	private final int versaoDoExecutor;
 
 	private BigInteger gastoNoDia = BigInteger.ZERO;
-	private long dia = LocalDate.now().toEpochDay();
 
 	public Disparo(RpcDoEnsaio rpc, RelayPrivado relay, Catalogo catalogo, Tarifario tarifario, CustoDeGas custoDeGas,
 			Impostos impostos, Autopsia laudos, Quarentena quarentena) {
@@ -96,7 +93,6 @@ public final class Disparo implements Closeable {
 		this.medidor = new MedidorDeGas(rpc);
 		this.medidor.aoCalibrar(custoDeGas::fatorDeGas);
 		this.versaoDoExecutor = lerVersao();
-		this.sequenciaDeDrops_counter_ref = 0;
 
 		LOG.info(() -> "disparo: executor versão " + versaoDoExecutor
 				+ (versaoDoExecutor >= 2 ? " — pernas de gerente (V4, Infinity CL) LIGADAS"
@@ -198,10 +194,6 @@ public final class Disparo implements Closeable {
 			}
 		}
 
-		// O leilão usa a fração configurada por rota e considera gás no reward do bundle.
-		// PAGAMENTO_TIERS não limita mais o lance: no evento 128794204 cortou o direto para
-		// 20% do lucro, apesar de haver saldo. Os limites econômicos abaixo ainda preservam
-		// piso, margem, saldo do operador e teto absoluto por builder.
 		boolean limitadoPorPct = false;
 
 		BigInteger necessarioRaiz = custoDeGas.deBnb(raiz, necessarioBnb).orElseThrow(() -> semCambio(raiz));
@@ -471,9 +463,10 @@ public final class Disparo implements Closeable {
 				if (extras == null) {
 					extras = new LinkedHashMap<>();
 				}
-				extras.put("trace_executor", vereditor.rastrearChamada(de, CONTRATO, dadosHex, achado.altura())
-						.map(Disparo::resumirTraceFalha)
-						.orElse(Map.of("status", "debug_traceCall indisponivel no RPC")));
+				extras.put("trace_executor",
+						vereditor.rastrearChamada(de, CONTRATO, dadosHex, achado.altura())
+								.map(Disparo::resumirTraceFalha)
+								.orElse(Map.of("status", "debug_traceCall indisponivel no RPC")));
 			}
 
 			try {
@@ -495,15 +488,15 @@ public final class Disparo implements Closeable {
 		return resumo;
 	}
 
-	private static void coletarQuadrosDeFalha(com.google.gson.JsonObject quadro,
-			List<Map<String, Object>> encontrados, int profundidade) {
+	private static void coletarQuadrosDeFalha(com.google.gson.JsonObject quadro, List<Map<String, Object>> encontrados,
+			int profundidade) {
 		if (profundidade > 64) {
 			return;
 		}
-		String input = quadro.has("input") && quadro.get("input").isJsonPrimitive()
-				? quadro.get("input").getAsString() : "";
-		String erro = quadro.has("error") && quadro.get("error").isJsonPrimitive()
-				? quadro.get("error").getAsString() : "";
+		String input = quadro.has("input") && quadro.get("input").isJsonPrimitive() ? quadro.get("input").getAsString()
+				: "";
+		String erro = quadro.has("error") && quadro.get("error").isJsonPrimitive() ? quadro.get("error").getAsString()
+				: "";
 		boolean chamadaTransfer = input.length() >= 10 && input.regionMatches(true, 2, "a9059cbb", 0, 8);
 		if (chamadaTransfer || !erro.isBlank()) {
 			Map<String, Object> detalhe = new LinkedHashMap<>();

@@ -14,32 +14,14 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-import br.com.node.nucleo.Ciclo;
-import br.com.node.nucleo.Perna;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// O que a CADEIA nos ensinou sobre cada pool, para o erro não se repetir.
-//
-// Existe por causa do que o log mostrou: a mesma fenda, com o mesmo lucro ao wei, achada por 30+
-// blocos seguidos e despachada de novo a cada minuto da janela de dedup. Arb real não sobrevive a um
-// bloco na BSC; a que sobrevive é o modelo errado numa pool, e o `GrafoDePrecos` devolve UM ciclo
-// negativo por bloco — enquanto o fantasma estiver no grafo, ele é o ciclo, e esconde todos os outros.
-//
-// Quem ensina é a `Autopsia`, com número. Três lições, cada uma com o seu remédio:
-//   - PENA: a pool desmentida sai do grafo por um tempo, que DOBRA a cada reincidência (até PENA_MAXIMA)
-//     — o motivo passageiro (estado atrasado) volta logo, o permanente (token quebrado) para de voltar;
-//   - SEM EMPRÉSTIMO: a pool chama no flash swap um callback que o Executor não implementa; como perna
-//     do meio ela serve, só a primeira posição lhe é negada. Fato do contrato dela: não expira;
-//   - TAXA MEDIDA: a taxa que a pool cobra de NÓS, achada pela cadeia quando a nossa reverteu por `K`.
-//     Vence a prova por troca no `Tarifario`, porque é medida com o nosso chamador — a 7a3eb6e7 cobra
-//     5 bps dos seus dois chamadores e 10% de quem chama o par direto.
-//
-// PERSISTE em disco (quando há arquivo): o node é reiniciado muitas vezes por sessão, e sem isto cada
-// restart reabria o mesmo fantasma e repetia o mesmo revert.
+import br.com.node.nucleo.Ciclo;
+import br.com.node.nucleo.Perna;
+
 public final class Quarentena {
 
 	private static final Logger LOG = Logger.getLogger(Quarentena.class.getName());
@@ -68,9 +50,6 @@ public final class Quarentena {
 		carregar();
 	}
 
-	// Condena por `base`, dobrando a cada reincidência. A contagem sobrevive ao fim
-	// da pena: é o que
-	// separa "errou uma vez" de "erra sempre".
 	public void condenar(byte[] pool, Duration base, String motivo) {
 
 		String chave = HexFormat.of().formatHex(pool);
@@ -97,8 +76,6 @@ public final class Quarentena {
 		return !bloqueada;
 	}
 
-	// Uma falha TF não identifica qual perna/token falhou. A sequência ordenada é a única unidade
-	// segura para suspender: as mesmas pools continuam disponíveis em outros caminhos.
 	public void condenarRota(List<String> saltos, Duration base, String motivo) {
 
 		String chave = chaveRota(saltos);
@@ -141,7 +118,6 @@ public final class Quarentena {
 		}
 	}
 
-	// Chaves independem da rotação inicial do ciclo, mas preservam o sentido de cada troca.
 	public static String chaveRota(Ciclo ciclo) {
 		List<String> saltos = ciclo.pernas().stream().map(Quarentena::salto).toList();
 		return chaveRota(saltos);
@@ -171,8 +147,7 @@ public final class Quarentena {
 
 	private static String salto(Perna perna) {
 		HexFormat hex = HexFormat.of();
-		return hex.formatHex(perna.pool()) + ":" + hex.formatHex(perna.entra()) + ":"
-				+ hex.formatHex(perna.sai());
+		return hex.formatHex(perna.pool()) + ":" + hex.formatHex(perna.entra()) + ":" + hex.formatHex(perna.sai());
 	}
 
 	public void proibirEmprestimo(byte[] pool, String callback) {
@@ -185,7 +160,6 @@ public final class Quarentena {
 		return !semEmprestimo.containsKey(HexFormat.of().formatHex(pool));
 	}
 
-	// Taxa em milionésimos, a mesma escala do `Tarifario`.
 	public void medirTaxa(byte[] pool, int taxa) {
 		taxas.put(HexFormat.of().formatHex(pool), taxa);
 		salvar();
@@ -195,8 +169,6 @@ public final class Quarentena {
 		return Optional.ofNullable(taxas.get(HexFormat.of().formatHex(pool)));
 	}
 
-	// As que cumprem pena agora, com o motivo — para o relatório dizer QUEM saiu do
-	// grafo e por quê.
 	public Map<String, String> presas() {
 
 		long agora = System.currentTimeMillis();
@@ -212,8 +184,6 @@ public final class Quarentena {
 		return presas;
 	}
 
-	// Limpa penas de pool e de rota, preservando taxas medidas e restrições de empréstimo.
-	// Usado via POST /quarentena/limpar para liberar itens suspensos por erros passados.
 	public int limparPenas() {
 		int total = penas.size() + rotas.size();
 		penas.clear();
@@ -222,7 +192,6 @@ public final class Quarentena {
 		return total;
 	}
 
-	// Resumo para o endpoint HTTP /quarentena.
 	public Map<String, Object> statusHttp() {
 		long agora = System.currentTimeMillis();
 		Map<String, Object> r = new LinkedHashMap<>();
@@ -277,8 +246,6 @@ public final class Quarentena {
 		return Map.copyOf(taxas);
 	}
 
-	// Em árvore JSON, não por reflexão: o binário nativo não serializa `record` sem
-	// metadata declarada.
 	private synchronized void salvar() {
 
 		if (arquivo == null) {
@@ -349,9 +316,6 @@ public final class Quarentena {
 				});
 			}
 			if (raiz.has("sem_emprestimo")) {
-				// Descartadas ao carregar: eram todas proibições por callback desconhecido, e o
-				// Executor
-				// implantado em 24/09 atende qualquer callback pelo `fallback`.
 				int descartadas = raiz.getAsJsonObject("sem_emprestimo").size();
 				if (descartadas > 0) {
 					LOG.info(() -> "quarentena: " + descartadas

@@ -64,11 +64,12 @@ public final class Autopsia implements Closeable {
 
 	private static final byte[] AUTOPSIAR = AbiDoExecutor
 			.seletor("autopsiar((address,address,address,uint8,uint16)[],uint256)");
-	private static final String LAUDO = HexFormat.of().formatHex(AbiDoExecutor.seletor(
-			"Laudo(uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256,bytes,bytes4)"));
+	private static final String LAUDO = HexFormat.of().formatHex(AbiDoExecutor
+			.seletor("Laudo(uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256,bytes,bytes4)"));
 	private static final String EMPRESTIMO_NAO_V2 = "7978d88b";
 
-	// Os callbacks de flash swap que o Executor IMPLEMENTA. A pool que chama outro nome faz a rota
+	// Os callbacks de flash swap que o Executor IMPLEMENTA. A pool que chama outro
+	// nome faz a rota
 	// real reverter sem dado nenhum — o "0x" do veredito.
 	private static final Set<String> CALLBACKS_DO_EXECUTOR = Set.of(
 			HexFormat.of().formatHex(AbiDoExecutor.seletor("uniswapV2Call(address,uint256,uint256,bytes)")),
@@ -76,14 +77,19 @@ public final class Autopsia implements Closeable {
 			HexFormat.of().formatHex(AbiDoExecutor.seletor("BiswapCall(address,uint256,uint256,bytes)")),
 			HexFormat.of().formatHex(AbiDoExecutor.seletor("swapV2Call(address,uint256,uint256,bytes)")));
 
-	// Tolerâncias, em pontos-base. A perna é culpada acima de TOLERANCIA_BPS de saída a menos; o
-	// estado e o imposto contam como causa acima de SINAL_BPS. Uma arb vive de 10 a 25 bps, então
-	// 30 já é o dobro do edge — abaixo disso é arredondamento e corrida, não modelo.
+	// Tolerâncias, em pontos-base. A perna é culpada acima de TOLERANCIA_BPS de
+	// saída a menos; o
+	// estado e o imposto contam como causa acima de SINAL_BPS. Uma arb vive de 10 a
+	// 25 bps, então
+	// 30 já é o dobro do edge — abaixo disso é arredondamento e corrida, não
+	// modelo.
 	static final long TOLERANCIA_BPS = 30;
 	static final long SINAL_BPS = 10;
 
-	// Pena da pool culpada. ESTADO fica mais: se o cursor não atualizou a pool até agora, é provável
-	// que os eventos dela não estejam sendo lidos, e ela voltaria fantasma em meia hora.
+	// Pena da pool culpada. ESTADO fica mais: se o cursor não atualizou a pool até
+	// agora, é provável
+	// que os eventos dela não estejam sendo lidos, e ela voltaria fantasma em meia
+	// hora.
 	private static final Duration PENA = Duration.ofMinutes(30);
 	static final Duration PENA_DE_PROIBICAO = Duration.ofDays(30);
 	static final Duration PENA_DE_ESTADO = Duration.ofHours(3);
@@ -92,24 +98,24 @@ public final class Autopsia implements Closeable {
 		OK, REVERTEU, TAXA_SUBESTIMADA, IMPOSTO, ESTADO, CURVA_OU_TAXA, SEM_MODELO
 	}
 
-	record Laudo(List<BigInteger> estadoA, List<BigInteger> estadoB, List<BigInteger> enviado,
-			List<BigInteger> entrou, List<BigInteger> prometido, List<BigInteger> chegou, int falhouEm,
-			String motivo, String callback) {
+	record Laudo(List<BigInteger> estadoA, List<BigInteger> estadoB, List<BigInteger> enviado, List<BigInteger> entrou,
+			List<BigInteger> prometido, List<BigInteger> chegou, int falhouEm, String motivo, String callback) {
 
 		boolean passou(int perna) {
 			return falhouEm < 0 || perna < falhouEm;
 		}
 	}
 
-	record Perna(int indice, String pool, boolean v3, int taxaBps, Classe classe, long desvioBps,
-			long estadoBps, long impostoVendaBps, long impostoCompraBps) {
+	record Perna(int indice, String pool, boolean v3, int taxaBps, Classe classe, long desvioBps, long estadoBps,
+			long impostoVendaBps, long impostoCompraBps) {
 	}
 
 	private final RpcDoEnsaio rpc;
 	private final Quarentena quarentena;
 	private final Impostos impostos;
 	private final Path arquivo;
-	// `serializeNulls`: "a cadeia não chegou ao fim" é um null que diz alguma coisa, e o Gson o omitia.
+	// `serializeNulls`: "a cadeia não chegou ao fim" é um null que diz alguma
+	// coisa, e o Gson o omitia.
 	private final Gson gson = new com.google.gson.GsonBuilder().serializeNulls().create();
 
 	private final Map<String, AtomicLong> porClasse = new ConcurrentHashMap<>();
@@ -139,23 +145,25 @@ public final class Autopsia implements Closeable {
 		publicar(hash, resultado);
 	}
 
-	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
-			String desfecho, String veredito) {
+	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada, String desfecho,
+			String veredito) {
 		examinar(operador, contrato, achado, chamada, desfecho, veredito, null, null);
 	}
 
-	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
-			String desfecho, String veredito, String hashEnviado) {
+	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada, String desfecho,
+			String veredito, String hashEnviado) {
 		examinar(operador, contrato, achado, chamada, desfecho, veredito, hashEnviado, null);
 	}
 
-	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada,
-			String desfecho, String veredito, String hashEnviado, Map<String, Object> extras) {
+	public void examinar(String operador, String contrato, Achado achado, RotaDoModelo.Chamada chamada, String desfecho,
+			String veredito, String hashEnviado, Map<String, Object> extras) {
 
 		examinadas.incrementAndGet();
 
-		// O contrato-sonda do laudo perna a perna só sabe V2 e V3. Rota com perna de gerente fica com o
-		// veredito do CONTRATO (que roda o Executor de verdade) e mais nada — e, principalmente, sem cair no
+		// O contrato-sonda do laudo perna a perna só sabe V2 e V3. Rota com perna de
+		// gerente fica com o
+		// veredito do CONTRATO (que roda o Executor de verdade) e mais nada — e,
+		// principalmente, sem cair no
 		// "sem laudo" que culparia a pool do empréstimo por um revert que não é dela.
 		if (chamada.rota().stream().anyMatch(Salto::deGerente)) {
 			porClasse.computeIfAbsent("GERENTE_SO_VEREDITO", k -> new AtomicLong()).incrementAndGet();
@@ -169,7 +177,8 @@ public final class Autopsia implements Closeable {
 			registro.put("lucro_previsto", achado.oportunidade().lucro().toString());
 			registro.put("rota", chamada.rota().stream().map(s -> s.pool() + " tipo " + s.tipo()).toList());
 
-			// O emprestador (rota[0]) pode ser BLACKLISTED/FORBIDDEN mesmo numa rota com gerente:
+			// O emprestador (rota[0]) pode ser BLACKLISTED/FORBIDDEN mesmo numa rota com
+			// gerente:
 			// o sonda não roda aqui, mas a condenação permanente ainda se aplica.
 			String motivoGerente = Autopsia.motivoDoVeredito(veredito).trim();
 			if (!motivoGerente.isBlank()) {
@@ -177,7 +186,8 @@ public final class Autopsia implements Closeable {
 				if (proibicao(motivoGerente)) {
 					quarentena.condenar(emprestadora, PENA_DE_PROIBICAO,
 							"empréstimo reverteu (" + motivoGerente + ") em gerente em " + registro.get("instante"));
-					registro.put("culpada", Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "EMPRESTIMO_REVERTEU"));
+					registro.put("culpada",
+							Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "EMPRESTIMO_REVERTEU"));
 				} else if (overflow(motivoGerente)) {
 					chamada.rota().stream().filter(s -> !s.v3() && !s.deGerente())
 							.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()), PENA_DE_ESTADO,
@@ -195,7 +205,8 @@ public final class Autopsia implements Closeable {
 
 		String bloco = "0x" + Long.toHexString(achado.altura());
 
-		// Só compara quando o nó JÁ tem o bloco N: antes disso ele responde no N−1 sem avisar (27/09).
+		// Só compara quando o nó JÁ tem o bloco N: antes disso ele responde no N−1 sem
+		// avisar (27/09).
 		try {
 			if (!rpc.esperarBloco(achado.altura(), 15, 200)) {
 				estadoDoBlocoIndisponivel.incrementAndGet();
@@ -210,8 +221,10 @@ public final class Autopsia implements Closeable {
 
 		Optional<String> corpo = pedirCorpo(operador, contrato, chamada, bloco);
 
-		// O bloco é NOVO demais para o RPC que atendeu (o node o viu antes dele): espera e pede o MESMO
-		// bloco de novo — ir ao `latest` compararia outro instante. Medido em 24/09: "block not found".
+		// O bloco é NOVO demais para o RPC que atendeu (o node o viu antes dele):
+		// espera e pede o MESMO
+		// bloco de novo — ir ao `latest` compararia outro instante. Medido em 24/09:
+		// "block not found".
 		for (int tentativa = 0; tentativa < 3 && corpo.map(Autopsia::blocoAindaNaoChegou).orElse(false); tentativa++) {
 			try {
 				Thread.sleep(700);
@@ -223,10 +236,14 @@ public final class Autopsia implements Closeable {
 			corpo = pedirCorpo(operador, contrato, chamada, bloco);
 		}
 
-		// O nó já descartou o estado daquele bloco: NÃO há laudo. CICATRIZ de 27/09: aqui se caía em silêncio no
-		// `latest`, e a comparação com um bloco mais novo virava "ESTADO" — 9 de 9 fendas marcadas como erro de
-		// modelo quando o modelo batia com a cadeia no bloco N ao wei (conferido). Nem vai ao `semLaudo`: lá o
-		// corpo de erro seria lido como "empréstimo reverteu" e condenaria a pool emprestadora.
+		// O nó já descartou o estado daquele bloco: NÃO há laudo. CICATRIZ de 27/09:
+		// aqui se caía em silêncio no
+		// `latest`, e a comparação com um bloco mais novo virava "ESTADO" — 9 de 9
+		// fendas marcadas como erro de
+		// modelo quando o modelo batia com a cadeia no bloco N ao wei (conferido). Nem
+		// vai ao `semLaudo`: lá o
+		// corpo de erro seria lido como "empréstimo reverteu" e condenaria a pool
+		// emprestadora.
 		// Idem se, depois das tentativas, o bloco AINDA não chegou ao RPC.
 		boolean aindaNaoChegou = corpo.map(Autopsia::blocoAindaNaoChegou).orElse(false);
 		if (aindaNaoChegou || corpo.map(Autopsia::estadoIndisponivel).orElse(false)) {
@@ -247,8 +264,8 @@ public final class Autopsia implements Closeable {
 
 		Map<String, Object> registro = comparar(achado, chamada, laudo.get());
 		if (laudo.get().falhouEm() < 0) {
-			quarentena.absolverRota(chamada.rota().stream()
-					.map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList());
+			quarentena.absolverRota(
+					chamada.rota().stream().map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList());
 		}
 		registro.put("desfecho", desfecho);
 		registro.put("veredito", veredito);
@@ -268,7 +285,8 @@ public final class Autopsia implements Closeable {
 		}
 	}
 
-	// A comparação, sem rede — separada para o teste prová-la com um laudo montado à mão.
+	// A comparação, sem rede — separada para o teste prová-la com um laudo montado
+	// à mão.
 	Map<String, Object> comparar(Achado achado, RotaDoModelo.Chamada chamada, Laudo laudo) {
 
 		List<Travessia> travessias = achado.travessias();
@@ -307,9 +325,12 @@ public final class Autopsia implements Closeable {
 					perna.put("motivo", laudo.motivo());
 					Perna p = new Perna(i, salto.pool(), salto.v3(), salto.taxaBps(), reverteu, Long.MAX_VALUE,
 							estadoBps, 0, 0);
-					// Revert DEPOIS de uma perna com imposto é consequência dele (a perna recebeu menos do que a
-					// conta pedia): a culpada segue sendo o imposto. CICATRIZ de 24/09: o revert tomava a culpa,
-					// a pool inocente ia para a quarentena e o token de 50% de imposto ficava no grafo.
+					// Revert DEPOIS de uma perna com imposto é consequência dele (a perna recebeu
+					// menos do que a
+					// conta pedia): a culpada segue sendo o imposto. CICATRIZ de 24/09: o revert
+					// tomava a culpa,
+					// a pool inocente ia para a quarentena e o token de 50% de imposto ficava no
+					// grafo.
 					boolean impostoAntes = culpada != null && culpada.classe() == Classe.IMPOSTO;
 					culpada = culpada == null || (culpada.classe() != Classe.REVERTEU && !impostoAntes) ? p : culpada;
 				}
@@ -377,8 +398,8 @@ public final class Autopsia implements Closeable {
 				: finalCadeia.multiply(BigInteger.valueOf(10_000)).divide(chamada.montante()).longValue());
 		registro.put("retorno_previsto_bps", achado.oportunidade().saida().multiply(BigInteger.valueOf(10_000))
 				.divide(chamada.montante()).longValue());
-		registro.put("fecharia_agora", finalCadeia != null
-				&& finalCadeia.compareTo(chamada.montante().add(chamada.lucroMinimo())) >= 0);
+		registro.put("fecharia_agora",
+				finalCadeia != null && finalCadeia.compareTo(chamada.montante().add(chamada.lucroMinimo())) >= 0);
 		registro.put("callback", laudo.callback());
 		registro.put("callback_conhecido", CALLBACKS_DO_EXECUTOR.contains(laudo.callback()));
 		registro.put("falhou_em", laudo.falhouEm());
@@ -401,9 +422,11 @@ public final class Autopsia implements Closeable {
 		return registro;
 	}
 
-	// A frase com que os forks V2 recusam saída acima do que o invariante permite: "Pancake: K",
+	// A frase com que os forks V2 recusam saída acima do que o invariante permite:
+	// "Pancake: K",
 	// "UniswapV2: K", "BiswapPair: K", "K"…
-	// O veredito do relay vem com prefixo ("[0x65d0..5a46] execution reverted: LL: K") ou já curto ("LL: K").
+	// O veredito do relay vem com prefixo ("[0x65d0..5a46] execution reverted: LL:
+	// K") ou já curto ("LL: K").
 	static String motivoDoVeredito(Object veredito) {
 		String v = veredito == null ? "" : veredito.toString();
 		int i = v.indexOf("execution reverted:");
@@ -416,14 +439,21 @@ public final class Autopsia implements Closeable {
 	}
 
 	// O erro vira CORREÇÃO, não só pena — o remédio de cada classe é outro:
-	//   - IMPOSTO: a autópsia MEDIU o imposto com um swap de verdade (prometido − chegou; enviado −
-	//     entrou). Grava como prova, e o portão do cotador passa a barrar o par — sem depender da sonda,
-	//     que falha justo nos tokens de layout estranho (foi o slot não achado que virou honeypot falso).
-	//   - TAXA_SUBESTIMADA: acha a taxa que a pool cobra de NÓS, por bisseção com a própria autópsia, e
-	//     a corrige no tarifário: a pool volta ao grafo precificada certo em vez de sair dele.
-	//   - o resto (revert, estado, curva): pena, que dobra a cada reincidência.
-	// TODA perna em que a cadeia mediu imposto vira prova — não só a culpada. Uma rota pode ter imposto
-	// numa perna e o revert noutra; gravar só a culpada deixava o token taxado no grafo.
+	// - IMPOSTO: a autópsia MEDIU o imposto com um swap de verdade (prometido −
+	// chegou; enviado −
+	// entrou). Grava como prova, e o portão do cotador passa a barrar o par — sem
+	// depender da sonda,
+	// que falha justo nos tokens de layout estranho (foi o slot não achado que
+	// virou honeypot falso).
+	// - TAXA_SUBESTIMADA: acha a taxa que a pool cobra de NÓS, por bisseção com a
+	// própria autópsia, e
+	// a corrige no tarifário: a pool volta ao grafo precificada certo em vez de
+	// sair dele.
+	// - o resto (revert, estado, curva): pena, que dobra a cada reincidência.
+	// TODA perna em que a cadeia mediu imposto vira prova — não só a culpada. Uma
+	// rota pode ter imposto
+	// numa perna e o revert noutra; gravar só a culpada deixava o token taxado no
+	// grafo.
 	@SuppressWarnings("unchecked")
 	void gravarImpostosDasPernas(Map<String, Object> registro) {
 
@@ -438,7 +468,8 @@ public final class Autopsia implements Closeable {
 
 			byte[] pool = HexFormat.of().parseHex((String) perna.get("pool"));
 
-			// Cada direção no seu lugar: a venda é do token que ENTRA na pool, a compra do que SAI dela. Até 27/09
+			// Cada direção no seu lugar: a venda é do token que ENTRA na pool, a compra do
+			// que SAI dela. Até 27/09
 			// as duas iam para a mesma chave e a segunda apagava a primeira.
 			if (venda > SINAL_BPS) {
 				impostos.medidaVenda(pool, HexFormat.of().parseHex((String) perna.get("entra")), (int) venda);
@@ -462,14 +493,11 @@ public final class Autopsia implements Closeable {
 		byte[] pool = HexFormat.of().parseHex((String) perna.get("pool"));
 
 		if (classe == Classe.IMPOSTO) {
-			long venda = ((Number) perna.getOrDefault("imposto_venda_bps", 0L)).longValue();
-			long compra = ((Number) perna.getOrDefault("imposto_compra_bps", 0L)).longValue();
 			return;
 		}
 
 		if (classe == Classe.TAXA_SUBESTIMADA) {
 
-			int atual = chamada.rota().get(indice).taxaBps();
 			Optional<Integer> real = sondarTaxa(operador, contrato, chamada, indice, bloco);
 
 			if (real.isPresent()) {
@@ -478,21 +506,14 @@ public final class Autopsia implements Closeable {
 				return;
 			}
 
-			quarentena.condenar(pool, PENA, "taxa acima de " + CANDIDATAS_BPS.get(CANDIDATAS_BPS.size() - 1)
-					+ " bps em " + instante);
 			return;
 		}
 
-		quarentena.condenar(pool, classe == Classe.ESTADO ? PENA_DE_ESTADO : PENA, classe.name() + " em " + instante);
 	}
 
-	// As taxas V2 que se tentam, em bps. Forks cobram de 1 a 30 bps; acima disso é taxa por chamador ou
-	// armadilha, e acima de 10% a pool não serve para arbitragem de qualquer jeito.
-	private static final List<Integer> CANDIDATAS_BPS = List.of(20, 25, 30, 35, 40, 50, 60, 75, 100, 150, 200, 300,
-			500, 1_000);
+	private static final List<Integer> CANDIDATAS_BPS = List.of(20, 25, 30, 35, 40, 50, 60, 75, 100, 150, 200, 300, 500,
+			1_000);
 
-	// A menor taxa candidata com que a perna PASSA pelo `K` — a mesma rota, só a taxa daquela perna
-	// trocada. Passar é monótono na taxa (taxa maior pede saída menor), então é bisseção: ~4 chamadas.
 	Optional<Integer> sondarTaxa(String operador, String contrato, RotaDoModelo.Chamada chamada, int indice,
 			String bloco) {
 
@@ -565,16 +586,10 @@ public final class Autopsia implements Closeable {
 			callbackDesconhecido.incrementAndGet();
 		}
 
-		// A culpada conta pela classe DELA mesmo quando o callback também falha: são dois defeitos, e o
-		// do callback já tem contador próprio.
 		String classe = culpada != null ? (String) culpada.get("classe")
 				: !callbackOk ? "CALLBACK_DESCONHECIDO" : fecharia ? "FECHARIA" : "SEM_CULPADA";
 		porClasse.computeIfAbsent(classe, k -> new AtomicLong()).incrementAndGet();
 
-		// O relay reverteu pelo invariante e a autópsia PASSOU: a pool V2 cobra mais de nós na execução
-		// real do que no laudo, e a bisseção não acha a taxa (o laudo não reverte). Medido em 24/09: a
-		// 7a3eb6e7 deu "LL: K" 6 vezes em 40 min, sempre FECHARIA, sem aprender nada. Com uma única V2
-		// na rota, ela é a culpada: pena, que dobra a cada reincidência.
 		if (culpada == null && violouInvariante(motivoDoVeredito(registro.get("veredito")))) {
 			List<Map<String, Object>> v2 = ((List<Map<String, Object>>) registro.get("pernas")).stream()
 					.filter(p -> "V2".equals(p.get("tipo"))).toList();
@@ -603,18 +618,17 @@ public final class Autopsia implements Closeable {
 		return pedirCorpo(operador, contrato, chamada, bloco).flatMap(Autopsia::lerLaudo);
 	}
 
-	// SEM LAUDO também é resultado, e é gravado. Sem a resposta da sonda, a causa só pode ser atribuída
-	// quando o veredito do Executor identifica algo explícito. Um erro genérico do runtime da sonda não
-	// prova que a primeira pool falhou; em rota com ponta V3 a própria sonda tem uma limitação conhecida.
 	private Map<String, Object> semLaudo(Achado achado, RotaDoModelo.Chamada chamada, String desfecho, String veredito,
 			String corpo, Map<String, Object> extras) {
 
 		String motivo = corpo == null ? "nenhum nó respondeu" : RpcDoEnsaio.interpretar(corpo).texto();
-		String motivoFinal = motivo.isBlank() ? String.valueOf(corpo).substring(0, Math.min(300, String.valueOf(corpo).length()))
+		String motivoFinal = motivo.isBlank()
+				? String.valueOf(corpo).substring(0, Math.min(300, String.valueOf(corpo).length()))
 				: motivo;
 
 		List<String> pools = new ArrayList<>();
-		chamada.rota().forEach(salto -> pools.add(salto.pool() + (salto.v3() ? " (V3)" : " (V2 " + salto.taxaBps() + " bps)")));
+		chamada.rota().forEach(
+				salto -> pools.add(salto.pool() + (salto.v3() ? " (V3)" : " (V2 " + salto.taxaBps() + " bps)")));
 
 		Map<String, Object> registro = new LinkedHashMap<>();
 		registro.put("tipo", "autopsia_sem_laudo");
@@ -635,47 +649,33 @@ public final class Autopsia implements Closeable {
 						|| motivo.toLowerCase(java.util.Locale.ROOT).contains("emprestimonaov2"));
 		boolean transferenciaFalhou = transferenciaFalhou(motivoExecutor);
 
-		// A sonda substitui o bytecode do Executor por autopsia-runtime.hex. Esse bytecode
-		// também contém EmprestimoNaoV2 e não sabe simular empréstimo V3. Esse revert é da
-		// sonda, não prova contra a pool nem contra a execução real.
 		if (sondaSemFlashV3) {
 			porClasse.computeIfAbsent("SONDA_SEM_FLASH_V3", k -> new AtomicLong()).incrementAndGet();
 		}
 		if (transferenciaFalhou) {
-			// TF confirma que a chamada falhou durante transfer(). Sem trace não revela qual pool
-			// ou token foi o culpado: suspendemos só esta sequência ordenada, preservando as pools
-			// para outros ciclos. A pena expira e cresce apenas se a mesma rota reincidir.
-			List<String> saltos = chamada.rota().stream()
-					.map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList();
+			List<String> saltos = chamada.rota().stream().map(s -> s.pool() + ":" + s.entra() + ":" + s.sai()).toList();
 			String chaveRota = Quarentena.chaveRota(saltos);
-			quarentena.condenarRota(saltos, PENA,
-					"TF sem perna identificada em " + registro.get("instante"));
 			registro.put("rota_em_quarentena", chaveRota);
 			porClasse.computeIfAbsent("TRANSFERENCIA_SEM_PERNA", k -> new AtomicLong()).incrementAndGet();
 		}
 
-		if (!transferenciaFalhou && !motivoExecutor.isBlank()
-				&& overflow(motivoExecutor)) {
-			// OVERFLOW pode ser em QUALQUER perna V2 da rota, não só na emprestadora.
-			// CICATRIZ de 10/10: quarentenávamos sempre rota[0]; se o overflow era numa perna
-			// intermediária a pool ruim ficava livre e o mesmo erro se repetia em massa antes de
-			// a próxima autopsia terminar. Pena de estado (3 h): o estado inválido persiste
-			// até a próxima Sync válida chegar, e 30 min não é suficiente.
-			chamada.rota().stream()
-					.filter(s -> !s.v3() && !s.deGerente())
+		if (!transferenciaFalhou && !motivoExecutor.isBlank() && overflow(motivoExecutor)) {
+			chamada.rota().stream().filter(s -> !s.v3() && !s.deGerente())
 					.forEach(s -> quarentena.condenar(HexFormat.of().parseHex(s.pool()), PENA_DE_ESTADO,
 							"Pancake: OVERFLOW na rota em " + registro.get("instante")));
 			porClasse.computeIfAbsent("OVERFLOW", k -> new AtomicLong()).incrementAndGet();
-		} else if (!transferenciaFalhou && !motivoExecutor.isBlank()
-				&& proibicao(motivoExecutor) && !chamada.rota().isEmpty()) {
+		} else if (!transferenciaFalhou && !motivoExecutor.isBlank() && proibicao(motivoExecutor)
+				&& !chamada.rota().isEmpty()) {
 			byte[] emprestadora = HexFormat.of().parseHex(chamada.rota().get(0).pool());
 			quarentena.condenar(emprestadora, PENA_DE_PROIBICAO,
 					"executor recebeu proibição explícita (" + motivoExecutor + ") em " + registro.get("instante"));
-			registro.put("culpada", Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "PROIBICAO_EXPLICITA"));
+			registro.put("culpada",
+					Map.of("indice", 0, "pool", chamada.rota().get(0).pool(), "classe", "PROIBICAO_EXPLICITA"));
 			porClasse.computeIfAbsent("PROIBICAO_EXPLICITA", k -> new AtomicLong()).incrementAndGet();
-		} else if (!sondaSemFlashV3 && !transferenciaFalhou) {
-			porClasse.computeIfAbsent("SEM_LAUDO", k -> new AtomicLong()).incrementAndGet();
-		}
+		} // else if (!sondaSemFlashV3 && !transferenciaFalhou) {
+			// porClasse.computeIfAbsent("SEM_LAUDO", k -> new
+			// AtomicLong()).incrementAndGet();
+			// }
 
 		if (sondaSemFlashV3) {
 			registro.put("limitacao_sonda", "autopsia-runtime nao simula flash loan com ponta V3");
@@ -699,8 +699,10 @@ public final class Autopsia implements Closeable {
 
 	static boolean proibicao(String motivo) {
 		String m = motivo.toLowerCase(java.util.Locale.ROOT);
-		// "forbidden" = par recusa chamador por regra de acesso; "blacklisted" = Executor na blacklist do token/par.
-		// Ambas são permanentes: o estado do contrato que bloqueia não se desfaz com o tempo.
+		// "forbidden" = par recusa chamador por regra de acesso; "blacklisted" =
+		// Executor na blacklist do token/par.
+		// Ambas são permanentes: o estado do contrato que bloqueia não se desfaz com o
+		// tempo.
 		return m.contains("forbidden") || m.contains("blacklisted") || m.contains("blacklist");
 	}
 
@@ -708,21 +710,26 @@ public final class Autopsia implements Closeable {
 		return motivo.toLowerCase(java.util.Locale.ROOT).contains("overflow");
 	}
 
-	// Rejeição por gás insuficiente do nosso lado — culpa nossa, não da pool. Pena mínima.
+	// Rejeição por gás insuficiente do nosso lado — culpa nossa, não da pool. Pena
+	// mínima.
 	static boolean gasInsuficiente(String motivo) {
 		String m = motivo.toLowerCase(java.util.Locale.ROOT);
 		return m.contains("out of gas") || m.contains("gas limit") || m.contains("intrinsic gas")
 				|| m.contains("gas required") || m.contains("gas too low");
 	}
 
-	// A tx-alvo do bundle falhou na simulação do relay — problema de timing/bundle, não da pool.
+	// A tx-alvo do bundle falhou na simulação do relay — problema de timing/bundle,
+	// não da pool.
 	static boolean txAlvoFalhou(String motivo) {
 		return motivo.toLowerCase(java.util.Locale.ROOT).contains("non-reverting tx in bundle failed");
 	}
 
-	// "header not found" é o nodereal (RPC_LOGS) sem o bloco AINDA: vemos o bloco antes dele. Medido em 27/09: ele
-	// responde assim para qualquer altura acima da cabeça dele. Estava em `estadoIndisponivel`, e 23 de 28
-	// autópsias ficaram sem laudo — e sem laudo o imposto não se mede, e a mesma fenda fantasma voltou a cada bloco.
+	// "header not found" é o nodereal (RPC_LOGS) sem o bloco AINDA: vemos o bloco
+	// antes dele. Medido em 27/09: ele
+	// responde assim para qualquer altura acima da cabeça dele. Estava em
+	// `estadoIndisponivel`, e 23 de 28
+	// autópsias ficaram sem laudo — e sem laudo o imposto não se mede, e a mesma
+	// fenda fantasma voltou a cada bloco.
 	static boolean blocoAindaNaoChegou(String corpo) {
 		String c = corpo.toLowerCase(java.util.Locale.ROOT);
 		return c.contains("block not found") || c.contains("header not found");
@@ -745,12 +752,14 @@ public final class Autopsia implements Closeable {
 		return rpc.chamarComOverride(operador, contrato, dados, override, bloco);
 	}
 
-	// `autopsiar(Travessia[],uint256)`: a mesma codificação da rota do Executor, sem o lucro mínimo.
+	// `autopsiar(Travessia[],uint256)`: a mesma codificação da rota do Executor,
+	// sem o lucro mínimo.
 	static byte[] calldata(List<Salto> rota, BigInteger montante) {
 
 		byte[] completo = AbiDoExecutor.executar(rota, montante, BigInteger.ZERO);
 
-		// `executar` codifica (offset, montante, lucroMinimo, rota...). Aqui são dois parâmetros: o
+		// `executar` codifica (offset, montante, lucroMinimo, rota...). Aqui são dois
+		// parâmetros: o
 		// offset da rota passa de 0x60 para 0x40 e o lucro mínimo sai.
 		byte[] dados = new byte[completo.length - 32];
 		System.arraycopy(AUTOPSIAR, 0, dados, 0, 4);
@@ -813,7 +822,8 @@ public final class Autopsia implements Closeable {
 				falhouEm, motivoLegivel(motivo), callback);
 	}
 
-	// O motivo cru vira texto quando é `Error(string)`; senão fica o hex (seletor + argumentos).
+	// O motivo cru vira texto quando é `Error(string)`; senão fica o hex (seletor +
+	// argumentos).
 	private static String motivoLegivel(String hex) {
 
 		if (hex.isEmpty()) {
@@ -842,7 +852,8 @@ public final class Autopsia implements Closeable {
 		return valores;
 	}
 
-	// O plano do modelo: a entrada de cada perna e a saída final, andando as travessias do montante.
+	// O plano do modelo: a entrada de cada perna e a saída final, andando as
+	// travessias do montante.
 	// Pára onde o modelo recusa — o que já é resposta.
 	private static List<BigInteger> planoDoModelo(List<Travessia> travessias, BigInteger montante) {
 
@@ -891,8 +902,10 @@ public final class Autopsia implements Closeable {
 		return List.of();
 	}
 
-	// O quanto o estado que o modelo usou difere do da cadeia, no pior dos dois números. Zero quando a
-	// cadeia não respondeu o estado (o laudo põe zero, e zero não é desvio: é falta de medida).
+	// O quanto o estado que o modelo usou difere do da cadeia, no pior dos dois
+	// números. Zero quando a
+	// cadeia não respondeu o estado (o laudo põe zero, e zero não é desvio: é falta
+	// de medida).
 	private static long desvioDeEstado(Pool pool, Laudo laudo, int i) {
 
 		BigInteger a = laudo.estadoA().get(i);
@@ -917,7 +930,8 @@ public final class Autopsia implements Closeable {
 		return modelo.subtract(cadeia).abs().multiply(BigInteger.valueOf(10_000)).divide(cadeia).longValue();
 	}
 
-	// Quanto `depois` ficou abaixo de `antes`, em bps de `antes`. Negativo (a cadeia deu MAIS) vira 0:
+	// Quanto `depois` ficou abaixo de `antes`, em bps de `antes`. Negativo (a
+	// cadeia deu MAIS) vira 0:
 	// só interessa o lado que faz reverter.
 	static long perda(BigInteger antes, BigInteger depois) {
 

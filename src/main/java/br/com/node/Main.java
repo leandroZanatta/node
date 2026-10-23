@@ -15,13 +15,12 @@ import java.util.logging.Logger;
 
 import br.com.node.cadeia.Crivo;
 import br.com.node.catalogo.Catalogo;
-import br.com.node.sincronizacao.VarredorDeGerentes;
 import br.com.node.catalogo.Cauda;
 import br.com.node.catalogo.Cotador;
 import br.com.node.catalogo.Fabricas;
 import br.com.node.catalogo.Impostos;
-import br.com.node.catalogo.Quarentena;
 import br.com.node.catalogo.ObservatorioArbitragem;
+import br.com.node.catalogo.Quarentena;
 import br.com.node.catalogo.Tarifario;
 import br.com.node.catalogo.Taxas;
 import br.com.node.descoberta.Descoberta;
@@ -29,15 +28,15 @@ import br.com.node.descoberta.Sementes;
 import br.com.node.ensaio.Autopsia;
 import br.com.node.ensaio.Backrun;
 import br.com.node.ensaio.CustoDeGas;
-import br.com.node.ensaio.Disparo;
 import br.com.node.ensaio.DiarioDeEnsaio;
+import br.com.node.ensaio.Disparo;
 import br.com.node.ensaio.Gabarito;
 import br.com.node.ensaio.Gatilhos;
-import br.com.node.mempool.Simulador;
 import br.com.node.ensaio.RelayPrivado;
 import br.com.node.ensaio.RpcDoEnsaio;
 import br.com.node.kademlia.TabelaDeRotas;
 import br.com.node.mempool.ObservatorioMempool;
+import br.com.node.mempool.Simulador;
 import br.com.node.rede.Discv4;
 import br.com.node.rede.Envelope;
 import br.com.node.rede.PortaUdp;
@@ -52,10 +51,11 @@ import br.com.node.sincronizacao.Cabeca;
 import br.com.node.sincronizacao.Cursor;
 import br.com.node.sincronizacao.Frente;
 import br.com.node.sincronizacao.Sincronizacao;
+import br.com.node.sincronizacao.VarredorDeGerentes;
 import br.com.node.sondagem.Rpc;
 import br.com.node.sondagem.Sondagem;
-import br.com.node.util.Identidade;
 import br.com.node.util.Diario;
+import br.com.node.util.Identidade;
 import br.com.node.util.NodeKey;
 import br.com.node.util.Resources;
 import br.com.node.vo.NoRemoto;
@@ -63,11 +63,6 @@ import br.com.node.vo.NoRemoto;
 public final class Main {
 
 	static {
-		// CICATRIZ: PRIMEIRA coisa do processo, antes de qualquer Logger emitir.
-		// Bloco estático roda antes de qualquer campo estático (LOG incluso) e
-		// antes do main; sem isso os primeiros LOG.* iam só para o console e o
-		// arquivo nascia depois — perdendo o boot, que é o que mais importa
-		// depurar. Diario não usa Resources (ver javadoc dela).
 		Diario.ligar();
 	}
 
@@ -96,9 +91,6 @@ public final class Main {
 
 		Catalogo catalogo = new Catalogo();
 
-		// O `PoolKey` das pools de gerente (V4, Infinity CL): o catálogo pede a chave da pool que mexeu, e a
-		// resposta vem do banco numa thread própria — o cursor não espera banco. A pool que nasce ao vivo vai
-		// para o banco pelo mesmo caminho.
 		PoolsNoGerenteRepository poolsNoGerente = new PoolsNoGerenteRepository(banco);
 		java.util.concurrent.ExecutorService chavesDeGerente = Executors.newSingleThreadExecutor(tarefa -> {
 			Thread thread = new Thread(tarefa, "chaves-de-gerente");
@@ -148,37 +140,34 @@ public final class Main {
 		DiarioDeEnsaio diarioDeEnsaio = new DiarioDeEnsaio(Path.of("target", "ensaio.jsonl"));
 
 		RpcDoEnsaio rpcEnsaio = new RpcDoEnsaio();
-		RpcDoEnsaio rpcTrace = java.util.Optional.ofNullable(System.getenv("RPC_TRACE"))
-				.map(String::trim).filter(u -> !u.isBlank())
-				.map(urls -> java.util.Arrays.stream(urls.split(",")).map(String::trim).filter(u -> !u.isBlank()).toList())
+		RpcDoEnsaio rpcTrace = java.util.Optional.ofNullable(System.getenv("RPC_TRACE")).map(String::trim)
+				.filter(u -> !u.isBlank()).map(urls -> java.util.Arrays.stream(urls.split(",")).map(String::trim)
+						.filter(u -> !u.isBlank()).toList())
 				.filter(urls -> !urls.isEmpty()).map(RpcDoEnsaio::new).orElse(rpcEnsaio);
 		LOG.info(() -> rpcTrace == rpcEnsaio
 				? "trace de pagamentos internos: usando RPC de execução (RPC_TRACE não configurado)"
 				: "trace de pagamentos internos: usando RPC_TRACE dedicado");
 		tarifario.porChamada(new br.com.node.catalogo.EspacamentoPorChamada(pool -> tickSpacing(rpcEnsaio, pool)));
-		// Os mapas de ticks: a pool de liquidez concentrada cota ATRAVESSANDO ticks, não só até o primeiro.
-		br.com.node.catalogo.Ticks ticks = new br.com.node.catalogo.Ticks((para, dados, bloco) -> ethCall(rpcEnsaio, para, dados, bloco));
+		br.com.node.catalogo.Ticks ticks = new br.com.node.catalogo.Ticks(
+				(para, dados, bloco) -> ethCall(rpcEnsaio, para, dados, bloco));
 		catalogo.aoMudarLiquidez(ticks::aoMudarLiquidez);
 		cotador.ticks(ticks);
 		RelayPrivado relay = new RelayPrivado();
 		CustoDeGas custoDeGas = new CustoDeGas(rpcEnsaio, catalogo);
 		custoDeGas.atualizar();
-		// A autópsia compara com o estado do BLOCO N: pelo `RPC_LOGS` (estado histórico) quando configurado; os
-		// dataseeds públicos já o descartaram, e sem ele a autópsia diz "sem estado do bloco" em vez de comparar
-		// com outro bloco.
 		RpcDoEnsaio rpcDaAutopsia = java.util.Optional.ofNullable(System.getenv("RPC_LOGS")).map(String::trim)
 				.filter(u -> !u.isBlank()).map(u -> new RpcDoEnsaio(List.of(u))).orElse(rpcEnsaio);
-		Autopsia autopsia = new Autopsia(rpcDaAutopsia, quarentena, impostos,
-				null);
+		Autopsia autopsia = new Autopsia(rpcDaAutopsia, quarentena, impostos, null);
 		autopsia.aoConcluir(diarioDeEnsaio::autopsia);
 		Disparo disparo = new Disparo(rpcEnsaio, relay, catalogo, tarifario, custoDeGas, impostos, autopsia,
 				quarentena);
 		disparo.atualizarNonce();
-		// O desfecho de cada envio (e a folga até o bloco seguinte), e o lance que aprende com ele.
 		br.com.node.ensaio.Desfechos desfechos = new br.com.node.ensaio.Desfechos(br.com.node.ensaio.Disparo.executor(),
 				cabeca::momentos, null);
-		Path arquivoPagamentos = Path.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
-		Path arquivoVencedores = Path.of(java.util.Optional.ofNullable(System.getenv("VENCEDORES_LOG")).orElse("vencedores.jsonl"));
+		Path arquivoPagamentos = Path
+				.of(java.util.Optional.ofNullable(System.getenv("PAGAMENTOS_LOG")).orElse("pagamentos.jsonl"));
+		Path arquivoVencedores = Path
+				.of(java.util.Optional.ofNullable(System.getenv("VENCEDORES_LOG")).orElse("vencedores.jsonl"));
 		br.com.node.ensaio.PagamentosDeBloco pagamentos = new br.com.node.ensaio.PagamentosDeBloco(rpcEnsaio,
 				arquivoPagamentos, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 		br.com.node.ensaio.Lances lances = new br.com.node.ensaio.Lances(Path.of("lances.json"),
@@ -191,19 +180,17 @@ public final class Main {
 		disparo.aoRecusarTentativa(diarioDeEnsaio::recusa);
 		disparo.aoVeredito(desfechos::veredito);
 		disparo.vereditoPor(rpcDaAutopsia);
-		// Busca o bid real do rival (gas + BNB ao builder EOA) de forma assíncrona para não bloquear o cursor.
 		java.util.concurrent.ExecutorService bidLookup = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 			Thread t = new Thread(r, "bid-lookup");
 			t.setDaemon(true);
 			return t;
 		});
 		desfechos.aoDecidir(desfecho -> {
-			// QUEM GANHOU, em toda perda para rival ou pool mexida: a transação vencedora e o pagamento dela às builders.
 			if (ganhouOutro(desfecho) && desfecho.posicao() != null) {
 				bidLookup.submit(() -> registrarVencedor(desfecho, rpcEnsaio, rpcTrace, arquivoVencedores));
 			}
-			boolean deveEnriquecer = (desfecho.classe().equals("pool_mexida_n1") || desfecho.classe().equals("rival_n1"))
-					&& desfecho.folgaMs() != null && desfecho.folgaMs() > 0
+			boolean deveEnriquecer = (desfecho.classe().equals("pool_mexida_n1")
+					|| desfecho.classe().equals("rival_n1")) && desfecho.folgaMs() != null && desfecho.folgaMs() > 0
 					&& desfecho.posicao() != null;
 			if (deveEnriquecer) {
 				bidLookup.submit(() -> {
@@ -226,28 +213,24 @@ public final class Main {
 		disparo.medirCom(cabeca::momentos);
 		Cauda cauda = new Cauda(catalogo, cotador, tarifario, achado -> backrun.considerar(List.of(achado), null));
 		cauda.quarentena(quarentena);
-		// O Executor 3 empresta também da ponta V3 ou de gerente: a busca deixa de exigir V2 na entrada.
 		cauda.pontaLivre(disparo.versaoDoExecutor() >= 3);
 		cauda.aoSemFlashAchar(achado -> gabarito.anotar(achado, false));
-		// Duas camadas: a rápida só nas pools QUENTES, o organizador no grafo inteiro. `CAUDA_UMA_CAMADA=1` volta
-		// ao jeito antigo (uma camada, grafo inteiro a cada bloco), para o A/B no mesmo servidor.
 		br.com.node.catalogo.Quentes quentes = new br.com.node.catalogo.Quentes(Path.of("quentes.json"));
 		if (!"1".equals(System.getenv("CAUDA_UMA_CAMADA"))) {
 			cauda.quentesDe(quentes);
 		}
-		// A raiz da cauda é sempre numerário (WBNB/USDT): sem câmbio é erro, não fenda de valor zero.
-		cauda.valorarCom(achado -> custoDeGas.paraBnb(achado.ciclo().pernas().get(0).entra(), achado.oportunidade().lucro())
-				.orElseThrow(() -> new IllegalStateException("fenda da cauda sem câmbio BNB para a raiz "
-						+ java.util.HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()))));
+		cauda.valorarCom(
+				achado -> custoDeGas.paraBnb(achado.ciclo().pernas().get(0).entra(), achado.oportunidade().lucro())
+						.orElseThrow(() -> new IllegalStateException("fenda da cauda sem câmbio BNB para a raiz "
+								+ java.util.HexFormat.of().formatHex(achado.ciclo().pernas().get(0).entra()))));
 
 		ObservatorioMempool mempool = new ObservatorioMempool(catalogo, tarifario::taxa, tarifario::espacamento,
-				tarifario::solidlyStable,
-				(overlay, crua) -> cauda.projetar(overlay, cabeca.alvo())
+				tarifario::solidlyStable, (overlay, crua) -> cauda.projetar(overlay, cabeca.alvo())
 						.ifPresent(achado -> backrun.considerar(List.of(achado), crua)));
 		Gatilhos gatilhos = new Gatilhos(rpcEnsaio, mempool::etapas, mempool::primeiraVisaoMs,
 				arbitragem -> custoDeGas.paraBnbSeDisponivel(arbitragem.token(), arbitragem.sobra()));
-		gatilhos.gravarFendasGrandesEm(Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
-				.orElse("fendas_grandes.jsonl")));
+		gatilhos.gravarFendasGrandesEm(Path
+				.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG")).orElse("fendas_grandes.jsonl")));
 		br.com.node.ensaio.AutopsiaDoMercado mercado = new br.com.node.ensaio.AutopsiaDoMercado(catalogo, cotador,
 				tarifario, custoDeGas, gabarito, Path.of("target", "mercado-" + carimbo + ".jsonl"));
 		mercado.versaoDoExecutor(disparo.versaoDoExecutor());
@@ -265,8 +248,9 @@ public final class Main {
 			@Override
 			public java.util.Optional<java.math.BigInteger> token(byte[] token, byte[] conta, long bloco) {
 				String dados = "70a08231" + "0".repeat(24) + java.util.HexFormat.of().formatHex(conta);
-				return ethCall(rpcEnsaio, java.util.HexFormat.of().formatHex(token), dados, "0x" + Long.toHexString(bloco))
-						.filter(r -> r.length() >= 66).map(r -> new java.math.BigInteger(r.substring(2, 66), 16));
+				return ethCall(rpcEnsaio, java.util.HexFormat.of().formatHex(token), dados,
+						"0x" + Long.toHexString(bloco)).filter(r -> r.length() >= 66)
+						.map(r -> new java.math.BigInteger(r.substring(2, 66), 16));
 			}
 		});
 		Simulador simulador = new Simulador(rpcEnsaio::chamar, mempool::aprenderDe);
@@ -280,13 +264,11 @@ public final class Main {
 					mercado.confirmar(arbitragem, altura, indice, gatilho);
 					gatilhos.investigar(arbitragem, altura, indice, gatilho);
 					desfechos.arbitragem(arbitragem, altura, indice);
-					quentes.vistaEmArbitragem(arbitragem.pools().stream().map(java.util.HexFormat.of()::formatHex).toList());
+					quentes.vistaEmArbitragem(
+							arbitragem.pools().stream().map(java.util.HexFormat.of()::formatHex).toList());
 				});
 
 		Frente frente = new Frente(sessoes, Resources.inteiro("sincronizacao.lote"));
-		// Os OBSERVADORES rodam na thread do cursor, e cada um na sua borda: exceção de um vai às `Falhas` com a
-		// pilha e o bloco segue aplicado. CICATRIZ de 27/09 (22:18–22:46): uma exceção aqui matava o cursor calado
-		// — 25 min parado na altura da partida, sem uma linha de log.
 		Cursor cursor = new Cursor(frente, catalogo, transicao -> {
 			naBorda("taxas: observar", () -> taxas.observar(transicao));
 			naBorda("impostos: observar", () -> impostos.observar(transicao));
@@ -312,8 +294,8 @@ public final class Main {
 		RelatorioExecucao relatorio = new RelatorioExecucao(arquivoDoRelatorio, descoberta, sessoes, tabela, lotacao,
 				cabeca, cursor, catalogo, lotacao::quedas, lotacao::naoTratadas, observatorio::resumo, mempool::resumo,
 				() -> {
-					Map<String, Object> resumo = ensaioResumo(cauda, backrun, disparo, gabarito, gatilhos, simulador, impostos,
-							desfechos, lances, custoDeGas, rpcTrace,
+					Map<String, Object> resumo = ensaioResumo(cauda, backrun, disparo, gabarito, gatilhos, simulador,
+							impostos, desfechos, lances, custoDeGas, rpcTrace,
 							rpcTrace == rpcEnsaio ? "RPC de execucao padrao" : "RPC_TRACE");
 					resumo.put("frente", frente.resumo());
 					resumo.put("peers", lotacao.resumoDePeers());
@@ -355,16 +337,12 @@ public final class Main {
 		porta.abrir(descoberta::receber);
 
 		descoberta.iniciar();
-		// O bloco inteiro (`NewBlock`) vira atalho: a frente pede só o recibo, sem a ida da header.
-		// A/B: ATALHO_CABECA=0 desliga, para medir no mesmo servidor quanto o atalho ganha.
 		boolean atalhoDaCabeca = !"0".equals(System.getenv("ATALHO_CABECA"));
 		lotacao.aoReceberBloco((sessao, bloco) -> {
 			if (atalhoDaCabeca) {
 				frente.adiantar(sessao, bloco.cabecalho());
 			}
-			// Atualiza o parentHash para o próximo lance 48club (RawBid.parentHash = hash do bloco atual).
 			disparo.aoAplicarCabecalho(bloco.cabecalho());
-			// A margem de chegada dos swaps (quanto antes do bloco nós os vimos), para o N+1.
 			mempool.blocoAnunciado(bloco);
 		});
 		if (atalhoDaCabeca) {
@@ -380,15 +358,11 @@ public final class Main {
 		gravacao.scheduleWithFixedDelay(quentes::salvar, 60, 60, TimeUnit.SECONDS);
 		gravacao.scheduleWithFixedDelay(custoDeGas::atualizar, 10, 10, TimeUnit.SECONDS);
 		gravacao.scheduleWithFixedDelay(disparo::atualizarNonce, 5, 5, TimeUnit.SECONDS);
-		// Thread PRÓPRIA: na `gravacao` o aquecimento esperava o banco, a lista de pools da cauda e as RPCs
-		// de gás e nonce, e a conexão esfriava. MEDIDO em 24/09: disparo com mediana de 611 ms, contra
-		// 193 ms com a conexão quente e 1,33 s com uma nova.
-		ScheduledExecutorService aquecimento = Executors
-				.newSingleThreadScheduledExecutor(tarefa -> {
-					Thread thread = new Thread(tarefa, "relay-aquecimento");
-					thread.setDaemon(true);
-					return thread;
-				});
+		ScheduledExecutorService aquecimento = Executors.newSingleThreadScheduledExecutor(tarefa -> {
+			Thread thread = new Thread(tarefa, "relay-aquecimento");
+			thread.setDaemon(true);
+			return thread;
+		});
 		aquecimento.scheduleWithFixedDelay(relay::aquecer, 1, 5, TimeUnit.SECONDS);
 		gravacao.scheduleWithFixedDelay(() -> relatorio.registrar("snapshot"), 0, 60, TimeUnit.SECONDS);
 
@@ -396,14 +370,17 @@ public final class Main {
 		Path arquivoDespachos = Path.of("target", "ensaio.jsonl");
 		br.com.node.api.HttpApi httpApi;
 		try {
-			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos, arquivoVencedores, Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG")).orElse("fendas_grandes.jsonl")), () -> {
-					Map<String, Object> p = new LinkedHashMap<>();
-					p.put("v2", catalogo.poolsV2());
-					p.put("v3", catalogo.poolsV3());
-					p.put("pares_conhecidos", catalogo.paresConhecidos());
-					p.put("descartadas", catalogo.poolsDescartadas());
-					return p;
-				}, quarentena);
+			httpApi = new br.com.node.api.HttpApi(apiPorta, relatorio, mercado, arquivoDespachos, arquivoPagamentos,
+					arquivoVencedores, Path.of(java.util.Optional.ofNullable(System.getenv("FENDAS_GRANDES_LOG"))
+							.orElse("fendas_grandes.jsonl")),
+					() -> {
+						Map<String, Object> p = new LinkedHashMap<>();
+						p.put("v2", catalogo.poolsV2());
+						p.put("v3", catalogo.poolsV3());
+						p.put("pares_conhecidos", catalogo.paresConhecidos());
+						p.put("descartadas", catalogo.poolsDescartadas());
+						return p;
+					}, quarentena);
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("não foi possível iniciar HTTP API na porta " + apiPorta, e);
 		}
@@ -414,7 +391,6 @@ public final class Main {
 		Thread.currentThread().join();
 	}
 
-	// eth_call cru: o resultado em hex, ou vazio se o nó não respondeu ou reverteu.
 	private static java.util.Optional<String> ethCall(RpcDoEnsaio rpc, String para, String dados, String bloco) {
 
 		try {
@@ -435,7 +411,6 @@ public final class Main {
 		}
 	}
 
-	// `tickSpacing()` (0xd0c93a7c) da própria pool, para as V3 de factory desconhecida. int24 na palavra.
 	private static java.util.OptionalInt tickSpacing(RpcDoEnsaio rpc, byte[] pool) {
 
 		try {
@@ -458,30 +433,18 @@ public final class Main {
 		}
 	}
 
-	// Calcula o bid total do rival a partir de dados on-chain: fetcha o bloco N+1 e procura a tx de
-	// pagamento ao builder pelo mesmo remetente da tx de arb, em posições adjacentes. Com o BNB e o
-	// gás usado da tx de arb: bid = gasPrice×0,9 + BNB/gasUsado. Vazio quando não encontra pagamento
-	// ou o RPC falha.
-	//
-	// Busca pelo REMETENTE (mesmo `from` que a arb), não pelo destinatário: rivais usam builders
-	// variados — só o 48club e o BlockRazor são conhecidos, mas há outros. Uma tx de BNB puro (sem
-	// dados) do mesmo remetente, perto da arb, é o pagamento ao builder, independente do endereço.
-	// Deltas cobrem bundle típico [pag, arb] e [arb, pag] e casos com 1 tx de separação.
-	// Perdemos para outra transação do bloco (o vencedor está em outra posição, no bloco N+1 ou N+2).
 	private static boolean ganhouOutro(br.com.node.ensaio.Desfechos.Desfecho desfecho) {
 		return switch (desfecho.classe()) {
-			case "rival_n1", "rival_n2", "pool_mexida_n1", "pool_mexida_n2" -> true;
-			default -> false;
+		case "rival_n1", "rival_n2", "pool_mexida_n1", "pool_mexida_n2" -> true;
+		default -> false;
 		};
 	}
 
-	// Lê o bloco do vencedor e grava quem ganhou e quanto levou, ligado à nossa tentativa pelo hash.
 	private static void registrarVencedor(br.com.node.ensaio.Desfechos.Desfecho desfecho, RpcDoEnsaio rpc,
 			RpcDoEnsaio rpcTrace, Path arquivo) {
 		try {
 			gravarVencedor(desfecho, rpc, rpcTrace, arquivo);
 		} catch (RuntimeException e) {
-			// O executor engole exceção de tarefa: sem este registro, a perda some sem nenhum sinal.
 			LOG.warning(() -> "vencedor do leilão não lido para " + desfecho.envio().hash() + ": " + e);
 		}
 	}
@@ -504,7 +467,6 @@ public final class Main {
 					alturaDoVencedor, desfecho.posicao(), bloco,
 					br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao());
 			if (linha.has("hash_vencedor")) {
-				// Quem recebeu BNB DENTRO da transação vencedora (o trace, ou a API do BscScan).
 				br.com.node.ensaio.TransferenciasInternas.anexar(rpcTrace, linha.get("hash_vencedor").getAsString(),
 						System.getenv("BSCSCAN_API_KEY"), linha);
 				rpc.recibo(linha.get("hash_vencedor").getAsString()).ifPresent(r -> {
@@ -526,32 +488,31 @@ public final class Main {
 		br.com.node.ensaio.VencedorDoLeilao.gravar(arquivo, linha);
 	}
 
-	private static java.util.Optional<BigInteger> bidRealDoRival(
-			br.com.node.ensaio.Desfechos.Desfecho desfecho,
+	private static java.util.Optional<BigInteger> bidRealDoRival(br.com.node.ensaio.Desfechos.Desfecho desfecho,
 			RpcDoEnsaio rpc) {
 
 		long alturaN1 = desfecho.envio().altura() + 1;
 		int posArb = desfecho.posicao();
 
 		com.google.gson.JsonObject bloco = rpc.bloco(alturaN1).orElse(null);
-		if (bloco == null || !bloco.has("transactions")) return java.util.Optional.empty();
+		if (bloco == null || !bloco.has("transactions"))
+			return java.util.Optional.empty();
 		com.google.gson.JsonArray txs = bloco.getAsJsonArray("transactions");
-		if (posArb < 0 || posArb >= txs.size()) return java.util.Optional.empty();
+		if (posArb < 0 || posArb >= txs.size())
+			return java.util.Optional.empty();
 
 		com.google.gson.JsonObject txArb = txs.get(posArb).getAsJsonObject();
 
-		BigInteger bnbPagamento = br.com.node.ensaio.PagamentosDeBloco.pagamentoAoBuilder(bloco, posArb,
-				br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao()).orElse(BigInteger.ZERO);
+		BigInteger bnbPagamento = br.com.node.ensaio.PagamentosDeBloco
+				.pagamentoAoBuilder(bloco, posArb, br.com.node.ensaio.PagamentosDeBloco.enderecosPadrao())
+				.orElse(BigInteger.ZERO);
 
-		if (bnbPagamento.signum() <= 0) return java.util.Optional.empty();
+		if (bnbPagamento.signum() <= 0)
+			return java.util.Optional.empty();
 
 		BigInteger bnbFinal = bnbPagamento;
 		String hashArb = txArb.get("hash").getAsString();
-		return rpc.recibo(hashArb)
-				.filter(r -> r.sucesso())
-				// O total que o rival pagou ao builder, em BNB. Não se converte para "por gás" aqui: quem precisa do
-				// total (o aprendiz de lances) multiplica de volta por um gás que não é o dele — o erro antigo.
-				.map(r -> r.sucesso() ? bnbFinal : null);
+		return rpc.recibo(hashArb).filter(r -> r.sucesso()).map(r -> r.sucesso() ? bnbFinal : null);
 	}
 
 	private static void descarregar(ProvasDeTaxaRepository provas, ImpostosRepository impostosProvados) {
@@ -570,8 +531,6 @@ public final class Main {
 		}
 	}
 
-	// A/B do disparo do garimpo (25/09): GARIMPO_POR_TX=1 reproduz o jeito antigo (na 1ª tx do bloco),
-	// para medir no mesmo servidor quanto o disparo por bloco inteiro ganhou. Sem a variável, por bloco.
 	private static void naBorda(String origem, Runnable observador) {
 		try {
 			observador.run();
@@ -600,10 +559,9 @@ public final class Main {
 		resumo.put("gabarito", gabarito.resumo());
 		resumo.put("gatilhos", gatilhos.resumo());
 		resumo.put("simulador", simulador.resumo());
-		resumo.put("disparo", Map.of("enviadas", disparo.enviadas(), "recusadas", disparo.recusadas(),
-"ultimo_envio", disparo.ultimoEnvio(),
-				"motivos_do_contrato", disparo.motivos(), "gas_medido", disparo.gasMedido(), "autopsia",
-				disparo.autopsias(), "recusas_do_relay", disparo.recusasDoRelay(), "milis", disparo.milis(),
+		resumo.put("disparo", Map.of("enviadas", disparo.enviadas(), "recusadas", disparo.recusadas(), "ultimo_envio",
+				disparo.ultimoEnvio(), "motivos_do_contrato", disparo.motivos(), "gas_medido", disparo.gasMedido(),
+				"autopsia", disparo.autopsias(), "recusas_do_relay", disparo.recusasDoRelay(), "milis", disparo.milis(),
 				"executor_versao", disparo.versaoDoExecutor()));
 
 		return resumo;

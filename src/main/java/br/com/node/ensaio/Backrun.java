@@ -20,14 +20,6 @@ import br.com.node.nucleo.Perna;
 
 public final class Backrun implements Closeable {
 
-	// A margem mora só em `CustoDeGas.piso`, o mesmo valor que `Disparo` exige no contrato.
-
-	// Janela de dedup: a MESMA oportunidade (mesmas pools, mesma entrada, mesmo lucro previsto) não se
-	// reenvia nesse intervalo.
-	// Sem isto, uma fenda persistente era despachada a cada bloco (dezenas de
-	// vezes: 498 despachos =
-	// ~8 oportunidades × dezenas), gerando "bundle already existed" e spammando o
-	// relay à toa.
 	private static final long JANELA_DEDUP_MS = 60_000;
 
 	private static final Logger LOG = Logger.getLogger(Backrun.class.getName());
@@ -39,14 +31,8 @@ public final class Backrun implements Closeable {
 	private final ExecutorService envio = Executors
 			.newSingleThreadExecutor(tarefa -> new Thread(tarefa, "backrun-envio"));
 
-	// O N+1 corre contra o bloco: não espera na fila da cauda nem das sombras, e dois N+1 seguem juntos.
 	private final ExecutorService envioN1 = Executors.newVirtualThreadPerTaskExecutor();
 
-	// Assinatura da oportunidade (pools ordenadas) → instante do último envio. Poda
-	// o que passou da
-	// janela quando cresce. Lido/escrito na thread que considera — mas considerar
-	// vem de threads da
-	// mempool e do cursor, então concorrente.
 	private final Map<String, Long> visto = new ConcurrentHashMap<>();
 
 	private final AtomicLong recebidos = new AtomicLong();
@@ -54,10 +40,6 @@ public final class Backrun implements Closeable {
 	private final AtomicLong deduplicados = new AtomicLong();
 	private final AtomicLong despachados = new AtomicLong();
 
-	// O PLACAR do que o piso barrou, para a pergunta "piso apertado demais ou conta errada?" ter
-	// resposta em número em vez de opinião. Guarda o MELHOR caso já recusado — a maior fração do
-	// piso — com o lucro e o piso que a produziram. A leitura é direta: melhor recusada a 2% do piso
-	// quer dizer que o piso não é o problema (a fenda é poeira); a 97%, que o piso é que aperta.
 	private final AtomicLong melhorFracaoBps = new AtomicLong();
 
 	private static final long JANELA_DO_REGISTRO_MS = 5 * 60_000L;
@@ -66,19 +48,10 @@ public final class Backrun implements Closeable {
 	private final AtomicReference<BigInteger> melhorLucro = new AtomicReference<>(BigInteger.ZERO);
 	private final AtomicReference<BigInteger> melhorPiso = new AtomicReference<>(BigInteger.ZERO);
 
-	// A RAIZ da melhor recusa (o token em que o piso e o lucro estão medidos). O `melhor_lucro` e o
-	// `melhor_piso` são wei DO TOKEN DA RAIZ, e sem este campo eles são um número sem unidade: foi
-	// assim que "0,0133 vs 0,0168" foi lido como BNB quando era USDT — 600× de erro na leitura.
 	private final AtomicReference<String> melhorRaiz = new AtomicReference<>("");
 
-	// Recusadas cujo lucro cobre estritamente o gás estimado, incluindo a transferência ao builder.
 	private final AtomicLong pagariaOGas = new AtomicLong();
 
-	// AUTÓPSIA SOMBRA: o melhor recusado que paga o gás vai à autópsia por `eth_call`, sem envio. Sem
-	// isto o modelo só é conferido quando algo passa do piso — e na corrida de 23/09 18:33 nada passou
-	// em 106 min (3.743 achados), então a precisão do modelo ficou sem medida nenhuma. Com teto de ritmo
-	// (uma a cada SOMBRA_INTERVALO_MS) e sem repetir o mesmo conjunto de pools dentro de SOMBRA_JANELA_MS:
-	// é amostra, e o RPC público não é nosso.
 	private static final long SOMBRA_INTERVALO_MS = 20_000;
 	private static final long SOMBRA_JANELA_MS = 600_000;
 	private final AtomicLong ultimaSombra = new AtomicLong();
@@ -91,8 +64,6 @@ public final class Backrun implements Closeable {
 		this.gabarito = gabarito;
 	}
 
-	// Do bloco aplicado à fenda chegar aqui: o tempo do GARIMPO, medido em toda fenda da cauda — e não só
-	// nas poucas que viram envio. Com o `bloco_ate_aplicado` da `Cabeca`, fecha a conta até a decisão.
 	private volatile java.util.function.LongFunction<java.util.Optional<br.com.node.sincronizacao.Cabeca.Momentos>> momentos = altura -> java.util.Optional
 			.empty();
 	private final br.com.node.util.Amostras aplicadoAteBackrun = new br.com.node.util.Amostras(2_000);
@@ -119,28 +90,12 @@ public final class Backrun implements Closeable {
 
 		for (Achado fenda : fendas) {
 
-			// Toda fenda, abaixo do piso ou não: o gabarito mede se a DETECÇÃO acerta, e o piso é outra
-			// pergunta (se vale para nós).
 			gabarito.anotar(fenda, cruaPendente != null);
 
 			BigInteger gasDaCauda = custoDeGas.estimarGasDasTravessias(fenda.travessias(), fenda.ciclo().pernas());
 			byte[] raiz = fenda.ciclo().pernas().get(0).entra();
 			Optional<BigInteger> piso = custoDeGas.piso(raiz, fenda.oportunidade().entrada(), gasDaCauda);
 
-			// O PISO é o único filtro de VALOR do sistema, e aqui é o único lugar que o
-			// aplica: o
-			// `Disparo` só o usa como `lucroMinimo` do contrato. O número sai do número e do
-			// tipo das
-			// pernas (cada V2 ≈ 75k, cada V3 ≈ 120k, + base, overhead e empréstimo), calibrado
-			// com swaps
-			// reais da BSC — não de uma constante genérica de 400k.
-			// Sem ele o despacho vira a maior poeira do bloco: medido no ar, tudo que saía
-			// estava 600× a
-			// 3.500× abaixo deste número e revertia na simulação do relay (falha de CUSTO,
-			// que o relay não
-			// cobra e por isso não dói — mas também não ensina nada). Sem piso (raiz
-			// não-numerário) é
-			// falha FECHADA, como no `Disparo`: não se entra.
 			BigInteger lucro = fenda.oportunidade().lucro();
 
 			if (piso.isEmpty() || lucro.compareTo(piso.get()) < 0) {
@@ -153,8 +108,6 @@ public final class Backrun implements Closeable {
 				continue;
 			}
 
-			// Em BNB, não em wei cru: fendas de raízes diferentes (WBNB, USDT, BTCB) têm lucro em unidades
-			// diferentes, e comparar os wei escolhia a de raiz com mais casas, não a que vale mais.
 			if (melhor == null || emBnb(fenda).compareTo(emBnb(melhor)) > 0) {
 				melhor = fenda;
 			}
@@ -175,19 +128,9 @@ public final class Backrun implements Closeable {
 		despachados.incrementAndGet();
 		LOG.info(() -> "backrun: despacho lucro " + escolhido.oportunidade().lucro() + " wei, "
 				+ escolhido.ciclo().pernas().size() + " pernas" + (cruaPendente == null ? " (cauda)" : " (n+1)"));
-		// Todo disparo em paralelo (virtual threads). A cauda também: em 24/09 14:08 quatro disparos do
-		// mesmo bloco saíram em série (476+402+315+246 ms) e o mais valioso chegou por último. A thread
-		// única fica só para as sombras, que não correm contra o bloco.
 		envioN1.execute(() -> disparo.disparar(escolhido, cruaPendente));
 	}
 
-	// A CONTA da recusa, escrita uma vez por melhora. Só na melhora, e isso é deliberado: a corrida
-	// de 9 h recusou 16.538 fendas, e registrar cada uma trocaria um silêncio por uma inundação. O
-	// que se quer ver é a MELHOR delas — a única que decidiria alguma coisa —, e ela aparece com
-	// todos os números que a decisão usou: gás, custo completo, piso, lucro e fração do piso.
-	//
-	// `piso` nulo é a recusa por FALTA de piso (raiz que não é numerário): não há fração a medir,
-	// só o fato, e ele já está contado no `abaixo_piso`.
 	private void anotarRecusa(Achado fenda, BigInteger gas, BigInteger lucro, BigInteger piso) {
 
 		if (piso == null) {
@@ -203,10 +146,6 @@ public final class Backrun implements Closeable {
 
 		synchronized (melhorFracaoBps) {
 
-			// A marca do REGISTRO é por janela, não da corrida inteira. CICATRIZ de 26/09: com a marca
-			// acumulada desde a subida, a linha sumia por uma hora depois de a noite chegar a 9.775 bps — e
-			// parecia node travado, quando as fendas recebidas seguiam em ~5 a 7 mil por meia hora. Cada janela
-			// volta a mostrar a melhor recusa dela; o relatório continua com a melhor da corrida.
 			long agora = System.currentTimeMillis();
 			if (agora - inicioDaJanela >= JANELA_DO_REGISTRO_MS) {
 				inicioDaJanela = agora;
@@ -270,8 +209,6 @@ public final class Backrun implements Closeable {
 		envio.execute(() -> disparo.examinarSemEnviar(achado));
 	}
 
-	// O lucro da fenda em BNB. Só é chamado com piso presente — e o piso exige cotação da raiz —, então sem
-	// câmbio aqui é dado incoerente: estoura, em vez de a fenda perder a ordem valendo zero.
 	private BigInteger emBnb(Achado fenda) {
 		byte[] raiz = fenda.ciclo().pernas().get(0).entra();
 		return custoDeGas.paraBnb(raiz, fenda.oportunidade().lucro()).orElseThrow(() -> new IllegalStateException(
@@ -289,13 +226,6 @@ public final class Backrun implements Closeable {
 		return String.join("-", pools);
 	}
 
-	// Já mandamos ESTA oportunidade dentro da janela? Se sim, dedup — não reenvia. Poda entradas velhas
-	// quando o mapa cresce, para não vazar memória.
-	//
-	// CICATRIZ: a assinatura era só o conjunto de pools, por 60 s. Numa pool que anda a cada bloco a fenda
-	// REABRE com outro tamanho no mesmo ciclo — e era calada por um minuto (~130 blocos) depois do primeiro
-	// despacho, que quase sempre perde. Com entrada e lucro na assinatura só se cala o reenvio idêntico
-	// (a fenda persistente que não mudou), que é o que a janela existia para barrar.
 	private boolean repetida(Achado achado) {
 
 		long agora = System.currentTimeMillis();
@@ -329,8 +259,6 @@ public final class Backrun implements Closeable {
 		resumo.put("melhor_fracao_do_piso_bps", melhorFracaoBps.get());
 		resumo.put("melhor_lucro", melhorLucro.get().toString());
 		resumo.put("melhor_piso", melhorPiso.get().toString());
-		// A unidade das duas linhas acima, e o câmbio que converteu o piso: sem eles o piso é um número
-		// que não se sabe ler nem conferir (foi o que aconteceu no relatório de 25/09).
 		resumo.put("melhor_piso_raiz", melhorRaiz.get());
 		resumo.put("cambio_usdt_bnb", custoDeGas.cambioUsdtPorBnb().map(BigInteger::toString).orElse("nunca medido"));
 		resumo.put("deduplicados", deduplicados.get());
