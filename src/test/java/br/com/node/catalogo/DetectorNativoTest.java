@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.OptionalInt;
@@ -15,10 +14,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.nucleo.Arbitragem;
 import br.com.node.vo.Log;
 
-// O BNB NATIVO numa pool de gerente, na forma do caso medido em 26/09: o rival paga BNB NATIVO à pool Infinity
-// (nenhum `Transfer`), recebe USDT do cofre, troca o USDT por WBNB num par V2 e fica com o WBNB. Sem o nativo na
-// conta, o detector via o WBNB inteiro como lucro (0,1274 "de lucro" num caso em que o contrato do rival ganhou
-// ~0,000025). Com o nativo, o lucro é só a diferença.
 class DetectorNativoTest {
 
 	private static final BigInteger E18 = BigInteger.TEN.pow(18);
@@ -44,14 +39,16 @@ class DetectorNativoTest {
 		BigInteger usdt2 = BigInteger.valueOf(60_000).multiply(E18);
 		BigInteger voltou = new BigInteger("300001000000000000000");
 
-		List<Log> logs = List.of(
-				transfer(WBNB, EXECUTOR, PAR_A, um), transfer(TOKEN_A, PAR_A, EXECUTOR, a), sync(PAR_A),
-				transfer(TOKEN_A, EXECUTOR, PAR_USDT, a), transfer(USDT, PAR_USDT, EXECUTOR, usdt1), sync(PAR_USDT),
-				// o gerente do Infinity: quantia0 (nativo) −100 (pago, sem Transfer), quantia1 (USDT) +60.000
+		List<Log> logs = List.of(transfer(WBNB, EXECUTOR, PAR_A, um), transfer(TOKEN_A, PAR_A, EXECUTOR, a),
+				sync(PAR_A), transfer(TOKEN_A, EXECUTOR, PAR_USDT, a), transfer(USDT, PAR_USDT, EXECUTOR, usdt1),
+				sync(PAR_USDT),
+				
+				
 				swapInfinity(nativo.negate(), usdt2), transfer(USDT, COFRE, EXECUTOR, usdt2),
 				transfer(USDT, EXECUTOR, PAR, usdt1.add(usdt2)), transfer(WBNB, PAR, EXECUTOR, voltou), sync(PAR));
 
-		// Sem o nativo na conta (o detector de antes): os 100 BNB pagos somem e viram "lucro".
+		
+		
 		Arbitragem semNativo = new Detector().em(logs).orElseThrow();
 		assertEquals(voltou.subtract(um), semNativo.sobra(), "o artefato: 100,001 de lucro");
 
@@ -65,10 +62,11 @@ class DetectorNativoTest {
 		byte[] dados = new byte[7 * 32];
 		palavraComSinal(dados, 0, quantia0);
 		palavraComSinal(dados, 1, quantia1);
-		dados[2 * 32 + 31] = 1; // sqrtPrice qualquer, não nulo
+		dados[2 * 32 + 31] = 1; 
 		dados[3 * 32 + 31] = 1;
 
-		return new Log(Eventos.GERENTE_INFINITY_CL, List.of(Eventos.SWAP_INFINITY_CL, POOL_ID, palavra(EXECUTOR)), dados);
+		return new Log(Eventos.GERENTE_INFINITY_CL, List.of(Eventos.SWAP_INFINITY_CL, POOL_ID, palavra(EXECUTOR)),
+				dados);
 	}
 
 	private static Log transfer(byte[] token, byte[] de, byte[] para, BigInteger valor) {

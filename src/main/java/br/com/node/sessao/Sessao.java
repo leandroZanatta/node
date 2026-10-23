@@ -20,7 +20,6 @@ import br.com.node.vo.EnrResponse;
 import br.com.node.vo.FindNode;
 import br.com.node.vo.ForkId;
 import br.com.node.vo.MensagemDiscovery;
-import br.com.node.vo.MensagemEth;
 import br.com.node.vo.MensagemRlpx;
 import br.com.node.vo.Neighbors;
 import br.com.node.vo.NoRemoto;
@@ -34,8 +33,7 @@ import br.com.node.vo.UpgradeStatus;
 
 public final class Sessao {
 
-	private static final Duration VALIDADE_DO_VINCULO = Duration
-			.ofHours(Resources.inteiro("descoberta.vinculo.horas"));
+	private static final Duration VALIDADE_DO_VINCULO = Duration.ofHours(Resources.inteiro("descoberta.vinculo.horas"));
 
 	private static final int NOS_POR_BUSCA = Resources.inteiro("descoberta.nos.por.busca");
 	private static final int NOS_POR_PACOTE = Resources.inteiro("descoberta.nos.por.pacote");
@@ -50,14 +48,11 @@ public final class Sessao {
 	private final ConexaoUdp udp;
 	private final TabelaDeRotas tabela;
 
-	// Um registro de pedidos por conversa: o id de requisição só é único dentro dela.
 	private final Pedidos pedidos = new Pedidos();
 	private final NodeKey chave;
 
 	private final Vinculo vinculo = new Vinculo(VALIDADE_DO_VINCULO);
 
-	// Escritos pela thread de recepção ou pela de atendimento, lidos pela de rodada.
-	// São escritas de referência únicas, sem invariante entre elas.
 	private volatile Optional<ForkId> rede;
 	private volatile ConexaoTcp tcp;
 	private volatile Instant ultimaEntrada;
@@ -78,10 +73,6 @@ public final class Sessao {
 		return vinculo.valido(Instant.now());
 	}
 
-	// Três estados, e são diferentes: `null` é "ainda não perguntamos";
-	// `Optional.empty()` é "respondeu e não publica fork id"; um ForkId é a resposta.
-	// Colapsar os dois primeiros faria a rodada perguntar para sempre a quem já
-	// disse que não sabe.
 	public Optional<ForkId> rede() {
 		return rede == null ? Optional.empty() : rede;
 	}
@@ -90,8 +81,6 @@ public final class Sessao {
 		return rede != null;
 	}
 
-	// O handshake é do node: nos apresentamos e ficamos provados. Não bloqueia — a
-	// prova chega num datagrama, mais tarde, na thread de recepção.
 	public void handshake() {
 		vinculo.pingEnviado(enviar(new Ping(MensagemDiscovery.VERSAO, udp.origem(), endpointDoPar(), expiracao())));
 	}
@@ -134,8 +123,7 @@ public final class Sessao {
 		}
 
 		case Pong pong -> {
-			// A tabela é de quem provou endereço, não de quem foi mencionado. Quem sabe
-			// que a prova fechou é esta sessão, então é ela que se insere.
+
 			if (vinculo.pongRecebido(pong.pingHash(), agora)) {
 				tabela.inserir(no);
 			}
@@ -147,8 +135,8 @@ public final class Sessao {
 			yield List.of();
 		}
 
-		case Neighbors vizinhos -> vinculo.valido(agora) ? vizinhos.nos().stream().limit(NOS_POR_BUSCA).toList()
-				: List.of();
+		case Neighbors vizinhos ->
+			vinculo.valido(agora) ? vizinhos.nos().stream().limit(NOS_POR_BUSCA).toList() : List.of();
 
 		case EnrRequest ignorado -> List.of();
 
@@ -159,9 +147,6 @@ public final class Sessao {
 		};
 	}
 
-	// Abre a conversa eth com este par. BLOQUEIA: são um connect, um aperto ECIES e
-	// duas trocas de mensagem. Quem chama é quem escolheu ativar esta sessão, na
-	// thread dela — nunca o laço da descoberta.
 	public void ativar() {
 
 		ConexaoTcp nova = new ConexaoTcp(no, chave);
@@ -171,8 +156,6 @@ public final class Sessao {
 
 		statusDoPar = nova.esperar(Status.class);
 
-		// No eth/68 a BSC troca isto depois do Status, e quem não responde leva
-		// Disconnect por erro de subprotocolo. No eth/70 ela NÃO é trocada.
 		nova.enviar(new UpgradeStatus(false));
 
 		ultimaEntrada = Instant.now();
@@ -180,9 +163,6 @@ public final class Sessao {
 		tcp = nova;
 	}
 
-	// Viva é quem deu QUALQUER entrada de protocolo dentro da tolerância — não só
-	// bloco. Medir mudez por bloco derruba sessão saudável durante catch-up pesado,
-	// e foi um dos defeitos que encheu o pool anterior de zumbis.
 	public boolean ativa() {
 
 		Instant entrada = ultimaEntrada;
@@ -190,8 +170,6 @@ public final class Sessao {
 		return tcp != null && entrada != null && entrada.plus(TOLERANCIA_DE_MUDEZ).isAfter(Instant.now());
 	}
 
-	// Lê uma mensagem da conversa e responde o que o protocolo exige. Bloqueia até o
-	// timeout do socket; estourar o timeout é a morte sendo detectada.
 	public MensagemRlpx atender() {
 
 		ConexaoTcp aberta = tcp;
@@ -204,15 +182,10 @@ public final class Sessao {
 
 		ultimaEntrada = Instant.now();
 
-		// O leitor é o único que lê, então é ele que correlaciona. Quem pediu está
-		// bloqueado no próprio id, não no socket.
 		if (mensagem instanceof Correlacionada resposta) {
 			pedidos.entregar(resposta);
 		}
 
-		// O par manda Ping para saber se estamos vivos, e não responder é levar
-		// Disconnect 0x0b. O node anterior nunca respondeu, e atribuía as quedas a
-		// "peer inútil" porque a tabela de motivos estava errada.
 		if (mensagem instanceof PingP2p) {
 			aberta.enviar(new PongP2p());
 		}
@@ -224,9 +197,6 @@ public final class Sessao {
 		return mensagem;
 	}
 
-	// O que o par declarou de si ao abrir a conversa: a cabeça dele, a dificuldade
-	// total e o fork. É por aqui que se descobre a altura do topo — o Status traz o
-	// hash, e a altura vem do cabeçalho daquele hash.
 	public Optional<Status> statusDoPar() {
 		return Optional.ofNullable(statusDoPar);
 	}
@@ -244,27 +214,12 @@ public final class Sessao {
 		}
 	}
 
-	// Sem cursor ainda: anunciamos o genesis como cabeça e dificuldade zero. É o que
-	// faz um par nos tratar como leech, e muda quando o cursor existir.
 	private Status nossoStatus() {
 
-		return new Status(VERSAO_ETH, ParametrosBsc.REDE, BigInteger.ZERO, ParametrosBsc.GENESIS,
-				ParametrosBsc.GENESIS, Forks.doBsc(Long.MAX_VALUE, Instant.now().getEpochSecond()));
+		return new Status(VERSAO_ETH, ParametrosBsc.REDE, BigInteger.ZERO, ParametrosBsc.GENESIS, ParametrosBsc.GENESIS,
+				Forks.doBsc(Long.MAX_VALUE, Instant.now().getEpochSecond()));
 	}
 
-	// Pede e espera a resposta DAQUELE pedido, na thread de quem chama.
-	//
-	// EXIGE UM LEITOR VIVO na conversa — é ele que correlaciona. Quem chama `pedir` não
-	// lê o socket: se lesse, duas threads lendo o mesmo socket embaralhariam quadros. O
-	// leitor é da `Lotacao`, e é por isso que a frente só usa sessão ATIVA em vez de
-	// abrir a sua.
-	//
-	// O PRAZO É DE QUEM PEDE, porque só quem pede sabe o tamanho do que pediu. Um prazo único de
-	// 15 s servia a faixa de 16 blocos do catch-up e o bloco único da cabeça: medido na cabeça com
-	// leque 1, 13 prazos estourados travaram o cursor por 15 s cada, e a mediana foi 18.978 ms.
-	// LATÊNCIA REAL deste peer: média móvel do tempo de resposta de TODO pedido nosso (cabeçalho, recibo,
-	// corpo). Prazo estourado entra como o próprio prazo — lento e mudo pesam igual. Sobrevive a
-	// reconexões (a Sessao do nó é a mesma), então a lotação lembra quem é rápido.
 	private static final double PESO_DA_AMOSTRA = 0.2;
 	private volatile double latenciaMs = -1;
 	private volatile long amostrasDeLatencia;
@@ -283,12 +238,10 @@ public final class Sessao {
 
 	public static final int AMOSTRAS_PARA_JULGAR = 20;
 
-	// Meia-vida do "quem entrega primeiro" (ver `PlacarDePrimeiros`): 10 min.
 	private static final long MEIA_VIDA_PRIMEIROS_MS = 10 * 60_000L;
 	private final PlacarDePrimeiros primeiros = new PlacarDePrimeiros(MEIA_VIDA_PRIMEIROS_MS);
 	private volatile long ativadaEmMs;
 
-	// Chamado pelo observatório quando este par é o primeiro dos nossos a trazer um hash pendente.
 	public void anotarPrimeiroEntregue() {
 		primeiros.anotar(System.currentTimeMillis());
 	}
@@ -297,13 +250,10 @@ public final class Sessao {
 		return primeiros.valor(System.currentTimeMillis());
 	}
 
-	// Há quanto tempo a conversa está aberta (0 se não está). Troca só derruba quem já se provou.
 	public long ativaHaMs() {
 		return ativa() && ativadaEmMs > 0 ? System.currentTimeMillis() - ativadaEmMs : 0;
 	}
 
-	// A melhor estimativa de distância a este peer, em ms: a latência dos nossos pedidos (mede o que
-	// usamos — respostas eth) quando já há amostras; senão o ping UDP da descoberta; senão, a pior.
 	public double distancia() {
 
 		if (amostrasDeLatencia >= AMOSTRAS_PARA_JULGAR) {
@@ -330,9 +280,6 @@ public final class Sessao {
 
 		pedidos.registrar(pedido.requisicaoId());
 
-		// Escrita que falha é conexão MORTA, não pedido azarado: derruba já. CICATRIZ de 24/09: a sessão
-		// seguia "ativa" até o prazo de mudez vencer, e nesse meio-tempo a frente a escolheu 1.293.561
-		// vezes em 3 minutos ("Pipe quebrado") — um laço quente num socket fechado.
 		try {
 			aberta.enviar(pedido);
 		} catch (PeerException escrita) {
@@ -347,9 +294,7 @@ public final class Sessao {
 			anotarLatencia((System.nanoTime() - inicio) / 1_000_000.0);
 			return veio;
 		} catch (PeerException falhou) {
-			// Prazo estourado só é DISTÂNCIA em pedido de bloco (cabeçalho, recibo), que o peer tem de ter.
-			// Corpo de tx que não vem é o peer que já não tem a tx — contá-lo aqui (medido em 24/09 12:12)
-			// levou a "latência" dos ativos a ~1.200 ms com as respostas reais em ~500 ms.
+
 			boolean deBloco = resposta != br.com.node.vo.PooledTransactions.class;
 			if (deBloco && falhou.getMessage() != null && falhou.getMessage().contains("não chegou")) {
 				anotarLatencia(prazoMs);
@@ -383,9 +328,6 @@ public final class Sessao {
 		}
 	}
 
-	// Quem escolhe o transporte é o TIPO do que se quer dizer, resolvido pelo
-	// compilador. Mensagem de descoberta sai pela conexão UDP porque é disso que ela
-	// é feita — não porque alguém chamou um método com nome de transporte.
 	private byte[] enviar(MensagemDiscovery mensagem) {
 		return udp.enviar(mensagem);
 	}

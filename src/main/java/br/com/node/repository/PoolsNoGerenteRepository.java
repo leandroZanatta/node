@@ -11,11 +11,6 @@ import java.util.OptionalLong;
 import br.com.node.catalogo.ChaveDaPool;
 import br.com.node.repository.postgres.Postgres;
 
-// O `PoolKey` das pools de gerente, e até onde a varredura de cada gerente já foi.
-//
-// Grava em LOTE (a varredura traz dezenas de milhares por faixa de 50 mil blocos) e busca UMA (o node
-// só pede a chave da pool que mexeu). A chave é imutável — a pool nasce uma vez —, então regravar é
-// idempotente e o conflito não muda nada.
 public final class PoolsNoGerenteRepository {
 
 	private final Postgres banco;
@@ -73,8 +68,6 @@ public final class PoolsNoGerenteRepository {
 		});
 	}
 
-	// A faixa e o marco vão JUNTOS, na mesma transação: marco gravado sem as chaves da faixa seria
-	// varredura que "passou" por pools que nunca entraram, e a retomada pularia elas para sempre.
 	public void gravarFaixa(byte[] gerente, List<ChaveDaPool> lote, long ate) {
 
 		banco.executar(conexao -> {
@@ -86,8 +79,8 @@ public final class PoolsNoGerenteRepository {
 
 				gravar(conexao, lote);
 
-				try (PreparedStatement comando = conexao.prepareStatement(
-						"insert into varredura_de_gerente (gerente, ate) values (?, ?) "
+				try (PreparedStatement comando = conexao
+						.prepareStatement("insert into varredura_de_gerente (gerente, ate) values (?, ?) "
 								+ "on conflict (gerente) do update set ate = greatest(varredura_de_gerente.ate, excluded.ate)")) {
 					comando.setBytes(1, gerente);
 					comando.setLong(2, ate);

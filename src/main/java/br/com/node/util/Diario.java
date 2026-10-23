@@ -69,16 +69,14 @@ public final class Diario {
 			try (InputStream entrada = Files.newInputStream(externo)) {
 				propriedades.load(entrada);
 			} catch (IOException e) {
-				throw new IllegalStateException("Falha lendo " + externo.toAbsolutePath() + ": " + e.getMessage(),
-						e);
+				throw new IllegalStateException("Falha lendo " + externo.toAbsolutePath() + ": " + e.getMessage(), e);
 			}
 		}
 
 		String diretorio = System.getProperty("node.log.dir", "logs").trim();
 
 		if (!diretorio.isEmpty()) {
-			propriedades.setProperty("java.util.logging.FileHandler.pattern",
-					diretorio + "/node-%g.log");
+			propriedades.setProperty("java.util.logging.FileHandler.pattern", diretorio + "/node-%g.log");
 		}
 
 		String nivel = System.getProperty("node.log.nivel", "").trim();
@@ -100,11 +98,6 @@ public final class Diario {
 			throw new IllegalStateException("Não foi possível criar diretório de logs: " + e.getMessage(), e);
 		}
 
-		// Os HANDLERS são criados aqui, e não pelo LogManager. CICATRIZ de 24/09: com `handlers=...` na
-		// configuração, o LogManager instancia as classes por REFLEXÃO — e no binário nativo o FileHandler
-		// não estava registrado: "Can't load log handler java.util.logging.FileHandler", o console seguia
-		// e o arquivo de log nunca nascia. Construídos à mão, não há reflexão, e JVM e nativo são iguais.
-		// O LogManager recebe o resto (níveis por logger), sem `handlers` e sem formatter por nome.
 		Properties paraOLogManager = new Properties();
 		paraOLogManager.putAll(propriedades);
 		paraOLogManager.remove("handlers");
@@ -136,9 +129,11 @@ public final class Diario {
 		try {
 			FileHandler arquivo = new FileHandler(
 					propriedades.getProperty("java.util.logging.FileHandler.pattern", "logs/node-%g.log"),
-					Integer.parseInt(propriedades.getProperty("java.util.logging.FileHandler.limit", "10485760").trim()),
+					Integer.parseInt(
+							propriedades.getProperty("java.util.logging.FileHandler.limit", "10485760").trim()),
 					Integer.parseInt(propriedades.getProperty("java.util.logging.FileHandler.count", "5").trim()),
-					Boolean.parseBoolean(propriedades.getProperty("java.util.logging.FileHandler.append", "true").trim()));
+					Boolean.parseBoolean(
+							propriedades.getProperty("java.util.logging.FileHandler.append", "true").trim()));
 			arquivo.setLevel(nivelDe(propriedades, "java.util.logging.FileHandler.level", Level.ALL));
 			arquivo.setFormatter(new java.util.logging.SimpleFormatter());
 			raiz.addHandler(arquivo);
@@ -148,9 +143,8 @@ public final class Diario {
 
 		ligado = true;
 
-		Logger.getLogger(Diario.class.getName())
-				.info(() -> "diário ligado: console + " + propriedades
-						.getProperty("java.util.logging.FileHandler.pattern"));
+		Logger.getLogger(Diario.class.getName()).info(
+				() -> "diário ligado: console + " + propriedades.getProperty("java.util.logging.FileHandler.pattern"));
 	}
 
 	private static Level nivelDe(Properties propriedades, String chave, Level padrao) {

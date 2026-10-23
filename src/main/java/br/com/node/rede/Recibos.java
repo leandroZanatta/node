@@ -10,12 +10,6 @@ import br.com.node.rlp.RlpBytes;
 import br.com.node.rlp.RlpItem;
 import br.com.node.vo.Log;
 
-// Extrai os logs de um bloco de recibos.
-//
-// Um recibo legado é lista RLP `[status, gasAcumulado, bloom, logs]`. Um recibo
-// tipado (EIP-2718) viaja como CADEIA de bytes cujo conteúdo é
-// `tipo || rlp([status, gasAcumulado, bloom, logs])` — tratar as duas formas como
-// uma só perde todo recibo tipado em silêncio, e hoje eles são a maioria.
 public final class Recibos {
 
 	private static final int CAMPO_DOS_LOGS = 3;
@@ -23,10 +17,6 @@ public final class Recibos {
 	private Recibos() {
 	}
 
-	// Os logs agrupados POR TRANSAÇÃO, e o agrupamento não é cosmético: a assinatura de
-	// uma arbitragem só existe no nível da transação — somando o fluxo líquido por token
-	// dentro dela, nenhum fica negativo e exatamente um fica positivo. Achatar o bloco
-	// num rio de logs apaga justamente o limite onde essa conta fecha.
 	public static List<List<Log>> porTransacao(byte[] cruDoBloco) {
 
 		List<List<Log>> porRecibo = new ArrayList<>();

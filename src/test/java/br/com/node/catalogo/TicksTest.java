@@ -19,14 +19,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import br.com.node.nucleo.MapaDeTicks;
 import br.com.node.sincronizacao.VarredorDeGerentes;
 
-import br.com.node.nucleo.MapaDeTicks;
-
-// A FOTO dos ticks contra a cadeia (roda só com `RPC_LOGS`): a leitura em lote pelo Multicall3 tem de dar, tick
-// a tick, o mesmo `liquidityNet` que a leitura direta do contrato — nas três fontes (V3 pela pool, V4 pelo
-// `StateView`, Infinity pelo gerente). É o que prova a codificação do lote, as palavras e bits do bitmap e a
-// posição do `liquidityNet` na resposta.
 class TicksTest {
 
 	private static final HttpClient HTTP = HttpClient.newHttpClient();
@@ -56,7 +51,8 @@ class TicksTest {
 		Optional<String> url = VarredorDeGerentes.urlDoAmbiente();
 		assumeTrue(url.isPresent(), "sem RPC_LOGS");
 
-		String bloco = "0x" + Long.toHexString(Long.decode(rpc(url.get(), "eth_blockNumber", new JsonArray()).getAsString()) - 3);
+		String bloco = "0x"
+				+ Long.toHexString(Long.decode(rpc(url.get(), "eth_blockNumber", new JsonArray()).getAsString()) - 3);
 		int tick = tickCorrente(url.get(), pool, gerente, bloco);
 
 		Ticks ticks = new Ticks((para, dados, b) -> ethCall(url.get(), para, dados, b));
@@ -65,28 +61,34 @@ class TicksTest {
 		assertTrue(mapa.tamanho() > 0, "a foto não achou tick inicializado nenhum");
 		assertTrue(mapa.tickMinimo() <= tick && tick <= mapa.tickMaximo(), "a faixa tem de cobrir o tick corrente");
 
-		// Três ticks da foto, conferidos um a um contra a leitura direta: o primeiro, o do meio e o último.
+		
+		
 		Integer[] chaves = mapa.liquidas().keySet().toArray(new Integer[0]);
 		for (int indice : new int[] { 0, chaves.length / 2, chaves.length - 1 }) {
 			int t = chaves[indice];
-			assertEquals(liquidaDireta(url.get(), pool, gerente, t, bloco), mapa.liquida(t), "liquidityNet do tick " + t);
+			assertEquals(liquidaDireta(url.get(), pool, gerente, t, bloco), mapa.liquida(t),
+					"liquidityNet do tick " + t);
 		}
 	}
 
 	private static int tickCorrente(String url, byte[] pool, byte[] gerente, String bloco) throws Exception {
 
-		String resposta = gerente == null ? ethCall(url, HexFormat.of().formatHex(pool), "3850c7bd", bloco).orElseThrow()
-				: ethCall(url, gerente == Eventos.GERENTE_V4 ? "d13dd3d6e93f276fafc9db9e6bb47c1180aee0c4"
-						: HexFormat.of().formatHex(Eventos.GERENTE_INFINITY_CL),
+		String resposta = gerente == null
+				? ethCall(url, HexFormat.of().formatHex(pool), "3850c7bd", bloco).orElseThrow()
+				: ethCall(url,
+						gerente == Eventos.GERENTE_V4 ? "d13dd3d6e93f276fafc9db9e6bb47c1180aee0c4"
+								: HexFormat.of().formatHex(Eventos.GERENTE_INFINITY_CL),
 						"c815641c" + HexFormat.of().formatHex(pool), bloco).orElseThrow();
 		String semPrefixo = resposta.substring(2);
 
 		return new BigInteger(HexFormat.of().parseHex(semPrefixo.substring(64, 128))).intValue();
 	}
 
-	private static BigInteger liquidaDireta(String url, byte[] pool, byte[] gerente, int tick, String bloco) throws Exception {
+	private static BigInteger liquidaDireta(String url, byte[] pool, byte[] gerente, int tick, String bloco)
+			throws Exception {
 
-		String palavra = String.format("%064x", BigInteger.valueOf(tick).and(BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE)));
+		String palavra = String.format("%064x",
+				BigInteger.valueOf(tick).and(BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE)));
 		String resposta;
 
 		if (gerente == null) {
@@ -125,9 +127,10 @@ class TicksTest {
 		corpo.addProperty("method", metodo);
 		corpo.add("params", parametros);
 
-		HttpResponse<String> resposta = HTTP.send(HttpRequest.newBuilder(URI.create(url))
-				.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(corpo.toString()))
-				.build(), HttpResponse.BodyHandlers.ofString());
+		HttpResponse<String> resposta = HTTP.send(
+				HttpRequest.newBuilder(URI.create(url)).header("Content-Type", "application/json")
+						.POST(HttpRequest.BodyPublishers.ofString(corpo.toString())).build(),
+				HttpResponse.BodyHandlers.ofString());
 
 		JsonObject json = JsonParser.parseString(resposta.body()).getAsJsonObject();
 		if (!json.has("result")) {

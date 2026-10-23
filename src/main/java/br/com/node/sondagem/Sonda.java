@@ -12,25 +12,6 @@ import java.util.concurrent.ConcurrentMap;
 
 import br.com.node.util.Keccak;
 
-// Mede, na cadeia, o imposto que NÓS pagaríamos num token — a venda e a compra.
-//
-// Por que existe: o imposto não vem em log. O `Impostos` do catálogo compara `Swap` com `Transfer` do
-// mesmo recibo, e isso mede quem passa por ROUTER — e token taxado isenta router e par, é assim que se
-// mantém negociável. O nosso executor transfere direto para o par, como endereço qualquer, e paga o
-// que os isentos não pagam. MEDIDO: o BlackSwan cobra 1300 bps de quem não é isento, e o
-// `Swap`-contra-`Transfer` dizia zero para ele — foi o buraco que deixou o YFSX passar.
-//
-// Como mede: `eth_call` com ESTADO FORJADO. Injeta o código de uma sonda num endereço, dá saldo a ela
-// escrevendo direto no armazenamento do token, manda transferir (venda) ou faz o swap do par (compra),
-// e lê quanto chegou. Roda sobre o estado real, não altera nada, custa zero.
-//
-// Escrever o saldo exige saber em que slot o mapping mora, e isso não se adivinha: lê-se. Pega-se um
-// detentor com saldo, e procura-se o slot cujo `keccak(detentor . slot)` guarda esse mesmo saldo. É
-// imutável, então vale uma vez por token.
-//
-// Validada contra a cicatriz antes de servir de fonte: `SondaDeImpostoTest` exige que ela reproduza os
-// 1300 bps do BlackSwan e o zero do WBNB na cadeia de hoje. É a mesma disciplina do `Multicall3Test`
-// para a conferência de estado — o instrumento se prova contra verdade conhecida antes de julgar.
 public final class Sonda {
 
 	private static final String ENDERECO_DA_SONDA = "00000000000000000000000000000000000005a1";
@@ -43,27 +24,18 @@ public final class Sonda {
 	private static final byte[] TOKEN1 = seletor("token1()");
 	private static final byte[] RESERVAS = seletor("getReserves()");
 
-	// Até que slot varrer o mapping de saldos. 20 cobre os layouts comuns; o old subiu para 120 e mediu
-	// zero acima de ~30, então 20 erra para o lado de "não achei" (que pede outra âncora), nunca para o
-	// de gravar imposto de um token que não soube ler.
 	private static final int SLOTS = 20;
 
-	// A saída da compra é pedida com folga de taxa (10%) de propósito: o que se mede é o imposto do
-	// token, e uma saída no limite do invariante faria a recusa vir da CURVA, que é outra pergunta.
 	private static final BigInteger FOLGA_DE_TAXA = BigInteger.valueOf(9_000);
 
 	private final Cadeia cadeia;
 
-	// Slot do mapping de saldos, por token. Imutável na cadeia: guarda-se entre medições.
 	private final ConcurrentMap<String, Integer> slots = new ConcurrentHashMap<>();
 
 	public Sonda(Cadeia cadeia) {
 		this.cadeia = cadeia;
 	}
 
-	// O imposto de VENDA na altura dada: transferir o token para o `destino`. Destino sendo um par
-	// registrado é o que os tokens taxam como venda; destino qualquer costuma ser de graça, e medir
-	// contra ele subestima. O `detentor` é uma âncora com saldo, para achar o slot.
 	public Medida venda(byte[] token, byte[] destino, byte[] detentor, long altura) {
 
 		Optional<Integer> slot = slotDe(token, detentor, altura);
@@ -79,9 +51,6 @@ public final class Sonda {
 		return retido(cadeia.chamar(hex(ENDERECO_DA_SONDA), hex(dados), estado, altura), valor);
 	}
 
-	// O imposto de COMPRA: o par nos envia o token, via swap. Não dá para medir com transferência —
-	// quem envia é o par, e nós não mandamos nele —, então faz-se o swap de verdade, sobrescrevendo o
-	// saldo do par no token de ENTRADA para o swap estar pago.
 	public Medida compra(byte[] pool, byte[] token, long altura) {
 
 		Optional<byte[]> reservas = ler(pool, RESERVAS, altura);
@@ -201,7 +170,8 @@ public final class Sonda {
 			return Medida.Motivo.SEM_RESPOSTA;
 		}
 
-		return new BigInteger(1, saldo.get()).signum() == 0 ? Medida.Motivo.SEM_DETENTOR : Medida.Motivo.SLOT_NAO_ACHADO;
+		return new BigInteger(1, saldo.get()).signum() == 0 ? Medida.Motivo.SEM_DETENTOR
+				: Medida.Motivo.SLOT_NAO_ACHADO;
 	}
 
 	private String comSaldo(byte[] token, String detentor, int slot, BigInteger valor) {

@@ -1,18 +1,5 @@
 package br.com.node.ensaio;
 
-// Uma perna da rota, na forma que o contrato `Executor` espera.
-//
-// É a tradução do que decidimos para o que se executa, e cada campo existe porque
-// a falta dele já custou dinheiro em algum lugar (herdado do old):
-//  - `entra` e `sai` dão o SENTIDO. A pool não o guarda — ela tem `token0` e
-//    `token1` — e trocá-los produz uma rota válida que anda para o lado errado;
-//  - `taxaBps` vem por parâmetro porque presumir 30 para todo mundo foi o erro
-//    que o próprio contrato documenta ter custado caro. Pancake cobra 25, Biswap
-//    10, e a conta do lucro mínimo depende disso;
-//  - `tipo` escolhe a matemática e a forma de pagar. A mesma rota com a curva
-//    errada erra por ordens de grandeza, não por margem;
-//  - `chave` só existe na pool de GERENTE (V4, Infinity CL): o `PoolKey` em ABI,
-//    porque lá `pool` é o gerente de todas e a pool mesma é a chave.
 public record Salto(String pool, String entra, String sai, int tipo, int taxaBps, byte[] chave) {
 
 	/** Os tipos como o contrato os numera. */
@@ -32,9 +19,9 @@ public record Salto(String pool, String entra, String sai, int tipo, int taxaBps
 		}
 
 		/*
-		 * O contrato lê a taxa num uint16. Acima disso o valor daria a volta e
-		 * viraria outro número — uma taxa pequena onde havia uma grande, que passa
-		 * pela trava de lucro por baixo.
+		 * O contrato lê a taxa num uint16. Acima disso o valor daria a volta e viraria
+		 * outro número — uma taxa pequena onde havia uma grande, que passa pela trava
+		 * de lucro por baixo.
 		 */
 		if (taxaBps < 0 || taxaBps > 65_535) {
 			throw new IllegalArgumentException("taxa fora do uint16: " + taxaBps);
@@ -51,7 +38,6 @@ public record Salto(String pool, String entra, String sai, int tipo, int taxaBps
 		}
 	}
 
-	// As pools de endereço, como sempre foram.
 	public Salto(String pool, String entra, String sai, boolean v3, int taxaBps) {
 		this(pool, entra, sai, v3 ? TIPO_V3 : TIPO_V2, taxaBps, new byte[0]);
 	}

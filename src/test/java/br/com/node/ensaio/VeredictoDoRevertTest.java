@@ -79,12 +79,12 @@ class VeredictoDoRevertTest {
 		VereditorDoContrato vereditor = new VereditorDoContrato(new RpcDoEnsaio(), quarentena, new Impostos());
 		byte[] chave = new byte[32];
 		chave[31] = 1;
-		Salto infinity = new Salto("11".repeat(20), "22".repeat(20), "33".repeat(20),
-				Salto.TIPO_INFINITY_CL, 0, chave);
+		Salto infinity = new Salto("11".repeat(20), "22".repeat(20), "33".repeat(20), Salto.TIPO_INFINITY_CL, 0, chave);
 
 		assertTrue(VereditorDoContrato.falhaNaChamada("0x033d7ade"));
 		vereditor.condenarGerentesSeNaoQuitado(List.of(infinity), "033d7ade", "0x033d7ade");
-		assertTrue(quarentena.livre(Keccak.hash(chave)), "sem trace, não temos evidência para atribuir a falha ao gerente");
+		assertTrue(quarentena.livre(Keccak.hash(chave)),
+				"sem trace, não temos evidência para atribuir a falha ao gerente");
 		vereditor.close();
 	}
 
@@ -107,7 +107,8 @@ class VeredictoDoRevertTest {
 				"declara 999 bytes de frase e não tem nenhum");
 	}
 
-	// Monta o `data` de um `Error(string)`: seletor + offset + comprimento + bytes com padding.
+	
+	
 	private static String erroComTexto(String frase) {
 
 		byte[] bytes = frase.getBytes(StandardCharsets.UTF_8);
@@ -117,7 +118,8 @@ class VeredictoDoRevertTest {
 		return "08c379a0" + palavra(32) + palavra(bytes.length) + corpo;
 	}
 
-	// Palavra de 32 bytes em hex, sem depender de locale nem de formatar número grande.
+	
+	
 	private static String palavra(long valor) {
 		return "0".repeat(64 - Long.toHexString(valor).length()) + Long.toHexString(valor);
 	}

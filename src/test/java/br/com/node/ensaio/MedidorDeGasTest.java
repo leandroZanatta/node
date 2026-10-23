@@ -17,7 +17,8 @@ class MedidorDeGasTest {
 		List<Integer> fatores = new ArrayList<>();
 		medidor.aoCalibrar(fatores::add);
 
-		// Gastamos metade do estimado, em cinco amostras: o fator sai só na quinta, e é 500.
+		
+		
 		for (int i = 0; i < 4; i++) {
 			medidor.registrar(BigInteger.valueOf(100), BigInteger.valueOf(50), true);
 		}

@@ -12,24 +12,10 @@ import java.util.stream.Collectors;
 
 import br.com.node.vo.SwapPendente;
 
-// O caderno de layouts: acumula o que o bloco rotulou, aprende o formato de cada contrato e passa a ler
-// local — sem RPC. É a peça que faz o sistema APRENDER DURANTE A EXECUÇÃO: cada bloco fechado é uma
-// fornada de amostras, e cada amostra é de graça, porque o gabarito é a própria cadeia.
-//
-// E mantém a regra VIVA, que é o que a separa de uma tabela escrita à mão: toda transação que o bloco
-// fecha é uma conferência do que a regra DECLAROU contra o que a cadeia MOVEU. Regra que para de
-// acertar expira, e o contrato volta a ser aprendido do zero — porque bot troca de contrato, de formato
-// e de rota, e uma regra velha projetaria com confiança sobre um mundo que já mudou.
-//
-// O `ler` é o caminho QUENTE (uma vez por transação pendente) e por isso não toma lock: é um lookup em
-// mapa concorrente. Quem escreve (anotar/revisar/conferir) roda na thread do bloco e sincroniza.
 public final class CadernoDeLayouts {
 
-	// Abaixo disto não se julga: uma ou duas conferências não separam azar de regra errada.
 	private static final int MINIMO_DE_CONFERENCIAS = 2;
 
-	// Memória limitada por contrato: o formato de HOJE é o que importa, e guardar séculos de histórico
-	// faria a regra descrever um mundo que não existe mais.
 	private static final int TETO_DE_CONTRATOS = 4_096;
 
 	private final int minimo;
@@ -53,9 +39,6 @@ public final class CadernoDeLayouts {
 		this.guardados = guardados;
 	}
 
-	// Lê uma transação pendente pelo layout do contrato, se houver. Vazio quando o contrato ainda não
-	// foi aprendido, quando o formato não fecha, ou quando ele nunca expõe o montante — os três casos
-	// que mandam a transação para a simulação em vez de inventar projeção.
 	public Optional<SwapPendente> ler(byte[] destino, byte[] calldata) {
 
 		LayoutAprendido layout = layouts.get(LayoutAprendido.chave(destino, calldata));
@@ -69,9 +52,9 @@ public final class CadernoDeLayouts {
 			amostras.clear();
 		}
 
-		List<ExemploDeMovimento> doContrato = amostras
-				.computeIfAbsent(LayoutAprendido.chave(exemplo.anunciada().destino(), exemplo.anunciada().calldata()),
-						chave -> new ArrayList<>());
+		List<ExemploDeMovimento> doContrato = amostras.computeIfAbsent(
+				LayoutAprendido.chave(exemplo.anunciada().destino(), exemplo.anunciada().calldata()),
+				chave -> new ArrayList<>());
 
 		if (doContrato.size() >= guardados) {
 			doContrato.remove(0);
@@ -80,8 +63,6 @@ public final class CadernoDeLayouts {
 		doContrato.add(exemplo);
 	}
 
-	// Reaprende quem já tem amostras. Contrato que ainda não atingiu o consenso continua sem layout — e
-	// continua sem ele de propósito: regra nascida de duas amostras é palpite com cara de regra.
 	public synchronized void revisar() {
 
 		for (Map.Entry<String, List<ExemploDeMovimento>> amostra : amostras.entrySet()) {
@@ -94,8 +75,6 @@ public final class CadernoDeLayouts {
 		}
 	}
 
-	// A conferência contra o gabarito: o que a regra declarou, contra o que o bloco moveu de verdade.
-	// Chamado para toda transação que foi incluída e que nós tínhamos anunciado.
 	public synchronized void conferir(byte[] destino, byte[] calldata, List<byte[]> tokensMovidosNoBloco) {
 
 		String chave = LayoutAprendido.chave(destino, calldata);
@@ -121,8 +100,6 @@ public final class CadernoDeLayouts {
 		}
 	}
 
-	// A conferência EM ORDEM: o caminho que a regra lê (com direção) e as pools que ela sabe, contra as
-	// trocas que a cadeia fez. A de conjunto (acima) aceitava caminho invertido e token repetido.
 	public synchronized void conferir(byte[] destino, byte[] calldata, List<br.com.node.nucleo.Perna> reais,
 			boolean ordenada) {
 
@@ -157,14 +134,17 @@ public final class CadernoDeLayouts {
 		}
 	}
 
-	/** Quantos contratos o caderno lê hoje — para o relatório dizer que o aprendizado produziu algo. */
+	/**
+	 * Quantos contratos o caderno lê hoje — para o relatório dizer que o
+	 * aprendizado produziu algo.
+	 */
 	public int aprendidos() {
 		return layouts.size();
 	}
 
 	/**
-	 * O placar por contrato@método: <code>[declarados, confirmados]</code>. É a acurácia viva, medida
-	 * contra o bloco, e não contra nós mesmos.
+	 * O placar por contrato@método: <code>[declarados, confirmados]</code>. É a
+	 * acurácia viva, medida contra o bloco, e não contra nós mesmos.
 	 */
 	public Map<String, long[]> placar() {
 
@@ -175,8 +155,6 @@ public final class CadernoDeLayouts {
 		return copia;
 	}
 
-	// Conjunto, não ordem: a ordem que o leitor devolve é a da calldata, e quem valida se ela é um
-	// caminho possível é o mapa de pools adiante — a conferência aqui é sobre QUAIS tokens se moveu.
 	private static boolean mesmoConjunto(List<byte[]> um, List<byte[]> outro) {
 
 		if (outro == null) {

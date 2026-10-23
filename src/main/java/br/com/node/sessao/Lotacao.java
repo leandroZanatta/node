@@ -37,15 +37,8 @@ public final class Lotacao implements Closeable {
 
 	private static final Duration RODADA = Duration.ofSeconds(Resources.inteiro("rlpx.rodada.segundos"));
 
-	// Penalidade CURTA e NÃO persistida. O projeto anterior gravava backoff
-	// exponencial de 30 s a 30 min na tabela de peers para qualquer queda, e uma
-	// rodada ruim barrava um par bom por meia hora — com o pool vazio, o disjuntor
-	// era o que impedia a recuperação.
 	private static final Duration PENALIDADE = Duration.ofSeconds(Resources.inteiro("rlpx.penalidade.segundos"));
 
-	// Com ~20% de aceitação medida (10 de 12 recusas por "peers demais"), tentar
-	// exatamente o que falta nunca preenche. O excesso é a taxa de recusa, não
-	// otimismo.
 	private static final int EXCESSO = 4;
 
 	private final Sessoes sessoes;
@@ -54,15 +47,11 @@ public final class Lotacao implements Closeable {
 	private final Set<String> tentando = ConcurrentHashMap.newKeySet();
 	private final Map<String, Instant> penalizados = new ConcurrentHashMap<>();
 
-	// O roteiro: qual código a rede manda que ainda não sabemos ler, e quantas vezes.
 	private final Map<Integer, Long> naoTratadas = new ConcurrentHashMap<>();
 
-	// Quem aproveita o bloco inteiro: com a header na mão, a frente pede só o recibo, e ao par que o
-	// mandou (ver `Frente.adiantar`). Escrito uma vez na montagem, lido pelas threads de atendimento.
 	private volatile BiConsumer<Sessao, NewBlock> aoReceberBloco = (sessao, bloco) -> {
 	};
 
-	// O mesmo anúncio, com QUEM anunciou: quem anuncia tem o bloco, e é a ele que se pede o recibo.
 	private volatile BiConsumer<Sessao, AnuncioBloco> aoAnunciarDe = (sessao, anuncio) -> {
 	};
 
@@ -74,16 +63,8 @@ public final class Lotacao implements Closeable {
 		this.aoReceberBloco = aoReceberBloco;
 	}
 
-	// POR QUE cada conversa caiu, separado por fase. Existe para responder uma pergunta antes
-	// de mudar o `Status`: o pool para em 8 a 11 de 25 porque parecemos leech, ou por outra
-	// coisa? "Peers demais" na abertura, "peer inútil" na conversa e mudez pedem três
-	// consertos diferentes — e mentir no protocolo para consertar o motivo errado seria o pior
-	// dos três.
 	private final Map<String, Long> quedas = new ConcurrentHashMap<>();
 
-	// O orçamento de threads é explícito: uma de rodada, TENTATIVAS de abertura (que
-	// bloqueiam no connect), e uma de leitura por conversa ativa. Nada de pool sem
-	// teto, e nada de thread por par conhecido — só por par ATIVO.
 	private final ScheduledExecutorService laco = Executors
 			.newSingleThreadScheduledExecutor(tarefa -> new Thread(tarefa, "lotacao"));
 
@@ -98,16 +79,12 @@ public final class Lotacao implements Closeable {
 		this.criterio = criterio;
 	}
 
-	// O ouvinte do anúncio entra aqui e desce por parâmetro até o leitor: quem lê a conversa é
-	// quem vê o `NewBlockHashes` chegar, e ele não pode segurar o anúncio até alguém perguntar.
-	// A cabeça chega empurrada, de graça, no instante em que o bloco existe.
 	public void iniciar(Consumer<AnuncioBloco> aoAnunciar) {
 		iniciar(aoAnunciar, mensagem -> {
 		});
 	}
 
-	public void iniciar(Consumer<AnuncioBloco> aoAnunciar,
-			Consumer<NewPooledTransactionHashes> aoAnunciarTransacoes) {
+	public void iniciar(Consumer<AnuncioBloco> aoAnunciar, Consumer<NewPooledTransactionHashes> aoAnunciarTransacoes) {
 		iniciar(aoAnunciar, (sessao, mensagem) -> aoAnunciarTransacoes.accept(mensagem), (sessao, mensagem) -> {
 		});
 	}
@@ -115,8 +92,8 @@ public final class Lotacao implements Closeable {
 	public void iniciar(Consumer<AnuncioBloco> aoAnunciar,
 			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
 			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
-		laco.scheduleWithFixedDelay(() -> rodada(aoAnunciar, aoAnunciarTransacoes, aoReceberTransacoes), 0, RODADA.toMillis(),
-				TimeUnit.MILLISECONDS);
+		laco.scheduleWithFixedDelay(() -> rodada(aoAnunciar, aoAnunciarTransacoes, aoReceberTransacoes), 0,
+				RODADA.toMillis(), TimeUnit.MILLISECONDS);
 	}
 
 	public long ativas() {
@@ -141,9 +118,6 @@ public final class Lotacao implements Closeable {
 		sessoes.todas().forEach(Sessao::desativar);
 	}
 
-	// A reposição é do MESMO laço que detecta a morte. Não existe caminho em que a
-	// lotação caia e ninguém tenha a tarefa de recompô-la — foi o que congelou o
-	// pool anterior em 25 zumbis.
 	private void rodada(Consumer<AnuncioBloco> aoAnunciar,
 			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
 			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
@@ -173,11 +147,6 @@ public final class Lotacao implements Closeable {
 
 		Instant agora = Instant.now();
 
-		// PERTO PRIMEIRO. Antes era a ordem em que o node conheceu o nó — um peer do outro lado do mundo
-		// entrava tão cedo quanto um vizinho. A ordem agora é a latência já medida desse peer (conversas
-		// anteriores); sem ela, o ping UDP da descoberta; sem nenhum dos dois, por último.
-		// QUEM ENTREGA PRIMEIRO antes de tudo: o pendente que um par traz cedo é o que nos põe na frente do bloco.
-		// Empate (quem nunca entregou primeiro, o que é a maioria) cai na distância, como antes.
 		return sessoes.todas().stream().filter(sessao -> !sessao.ativa())
 				.filter(sessao -> !tentando.contains(sessao.no().idHex()))
 				.filter(sessao -> livreDePenalidade(sessao, agora)).filter(Sessao::pronta)
@@ -187,10 +156,6 @@ public final class Lotacao implements Closeable {
 				.toList();
 	}
 
-	// RODÍZIO DOS QUE NÃO ENTREGAM PRIMEIRO. Mesma cadência do rodízio dos lentos (um por TROCA_A_CADA). Troca o
-	// ATIVO com menos entregas primeiro — e que já tem tempo de casa, para não derrubar quem acabou de entrar —
-	// por um candidato que entrega CLARAMENTE mais: mais que o dobro, mais um ponto. Sem essa folga, dois
-	// pares quase iguais trocariam de lugar a cada rodada.
 	private static final long TEMPO_DE_CASA_MS = 10 * 60_000L;
 	private static final double GANHO_MINIMO_PRIMEIROS = 1.0;
 
@@ -216,7 +181,8 @@ public final class Lotacao implements Closeable {
 		ultimaTroca = agora;
 		trocadosPorPrimeiro.incrementAndGet();
 		penalizados.put(pior.no().idHex(), agora.plus(PENALIDADE_DE_LENTO));
-		LOG.info(() -> String.format("lotação: troco o peer que menos entrega primeiro (%.2f) por um que entrega mais (%.2f): %s",
+		LOG.info(() -> String.format(
+				"lotação: troco o peer que menos entrega primeiro (%.2f) por um que entrega mais (%.2f): %s",
 				pior.primeirosEntregues(), melhor.primeirosEntregues(), pior.no()));
 		pior.desativar();
 		return true;
@@ -224,10 +190,6 @@ public final class Lotacao implements Closeable {
 
 	private final java.util.concurrent.atomic.AtomicLong trocadosPorPrimeiro = new java.util.concurrent.atomic.AtomicLong();
 
-	// RODÍZIO DOS LENTOS. Com as vagas cheias, um peer lento ocupava a vaga para sempre (só saía caindo).
-	// A cada TROCA_A_CADA, se o ativo mais lento está acima de LENTO_X da mediana dos ativos E acima de
-	// LENTO_MINIMO_MS, ele sai para um candidato mais perto entrar. Um por vez: trocar muitos de uma vez
-	// derruba a cobertura enquanto os novos abrem.
 	private static final int AMOSTRAS_PARA_JULGAR = Sessao.AMOSTRAS_PARA_JULGAR;
 	private static final double LENTO_X = 2.0;
 	private static final double LENTO_MINIMO_MS = 400;
@@ -265,7 +227,6 @@ public final class Lotacao implements Closeable {
 		maisLento.desativar();
 	}
 
-	// A distância dos peers, para o relatório: latência dos ativos (o que usamos) e ping dos candidatos.
 	public Map<String, Object> resumoDePeers() {
 
 		List<Double> ativos = sessoes.todas().stream().filter(Sessao::ativa)
@@ -281,24 +242,15 @@ public final class Lotacao implements Closeable {
 		resumo.put("ping_udp_p10_ms", udp.isEmpty() ? null : udp.get(udp.size() / 10));
 		resumo.put("trocados_por_lentidao", trocadosPorLentidao.get());
 		resumo.put("trocados_por_primeiro_a_entregar", trocadosPorPrimeiro.get());
-		resumo.put("ativos_que_entregaram_primeiro", sessoes.todas().stream().filter(Sessao::ativa)
-				.filter(s -> s.primeirosEntregues() >= 0.5).count());
+		resumo.put("ativos_que_entregaram_primeiro",
+				sessoes.todas().stream().filter(Sessao::ativa).filter(s -> s.primeirosEntregues() >= 0.5).count());
 		return resumo;
 	}
 
-	// O ENR é DICA, não critério. Exigir rede declarada no ENR para discar deixava o pool
-	// em 3 de 25: medido, 40 dos 444 pares provados declaram rede. Quem não declarou não é
-	// de outra cadeia — é só quem não publicou registro, e nós também não publicamos.
-	//
-	// Descarta-se só quem declarou OUTRA rede. O resto se confirma onde a resposta é
-	// autoritativa: o `Status` do aperto de mão.
 	private boolean naoDescartadoPeloEnr(Sessao sessao) {
 		return sessao.rede().map(criterio::test).orElse(true);
 	}
 
-	// O `Status` é a resposta autoritativa para "de que cadeia você é": ele vem do par
-	// sobre a cabeça DELE, não de um registro que pode estar velho. Par de outra cadeia
-	// sai aqui, antes de ocupar um leitor.
 	private boolean daNossaCadeia(Sessao sessao) {
 		return sessao.statusDoPar().map(Status::fork).filter(criterio).isPresent();
 	}
@@ -351,13 +303,10 @@ public final class Lotacao implements Closeable {
 		});
 	}
 
-	// O leitor é o que mantém a conversa viva: ele responde o Ping do par e é o que
-	// percebe a morte, porque `atender` estoura no timeout do socket.
 	private void atender(Sessao sessao, Consumer<AnuncioBloco> aoAnunciar,
 			BiConsumer<Sessao, NewPooledTransactionHashes> aoAnunciarTransacoes,
 			BiConsumer<Sessao, Transactions> aoReceberTransacoes) {
 
-		// Sair do laço sem exceção é a tolerância de mudez vencendo: o par ficou calado.
 		String motivo = "mudez";
 
 		try {
@@ -371,9 +320,6 @@ public final class Lotacao implements Closeable {
 					anuncio.anuncios().forEach(um -> aoAnunciarDe.accept(sessao, um));
 				}
 
-				// O `NewBlock` é o anúncio forte: vem com a header inteira. A cabeça que ele
-				// anuncia é a mesma que o hash sozinho anunciaria — quem quiser o desfecho das
-				// transações pega as cruas do próprio `NewBlock`.
 				if (mensagem instanceof NewBlock bloco) {
 					aoAnunciar.accept(new AnuncioBloco(bloco.cabecalho().hash(), bloco.cabecalho().numero()));
 					aoReceberBloco.accept(sessao, bloco);
@@ -412,15 +358,10 @@ public final class Lotacao implements Closeable {
 		quedas.merge(fase + " · " + motivo, 1L, Long::sum);
 	}
 
-	// O motivo é a FORMA da mensagem, sem o par: com o identificador dentro, cada queda seria
-	// uma chave nova e o mapa diria "houve quedas" em vez de "por quê".
 	private static String motivoDe(RuntimeException e) {
 
 		String texto = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
 
-		// O PASSO em que o par derrubou decide o que a queda prova: antes do `Hello` ele ainda nem
-		// viu o nosso `Status`, então "peer inútil" ali não pode ser sobre parecermos leech. A
-		// primeira medição jogava o passo fora e deixava justamente essa pergunta sem resposta.
 		if (texto.contains("derrubou")) {
 			return texto.substring(texto.indexOf("derrubou"));
 		}

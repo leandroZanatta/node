@@ -26,9 +26,6 @@ public final class ConexaoUdp {
 		this.portaTcpLocal = portaTcpLocal;
 	}
 
-	// De onde os nossos pacotes saem. O IP vai zerado: não sabemos o nosso endereço
-	// público e não precisamos — o par responde para a origem real do datagrama e
-	// ignora o que afirmamos. Inventar um IP só criaria a chance de afirmar o errado.
 	public Endpoint origem() {
 
 		try {

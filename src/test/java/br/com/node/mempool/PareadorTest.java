@@ -18,12 +18,6 @@ import br.com.node.catalogo.Eventos;
 import br.com.node.nucleo.Par;
 import br.com.node.vo.Log;
 
-// O PAREADOR: a tx que vimos anunciada na mempool casa com o efeito que o BLOCO mostrou, pelo id — e é
-// isso que transforma o bloco fechado em gabarito de graça (X = calldata anunciada, Y = os tokens e o
-// montante que a tx moveu). Sem esse par não existe aprendizado: não há rótulo.
-//
-// Sem rede: os logs são construídos aqui, no formato exato que a cadeia emite (`Swap` do V2 com quatro
-// montantes, `Swap` do V3 com dois assinados).
 class PareadorTest {
 
 	private static final byte[] POOL_AB = endereco(9);
@@ -45,7 +39,8 @@ class PareadorTest {
 
 		assertEquals(1, exemplos.size(), "uma anunciada com efeito é um exemplo");
 		assertEquals(java.util.Set.of(hex(A), hex(B)),
-				exemplos.get(0).tokensMovidos().stream().map(PareadorTest::hex).collect(java.util.stream.Collectors.toSet()),
+				exemplos.get(0).tokensMovidos().stream().map(PareadorTest::hex)
+						.collect(java.util.stream.Collectors.toSet()),
 				"o par vem ordenado por endereço, então a comparação é por conjunto");
 		assertEquals(BigInteger.valueOf(1000), exemplos.get(0).entradaObservada());
 	}
@@ -61,8 +56,8 @@ class PareadorTest {
 	@DisplayName("incluída que não vimos anunciada não vira exemplo (sem calldata, sem X)")
 	void semAnuncioNaoViraExemplo() {
 
-		assertTrue(Pareador.parear(Map.of(), Map.of("0xh1", List.of(swapV2(POOL_AB, 1000, 0, 0, 990))), PARES)
-				.isEmpty());
+		assertTrue(
+				Pareador.parear(Map.of(), Map.of("0xh1", List.of(swapV2(POOL_AB, 1000, 0, 0, 990))), PARES).isEmpty());
 	}
 
 	@Test
@@ -99,7 +94,8 @@ class PareadorTest {
 		return new TransacaoAnunciada(destino, calldata(entrada));
 	}
 
-	// [seletor 4][montante 32] — o mínimo para exercitar o pareador; o formato do layout não importa aqui.
+	
+	
 	private static byte[] calldata(long entrada) {
 
 		byte[] dados = new byte[36];
@@ -138,9 +134,11 @@ class PareadorTest {
 		byte[] bytes = valor.toByteArray();
 		byte[] palavra = new byte[32];
 
-		// A EVM escreve o int256 com EXTENSÃO DE SINAL: -700 é 30 bytes 0xFF + 0xFD 0x44, não zeros à
-		// esquerda. Sem isto, o helper do teste fabrica um log que a cadeia nunca emite — e o defeito
-		// aparece como falha da produção, que estava certa.
+		
+		
+		
+		
+		
 		java.util.Arrays.fill(palavra, (byte) (valor.signum() < 0 ? 0xFF : 0x00));
 
 		int copiar = Math.min(bytes.length, 32);
@@ -149,9 +147,11 @@ class PareadorTest {
 		return palavra;
 	}
 
-	// Endereço pseudo-aleatório DETERMINÍSTICO: com bytes repetidos, uma janela de 20 bytes casaria
-	// deslizando (0x0a vinte vezes casa em todo offset de uma sequência de 0x0a) e a descoberta de
-	// deslocamento viraria ruído.
+	
+	
+	
+	
+	
 	private static byte[] endereco(int semente) {
 		byte[] endereco = new byte[20];
 		new Random(semente).nextBytes(endereco);

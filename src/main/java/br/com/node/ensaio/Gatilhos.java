@@ -17,22 +17,6 @@ import com.google.gson.JsonObject;
 import br.com.node.mempool.ObservatorioMempool;
 import br.com.node.nucleo.Arbitragem;
 
-// ONDE o gatilho de cada arbitragem alheia se perdeu no nosso funil.
-//
-// O gabarito mostrou que as pools estão no grafo (136 de 142 arbitragens alheias com TODAS as pools
-// nele) e mesmo assim não achamos nenhuma: os outros fazem o backrun no MESMO bloco do swap que abre a
-// fenda, e para nós concorrermos é preciso ter visto esse swap pendente. A pergunta que resta é qual
-// etapa falha. Para cada arbitragem alheia: pede o bloco ao RPC, toma a tx imediatamente ANTERIOR (o
-// gatilho, na posição de backrun) e confere no registro da mempool até onde ela chegou —
-//   nunca anunciado → fluxo privado ou peers que não repassam: é rede, não código;
-//   anunciado sem corpo → o nosso pedido de corpo falhou ou foi filtrado;
-//   corpo sem swap → não decodificamos: o contrato+seletor dele entra no placar do que decodificar;
-//   swap sem projeção → o roteamento não mapeou para pools;
-//   projetado → vimos; a falha é depois (fenda, piso ou tempo).
-// E confere a PRÓPRIA tx do bot: se nós a vimos pendente, ele usa a mempool pública; se não, bundle privado.
-//
-// Fora do caminho quente: uma thread, uma chamada ao RPC por bloco (várias arbitragens do mesmo bloco
-// reusam), teto de fila para não acumular se o RPC engasgar.
 public final class Gatilhos implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(Gatilhos.class.getName());
@@ -52,9 +36,6 @@ public final class Gatilhos implements Closeable {
 	private final AtomicLong investigadas = new AtomicLong();
 	private final AtomicLong blocoNaSegundaTentativa = new AtomicLong();
 
-	// A MARGEM do gatilho: instante do bloco que o incluiu (relógio do validador, ms) menos a nossa primeira
-	// visão dele, por etapa. Positiva = chegou antes do bloco. É ela que diz se o que falta é CÓDIGO (vimos a
-	// tempo e não decodificamos ou não pegamos o corpo) ou REDE (chegou depois do bloco, ou nunca).
 	private final Map<String, br.com.node.util.Amostras> margemPorEtapa = new LinkedHashMap<>();
 	private final Map<String, long[]> antesDoBlocoPorEtapa = new LinkedHashMap<>();
 
@@ -62,16 +43,10 @@ public final class Gatilhos implements Closeable {
 	private JsonArray transacoesEmCache;
 	private JsonObject transacoesDoBloco;
 
-	// O FUNIL POR VALOR. Contar gatilhos iguais escondia o que importa: na corrida de 26/09, 107 backruns acima
-	// de US$ 1 somaram ~US$ 2.197 de ~2.485 — e 72% do valor era de UM tipo de gatilho (lote 7702) que o funil
-	// por contagem nem destacava. Aqui cada arbitragem entra com o valor em BNB, e a GORDA (acima de
-	// GORDA_BNB) fura a fila, vai ao log inteira e tem placar próprio por etapa.
-	// Fenda grande: a faixa em que a diferença entre ganhar e perder é relevante (0,001 BNB).
 	private static final java.math.BigInteger FENDA_GRANDE_BNB = java.math.BigInteger.valueOf(1_000_000_000_000_000L);
 
 	private volatile java.nio.file.Path arquivoFendasGrandes;
 
-	// Liga a gravação das fendas grandes num arquivo JSON por linha. Sem chamada, nada é gravado.
 	public void gravarFendasGrandesEm(java.nio.file.Path arquivo) {
 		this.arquivoFendasGrandes = arquivo;
 	}
@@ -97,7 +72,7 @@ public final class Gatilhos implements Closeable {
 		}
 	}
 
-	private static final java.math.BigInteger GORDA_BNB = java.math.BigInteger.valueOf(2_000_000_000_000_000L); // 0,002 BNB
+	private static final java.math.BigInteger GORDA_BNB = java.math.BigInteger.valueOf(2_000_000_000_000_000L);
 
 	private final java.util.function.Function<Arbitragem, Optional<java.math.BigInteger>> valorBnb;
 	private final Map<String, java.math.BigInteger> valorPorEtapa = new LinkedHashMap<>();
@@ -121,9 +96,6 @@ public final class Gatilhos implements Closeable {
 
 	public void investigar(Arbitragem arbitragem, long altura, int indice, int indiceDoGatilho) {
 
-		// Nenhuma tx anterior do bloco tocou as pools dela: a fenda veio de um bloco anterior — o tipo que
-		// o garimpo do estado confirmado deveria pegar, e não um backrun.
-		// Sem cotação (raiz fora de WBNB/USDT) é CONTADO, não vira valor zero.
 		Optional<java.math.BigInteger> valor = valorBnb.apply(arbitragem);
 		if (valor.isEmpty()) {
 			semCotacao.incrementAndGet();
@@ -140,7 +112,6 @@ public final class Gatilhos implements Closeable {
 			return;
 		}
 
-		// A gorda fura a fila: é justamente a que não pode faltar no placar.
 		if (!gorda && naFila.get() >= FILA_MAXIMA) {
 			largadasPelaFila.incrementAndGet();
 			return;
@@ -158,7 +129,6 @@ public final class Gatilhos implements Closeable {
 		});
 	}
 
-	// Soma o valor e, na gorda, o placar [quantas, vistas antes do bloco]. Chamado sob `synchronized (this)`.
 	private void somarValor(String etapa, java.math.BigInteger emBnb, boolean gorda, boolean antesDoBloco) {
 
 		if (emBnb != null) {
@@ -178,8 +148,6 @@ public final class Gatilhos implements Closeable {
 
 		Optional<JsonArray> transacoes = transacoes(altura);
 
-		// CICATRIZ: 608 "sem bloco" contra 111 investigadas (26/09, AWS). Chegamos ao bloco antes do RPC, e a
-		// falha ficava em cache para as outras arbitragens da mesma altura. Espera e tenta de novo, uma vez.
 		if (transacoes.isEmpty()) {
 			try {
 				Thread.sleep(1_500);
@@ -207,8 +175,6 @@ public final class Gatilhos implements Closeable {
 		long n = investigadas.incrementAndGet();
 		Long margemMs = visto.isPresent() && instanteDoBloco > 0 ? instanteDoBloco - visto.getAsLong() : null;
 
-		// Só as fendas grandes (0,001 BNB ou mais): é onde o backrun com alvo compensa. Uma linha por arbitragem:
-		// a abertura foi vista pendente antes do bloco? quanto antes? (ver /gatilhos)
 		if (emBnb != null && emBnb.compareTo(FENDA_GRANDE_BNB) >= 0) {
 			gravarFendaGrande(altura, indice, semPrefixo(texto(gatilho, "hash")), etapaDoGatilho, margemMs, emBnb);
 		}
@@ -220,14 +186,14 @@ public final class Gatilhos implements Closeable {
 
 			if (margemMs != null) {
 				long margem = margemMs;
-				margemPorEtapa.computeIfAbsent(etapaDoGatilho, k -> new br.com.node.util.Amostras(2_000)).anotar(margem);
+				margemPorEtapa.computeIfAbsent(etapaDoGatilho, k -> new br.com.node.util.Amostras(2_000))
+						.anotar(margem);
 				antesDoBlocoPorEtapa.computeIfAbsent(etapaDoGatilho, k -> new long[2])[margem > 0 ? 0 : 1]++;
 			}
 
 			if (etapaDoGatilho.equals("corpo sem swap")) {
 				naoDecodificados.computeIfAbsent(assinatura(gatilho), k -> new AtomicLong()).incrementAndGet();
-				// Uma amostra do começo do calldata por seletor: sem ela não dá para saber que função é, e o
-				// nome do seletor sozinho não diz. Os primeiros 4 bytes e os 2 primeiros argumentos (68 bytes).
+
 				amostraDoCalldata.putIfAbsent(assinatura(gatilho), amostraDe(gatilho));
 				if (emBnb != null) {
 					naoDecodificadosPorValor.merge(assinatura(gatilho), emBnb, java.math.BigInteger::add);
@@ -235,21 +201,18 @@ public final class Gatilhos implements Closeable {
 			}
 		}
 
-		// TODA gorda vai ao log, com o que é preciso para ir atrás dela na cadeia.
 		if (gorda) {
 			LOG.info(() -> "gatilho GORDO: " + emBnb + " wei BNB na altura " + altura + " (arb na posição " + indice
 					+ ", gatilho na " + indiceDoGatilho + ") — gatilho " + texto(gatilho, "hash") + " tipo "
 					+ texto(gatilho, "type") + " para " + assinatura(gatilho) + ": " + etapaDoGatilho
-					+ descricaoMargem(margemMs)
-					+ " · arbitrador " + texto(arbitrador, "to") + " a " + texto(arbitrador, "gasPrice")
-					+ " wei/gás: " + etapaDoArbitrador);
+					+ descricaoMargem(margemMs) + " · arbitrador " + texto(arbitrador, "to") + " a "
+					+ texto(arbitrador, "gasPrice") + " wei/gás: " + etapaDoArbitrador);
 		}
 
 		if (n <= REGISTRADOS_NO_LOG) {
 			LOG.info(() -> "gatilho: arbitragem alheia na altura " + altura + " (posição " + indice + ", gatilho na "
-					+ indiceDoGatilho + ") — gatilho "
-					+ texto(gatilho, "hash") + " para " + assinatura(gatilho) + ": " + etapaDoGatilho
-					+ " · a tx do arbitrador: " + etapaDoArbitrador);
+					+ indiceDoGatilho + ") — gatilho " + texto(gatilho, "hash") + " para " + assinatura(gatilho) + ": "
+					+ etapaDoGatilho + " · a tx do arbitrador: " + etapaDoArbitrador);
 		}
 	}
 
@@ -274,7 +237,6 @@ public final class Gatilhos implements Closeable {
 
 		Optional<JsonObject> bloco = rpc.bloco(altura).filter(b -> b.has("transactions"));
 
-		// Só o bloco LIDO fica em cache: a falha (RPC ainda sem ele) tem de poder ser repetida.
 		if (bloco.isEmpty()) {
 			return Optional.empty();
 		}
@@ -286,12 +248,12 @@ public final class Gatilhos implements Closeable {
 		return Optional.of(transacoesEmCache);
 	}
 
-	// Segundos do `timestamp` + milissegundo do `mixHash` (BSC; mesma leitura do `Eth.instanteMs`). 0 se faltar.
 	static long instanteMs(JsonObject bloco) {
 		try {
 			long segundos = Long.parseLong(semPrefixo(texto(bloco, "timestamp")), 16);
 			String mistura = semPrefixo(texto(bloco, "mixHash"));
-			java.math.BigInteger ms = mistura.isEmpty() ? java.math.BigInteger.ZERO : new java.math.BigInteger(mistura, 16);
+			java.math.BigInteger ms = mistura.isEmpty() ? java.math.BigInteger.ZERO
+					: new java.math.BigInteger(mistura, 16);
 			return segundos * 1_000 + (ms.compareTo(java.math.BigInteger.valueOf(1_000)) < 0 ? ms.longValue() : 0);
 		} catch (RuntimeException e) {
 			return 0;
@@ -318,7 +280,6 @@ public final class Gatilhos implements Closeable {
 		return "nunca anunciado";
 	}
 
-	// seletor@contrato, como o `SeletoresVistos` — para cruzar os dois placares.
 	private final Map<String, String> amostraDoCalldata = new java.util.concurrent.ConcurrentHashMap<>();
 
 	private static String amostraDe(JsonObject tx) {

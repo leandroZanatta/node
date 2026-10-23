@@ -23,9 +23,8 @@ public final class Resources {
 		String valor = resolver(chave);
 
 		if (valor == null || valor.isBlank()) {
-			throw new IllegalStateException(
-					"Configuração ausente: " + chave + " — defina " + chaveDeAmbiente(chave) + " no ambiente, "
-							+ "-D" + chave + " na linha de comando, ou a chave em " + ARQUIVO);
+			throw new IllegalStateException("Configuração ausente: " + chave + " — defina " + chaveDeAmbiente(chave)
+					+ " no ambiente, " + "-D" + chave + " na linha de comando, ou a chave em " + ARQUIVO);
 		}
 
 		return valor.trim();

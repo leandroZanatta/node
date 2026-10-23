@@ -18,8 +18,6 @@ import br.com.node.nucleo.Perna;
 import br.com.node.vo.Log;
 import br.com.node.vo.SwapPendente;
 
-// Os três defeitos do projetor medidos na noite de 23→24/09 (retorno N+1 mediano de +314%):
-// pool arbitrária entre as do mesmo par, direção pela ordem da calldata, token repetido no caminho.
 class ProjetorCertoTest {
 
 	private static final byte[] USDT = hex("55d398326f99059ff775485246999027b3197955");
@@ -27,7 +25,7 @@ class ProjetorCertoTest {
 	private static final byte[] X = hex("aa".repeat(20));
 	private static final byte[] PANCAKE_V2_FACTORY = hex("ca143ce32fe78f1f7019d7d551a6402fc5350c73");
 	private static final byte[] PANCAKE_V2_ROTEADOR = hex("10ed43c718714eb63d5aa57b78b54704e256024e");
-	// O par WBNB/USDT da Pancake V2, como está na cadeia.
+	
 	private static final byte[] PAR_PANCAKE = hex("16b9a82891338f9ba80e2d6970fdda79d1eb0dae");
 	private static final byte[] OUTRA_POOL = hex("33".repeat(20));
 
@@ -37,8 +35,9 @@ class ProjetorCertoTest {
 		assertArrayEquals(PAR_PANCAKE, Fabricas.parV2(PANCAKE_V2_FACTORY, USDT, WBNB).orElseThrow());
 	}
 
-	// Duas pools WBNB/USDT no catálogo: com o roteador da Pancake, a da factory dele; sem roteador, recusa
-	// — antes era a primeira que aparecesse.
+	
+	
+	
 	@Test
 	void poolVemDoRoteadorOuNaoVem() {
 
@@ -54,11 +53,14 @@ class ProjetorCertoTest {
 		assertEquals(1, doRoteador.size());
 		assertArrayEquals(PAR_PANCAKE, doRoteador.get(0));
 
-		assertTrue(Roteamento.mapearParaPools(swap, catalogo, null).isEmpty(), "com duas pools do par, sem roteador, chutou");
+		assertTrue(Roteamento.mapearParaPools(swap, catalogo, null).isEmpty(),
+				"com duas pools do par, sem roteador, chutou");
 	}
 
-	// Um bot que escreve [saída, entrada, montante, pool, entrada de novo]: o caminho aprendido tem de sair
-	// na ordem da TROCA (X → WBNB), sem o token repetido, e com a pool lida da calldata.
+	
+	
+	
+	
 	@Test
 	void aprendeDirecaoEPoolSemRepetir() {
 
@@ -67,8 +69,8 @@ class ProjetorCertoTest {
 		for (int i = 1; i <= 3; i++) {
 			BigInteger montante = BigInteger.valueOf(1_000 + i);
 			byte[] calldata = calldataDoBot(montante);
-			exemplos.add(new ExemploDeMovimento(new TransacaoAnunciada(hex("77".repeat(20)), calldata), List.of(WBNB, X),
-					montante, List.of(new Perna(OUTRA_POOL, X, WBNB))));
+			exemplos.add(new ExemploDeMovimento(new TransacaoAnunciada(hex("77".repeat(20)), calldata),
+					List.of(WBNB, X), montante, List.of(new Perna(OUTRA_POOL, X, WBNB))));
 		}
 
 		LayoutAprendido layout = AprendizDeLayout.aprender(exemplos, 3).orElseThrow();

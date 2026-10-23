@@ -12,8 +12,8 @@ public final class Segredos {
 	private final KeccakDigest egresso;
 	private final KeccakDigest ingresso;
 
-	Segredos(byte[] segredoEfemero, byte[] nonceLocal, byte[] nonceRemoto, boolean souIniciador,
-			byte[] pacoteEnviado, byte[] pacoteRecebido) {
+	Segredos(byte[] segredoEfemero, byte[] nonceLocal, byte[] nonceRemoto, boolean souIniciador, byte[] pacoteEnviado,
+			byte[] pacoteRecebido) {
 
 		byte[] nonceIniciador = souIniciador ? nonceLocal : nonceRemoto;
 		byte[] nonceReceptor = souIniciador ? nonceRemoto : nonceLocal;

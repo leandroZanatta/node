@@ -11,9 +11,6 @@ public final class Forks {
 	private Forks() {
 	}
 
-	// O fork id do corte de AGORA. É este que vai no Status: anunciar o do genesis
-	// é incompatível com a rede de hoje, e o par desconecta sem mensagem — medido
-	// no projeto anterior, 23 Status trocados e zero fork ids compatíveis.
 	public static ForkId doBsc(long cabeca, long agora) {
 
 		CRC32 crc = new CRC32();
@@ -41,9 +38,6 @@ public final class Forks {
 		return new ForkId(bigEndian32(crc.getValue()), 0);
 	}
 
-	// Todos os cortes que a BSC já teve. Um par pode estar parado em qualquer um
-	// deles — o bootnode publica o do genesis porque não segue a cadeia — então
-	// todos valem como prova de rede.
 	public static Set<Long> validosDaBsc() {
 
 		Set<Long> hashes = new LinkedHashSet<>();

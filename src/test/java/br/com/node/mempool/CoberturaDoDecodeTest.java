@@ -16,30 +16,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import br.com.node.catalogo.Eventos;
 
-// A COBERTURA do decode, medida — e o mapa de onde ela pode crescer.
-//
-// O `RecallDaProjecaoTest` diz QUANTO perdemos (o histograma de seletores). Este diz ONDE a perda
-// está e se ela é alcançável, que são as duas perguntas que decidem o que escrever em seguida:
-//
-//   1. A perda é CONCENTRADA (um router que faltou) ou CAUDA LONGA (bot privado)? Mede-se pelo par
-//      (seletor, contrato de destino): MEDIDO em 14 blocos, 106 txs perdidas com 48 seletores e 46
-//      contratos distintos, e o top-1 contrato respondendo por 28% da perda.
-//   2. O que a tx moveu APARECE na calldata? Se os endereços dos tokens estiverem lá como texto, um
-//      leitor ESTRUTURAL (sem conhecer a ABI) recupera o caminho; se não estiverem, só simular a tx
-//      crua na EVM resolve. MEDIDO: ~45% das perdidas carregam TODOS os tokens, ~22% não carregam
-//      nenhum — o resto carrega parte.
-//
-// É medidor, não portão: imprime o relatório e só exige amostra mínima, como o recall.
 class CoberturaDoDecodeTest {
 
 	private static final List<String> NOS = List.of("https://bsc-rpc.publicnode.com",
@@ -49,7 +35,8 @@ class CoberturaDoDecodeTest {
 	private static final int RECUO = 4;
 	private static final int POOLS_CHECADAS = 30;
 
-	// Os mesmos seletores que o `Roteamento`/`RoteamentoUniversal` já leem — a régua do recall.
+	
+	
 	private static final Set<String> CONHECIDOS = Set.of("38ed1739", "5c11d795", "18cbafe5", "791ac947", "7ff36ab5",
 			"b6f9de95", "24856bc3");
 
@@ -57,7 +44,10 @@ class CoberturaDoDecodeTest {
 	private static final String SWAP_V3 = hex(Eventos.SWAP_V3);
 	private static final String SWAP_V3_PANCAKE = hex(Eventos.SWAP_V3_PANCAKE);
 
-	/** `token0()` e `token1()` — o par da pool que o log moveu é a verdade sobre os tokens. */
+	/**
+	 * `token0()` e `token1()` — o par da pool que o log moveu é a verdade sobre os
+	 * tokens.
+	 */
 	private static final String TOKEN0 = "0x0dfe1681";
 	private static final String TOKEN1 = "0xd21220a7";
 
@@ -161,7 +151,8 @@ class CoberturaDoDecodeTest {
 		assertTrue(v2Total >= 10, "amostra de swaps V2 pequena demais: " + v2Total);
 	}
 
-	// txHash -> [input, to] do bloco. O `to` é o que separa router conhecido de bot privado.
+	
+	
 	private Map<String, String[]> transacoesDoBloco(String bloco) {
 
 		Map<String, String[]> txs = new LinkedHashMap<>();
@@ -188,7 +179,7 @@ class CoberturaDoDecodeTest {
 		return txs;
 	}
 
-	// txHash -> é V2 (senão é V3, nas duas formas do evento).
+	
 	private Map<String, Boolean> swapsDosLogs(List<JsonElement> logs) {
 
 		Map<String, Boolean> swaps = new LinkedHashMap<>();
@@ -205,7 +196,8 @@ class CoberturaDoDecodeTest {
 		return swaps;
 	}
 
-	// txHash -> pools que a tx moveu, dos próprios logs: a verdade sobre o que ela tocou.
+	
+	
 	private Map<String, List<String>> poolsDosLogs(List<JsonElement> logs) {
 
 		Map<String, List<String>> porTx = new LinkedHashMap<>();
@@ -231,7 +223,8 @@ class CoberturaDoDecodeTest {
 				.orElse(List.of());
 	}
 
-	// Os tokens das pools movidas: dois eth_call por pool, memorizados — imutável na cadeia.
+	
+	
 	private Set<String> tokensMovidos(List<String> pools) {
 
 		Set<String> tokens = new java.util.LinkedHashSet<>();
@@ -258,8 +251,8 @@ class CoberturaDoDecodeTest {
 	}
 
 	private Optional<Long> numero(Optional<JsonElement> resposta) {
-		return resposta.filter(JsonElement::isJsonObject).map(JsonElement::getAsJsonObject)
-				.filter(o -> o.has("result")).map(o -> Long.decode(o.get("result").getAsString()));
+		return resposta.filter(JsonElement::isJsonObject).map(JsonElement::getAsJsonObject).filter(o -> o.has("result"))
+				.map(o -> Long.decode(o.get("result").getAsString()));
 	}
 
 	private Optional<JsonElement> pedir(String metodo, String params) {
@@ -281,7 +274,7 @@ class CoberturaDoDecodeTest {
 				}
 
 			} catch (Exception transporte) {
-				// próximo nó
+				
 			}
 		}
 

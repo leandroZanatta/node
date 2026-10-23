@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-// Uma linha por tentativa: proposta, execução medida na cadeia e resultado no bloco.
 public final class DiarioDeEnsaio implements Closeable {
 
 	private static final Gson GSON = new GsonBuilder().serializeNulls().create();
@@ -85,9 +84,7 @@ public final class DiarioDeEnsaio implements Closeable {
 				registro.autopsia = Map.of("status", "nao_aplicavel_nao_enviada");
 				registro.desfecho = Map.of("classe", "nao_enviada");
 			} else {
-				// Não atribui autopsia aqui: a autópsia assíncrona (Autopsia.examinar) vai preenchê-la
-				// via aoConcluir → diario.autopsia(). Atribuir o placeholder antes fazia o registro ser
-				// gravado imediatamente, descartando o resultado real da autópsia quando chegasse.
+
 				registro.desfecho = Map.of("classe", "recusada_pelo_relay");
 			}
 			gravarSeCompleto(registro);
@@ -112,9 +109,7 @@ public final class DiarioDeEnsaio implements Closeable {
 		desfecho(desfecho, fracaoDepoisDoAprendizado, false);
 	}
 
-	// `bidEncontrado`: `bidRealDoRival` achou o pagamento de coinbase do rival — o bid efetivo é confiável.
-	public void desfecho(Desfechos.Desfecho desfecho, int fracaoDepoisDoAprendizado,
-			boolean bidEncontrado) {
+	public void desfecho(Desfechos.Desfecho desfecho, int fracaoDepoisDoAprendizado, boolean bidEncontrado) {
 		Registro registro = obter(desfecho.envio().hash());
 		if (registro == null) {
 			return;
@@ -189,8 +184,9 @@ public final class DiarioDeEnsaio implements Closeable {
 		Map<String, Object> diagnostico = new LinkedHashMap<>();
 		String causa;
 		String proximaAcao;
-		if (incompleto && "recusada_pelo_relay".equals(registro.desfecho != null ? registro.desfecho.get("classe") : null)) {
-			// Relay rejeitou mas a autópsia assíncrona não chegou antes do encerramento: ainda é rejeição válida.
+		if (incompleto
+				&& "recusada_pelo_relay".equals(registro.desfecho != null ? registro.desfecho.get("classe") : null)) {
+
 			String[] relayDiag = diagnosticoDeRelayRecusado(registro.autopsia);
 			causa = relayDiag[0];
 			proximaAcao = relayDiag[1];
@@ -249,19 +245,16 @@ public final class DiarioDeEnsaio implements Closeable {
 		return diagnostico;
 	}
 
-	// Extrai a causa real de uma rejeição de relay quando a autópsia assíncrona já chegou.
-	// Retorna [causa, proxima_acao].
 	@SuppressWarnings("unchecked")
 	private static String[] diagnosticoDeRelayRecusado(Map<String, Object> autopsia) {
 		if (autopsia == null) {
 			return new String[] { "relay_recusou_a_submissao", "corrigir_motivo_de_recusa_do_relay" };
 		}
-		// Rota com gerente: autópsia só repete o veredito, sem laudo perna a perna
+
 		if ("autopsia_gerente".equals(autopsia.get("tipo"))) {
-			return new String[] { "relay_recusou_rota_com_gerente",
-					"verificar_calculo_do_gerente_e_estado_da_pool" };
+			return new String[] { "relay_recusou_rota_com_gerente", "verificar_calculo_do_gerente_e_estado_da_pool" };
 		}
-		// Autópsia parcial: estado do bloco indisponível no RPC
+
 		if (autopsia.containsKey("status")) {
 			String status = String.valueOf(autopsia.get("status"));
 			if ("sem_estado_do_bloco".equals(status) || "bloco_ainda_nao_chegou_ao_rpc".equals(status)
@@ -271,7 +264,7 @@ public final class DiarioDeEnsaio implements Closeable {
 			}
 			return new String[] { "relay_recusou_a_submissao", "corrigir_motivo_de_recusa_do_relay" };
 		}
-		// Autópsia completa: usar a culpada para detalhar
+
 		Boolean fecharia = (Boolean) autopsia.get("fecharia_agora");
 		if (Boolean.FALSE.equals(fecharia)) {
 			Map<String, Object> culpada = (Map<String, Object>) autopsia.get("culpada");
@@ -296,8 +289,7 @@ public final class DiarioDeEnsaio implements Closeable {
 				return new String[] { "relay_recusou_revert_na_execucao",
 						"investigar_motivo_do_revert_na_pool_culpada" };
 			}
-			return new String[] { "relay_recusou_rota_nao_fechava_no_bloco",
-					"corrigir_modelo_ou_filtrar_a_rota" };
+			return new String[] { "relay_recusou_rota_nao_fechava_no_bloco", "corrigir_modelo_ou_filtrar_a_rota" };
 		}
 		if (Boolean.TRUE.equals(fecharia)) {
 			return new String[] { "relay_recusou_apesar_de_rota_valida_possivel_estado_em_transicao",
@@ -325,7 +317,7 @@ public final class DiarioDeEnsaio implements Closeable {
 			return "alvo_ajustado_pelo_bid_real_do_rival";
 		}
 		if ("pool_mexida_n1".equals(desfecho.classe())) {
-			// Sem pagamento de coinbase identificado: provável swap de usuário, não rival MEV.
+
 			return "sem_atualizacao_pool_mexida_por_tx_sem_coinbase";
 		}
 		return "fracao_dobrada_rival_confirmado_sem_bid_real";

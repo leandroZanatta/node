@@ -2,11 +2,6 @@ package br.com.node.rede;
 
 import br.com.node.exception.PeerException;
 
-// Lê bytes de um bloco Snappy: posição, varint, inteiro pequeno, cópia de literal.
-//
-// Mora em arquivo próprio porque classe encadeada não se lê, e porque `Cursor` já é o
-// nome do que avança a altura da cadeia — dois tipos com o mesmo nome obrigam quem lê a
-// conferir o import para saber do que se está falando.
 public final class LeituraSnappy {
 
 	private final byte[] dados;

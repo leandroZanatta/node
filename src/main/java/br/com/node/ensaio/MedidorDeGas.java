@@ -13,24 +13,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
-// Mede o gás REAL das nossas txs pelo recibo, e o confronta com o que a estimativa prometeu.
-//
-// É o fecho do laço de precisão. Até aqui a calibração vinha de medição de TERCEIROS (swaps de
-// router da BSC) e de `eth_estimateGas` — mas nenhuma execução NOSSA tinha sido comparada com o gás
-// que de fato se gastou. Sem este número, "estimativa precisa" é argumento; com ele, é conta.
-//
-// Roda fora do caminho de envio: thread própria, e o `Disparo` não espera nada. O recibo pode não
-// existir (bundle não incluído, tx pendente), e isso é DIFERENTE de revert — por isso há tentativas
-// espaçadas e um contador de `sem_recibo`, em vez de tratar ausência como falha.
 public final class MedidorDeGas implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(MedidorDeGas.class.getName());
 
-	// O bloco da BSC fecha em ~0,75 s, mas o recibo só nasce com a inclusão, e um bundle pode entrar
-	// no bloco seguinte. Cinco tentativas de 3 s cobrem ~4 blocos sem segurar nada.
 	private static final int TENTATIVAS = 5;
 	private static final long ESPERA_MS = 3_000;
-	// Abaixo disso, a mediana é ruído: o piso segue com a estimativa analítica.
+
 	static final int AMOSTRAS_PARA_CALIBRAR = 5;
 
 	private record Amostra(BigInteger estimado, BigInteger medido, boolean sucesso) {
@@ -46,7 +35,6 @@ public final class MedidorDeGas implements Closeable {
 		this.rpc = rpc;
 	}
 
-	// NÃO bloqueia: o envio segue, e a medição acontece na thread própria.
 	public void anotar(BigInteger estimado, String hash) {
 
 		if (rpc == null || estimado == null || estimado.signum() <= 0 || hash == null || hash.isBlank()) {
@@ -88,8 +76,6 @@ public final class MedidorDeGas implements Closeable {
 		LOG.fine(() -> "gas: sem recibo para " + hash + " (bundle não incluído ou tx pendente)");
 	}
 
-	// Separado do `buscar` de propósito: é aqui que mora a conta, e aqui é onde o teste offline
-	// a prova, sem rede.
 	void registrar(BigInteger estimado, BigInteger medido, boolean sucesso) {
 		amostras.add(new Amostra(estimado, medido, sucesso));
 		int fator = fatorMilesimos(amostrasCopia());
@@ -98,8 +84,6 @@ public final class MedidorDeGas implements Closeable {
 		}
 	}
 
-	// Quem usa o fator (o piso) recebe a mediana do gás medido sobre o estimado, em milésimos, quando já há
-	// amostras suficientes. Antes disso, o piso segue com a estimativa analítica.
 	private volatile java.util.function.IntConsumer aoCalibrar = fator -> {
 	};
 
@@ -113,7 +97,6 @@ public final class MedidorDeGas implements Closeable {
 		}
 	}
 
-	// Função pura: mediana de medido/estimado em milésimos. Zero enquanto não houver amostras suficientes.
 	static int fatorMilesimos(List<Amostra> copia) {
 		List<BigInteger> razoes = copia.stream().filter(a -> a.estimado().signum() > 0)
 				.map(a -> a.medido().multiply(BigInteger.valueOf(1000)).divide(a.estimado())).sorted().toList();
@@ -141,9 +124,6 @@ public final class MedidorDeGas implements Closeable {
 		}
 	}
 
-	// O placar da precisão: quantas amostras, com que desvio (medido − estimado, em %). `desvio`
-	// POSITIVO significa que gastou mais do que se estimou — o lado que estoura limite; negativo é
-	// estimativa folgada, que custa oportunidade.
 	public Map<String, Object> resumo() {
 
 		List<Amostra> copia;

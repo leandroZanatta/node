@@ -12,9 +12,6 @@ import br.com.node.util.NodeKey;
 import br.com.node.util.Resources;
 import br.com.node.vo.NoRemoto;
 
-// O registro único. A descoberta guardava o próprio mapa, e se a sincronização
-// guardasse outro passariam a existir dois donos do mesmo estado — que é como o
-// projeto anterior chegou a um gerente de sessões de 683 linhas.
 public final class Sessoes {
 
 	private final PortaUdp porta;
@@ -31,9 +28,6 @@ public final class Sessoes {
 		this.chave = chave;
 	}
 
-	// A chave é a identidade, não o endereço: o mesmo nó pode nos alcançar de uma
-	// porta de origem diferente, e duas sessões para o mesmo par significariam dois
-	// vínculos disputando o mesmo Pong.
 	public Sessao obter(NoRemoto no) {
 		return porId.computeIfAbsent(no.idHex(), id -> nova(no));
 	}

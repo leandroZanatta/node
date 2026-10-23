@@ -104,8 +104,6 @@ public final class Secp256k1 {
 		return Arrays.copyOfRange(codificado, 1, codificado.length);
 	}
 
-	// A chave pública (64 bytes, X||Y) de uma chave privada: G·privada. É o que dá o endereço
-	// (keccak dela, últimos 20 bytes) — usado para conferir de quem é a chave sem expô-la.
 	public static byte[] id(BigInteger privada) {
 		return paraId(DOMINIO.getG().multiply(privada).normalize());
 	}

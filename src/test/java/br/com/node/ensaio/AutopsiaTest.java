@@ -31,8 +31,9 @@ class AutopsiaTest {
 	private static final String POOL_A = "7a3eb6e7ffbf9f8b65afd40c0ab0ac2bab0c5d8e";
 	private static final String POOL_B = "47a90a2d92a8367a91efa1906bfc8c1e05bf10c4";
 
-	// Gerado por `cast calldata 'autopsiar((address,address,address,uint8,uint16)[],uint256)' ...` — a
-	// codificação é a que a cadeia leu e respondeu com laudo.
+	
+	
+	
 	@Test
 	void calldataIgualAoCast() {
 
@@ -51,12 +52,12 @@ class AutopsiaTest {
 				+ "0000000000000000000000000000000000000000000000000000000000000001"
 				+ "0000000000000000000000000000000000000000000000000000000000000000";
 
-		assertEquals(cast, HexFormat.of().formatHex(
-				Autopsia.calldata(rota, new BigInteger("39461437172537548248"))));
+		assertEquals(cast, HexFormat.of().formatHex(Autopsia.calldata(rota, new BigInteger("39461437172537548248"))));
 	}
 
-	// O laudo que a BSC devolveu em 23/09 para essa rota, cru: callback `pancakeCall`, nenhuma perna
-	// falhou, 39,46 USDT → 0,0515 WBNB → 39,37 USDT.
+	
+	
+	
 	@Test
 	void decodificaOLaudoDaCadeia() {
 
@@ -74,25 +75,27 @@ class AutopsiaTest {
 		assertEquals("(revert sem dado)", laudo.motivo());
 	}
 
-	// A perna 1 com o estado do modelo 5% longe do da cadeia e a saída 10% abaixo: a culpada é ela,
-	// por ESTADO — e a perna 0, que confere, não leva culpa nenhuma.
+	
+	
+	
 	@Test
 	void apontaAPernaQueDivergeEOMotivo() {
 
-		PoolV2 a = new PoolV2(new BigInteger("500000000000000000000000"), new BigInteger("650000000000000000000"), 2500);
-		PoolV2 bModelo = new PoolV2(new BigInteger("700000000000000000000"), new BigInteger("600000000000000000000000"), 2500);
+		PoolV2 a = new PoolV2(new BigInteger("500000000000000000000000"), new BigInteger("650000000000000000000"),
+				2500);
+		PoolV2 bModelo = new PoolV2(new BigInteger("700000000000000000000"), new BigInteger("600000000000000000000000"),
+				2500);
 		BigInteger bCadeiaR0 = new BigInteger("735000000000000000000");
 
 		Fixture f = fixture(a, bModelo);
 
-		BigInteger chegou0 = new Travessia(a, Direcao.ZERO_PARA_UM)
-				.aplicar(f.montante).saida();
+		BigInteger chegou0 = new Travessia(a, Direcao.ZERO_PARA_UM).aplicar(f.montante).saida();
 		BigInteger modelo1 = new Travessia(bModelo, Direcao.ZERO_PARA_UM).aplicar(chegou0).saida();
 		BigInteger chegou1 = modelo1.multiply(BigInteger.valueOf(9)).divide(BigInteger.TEN);
 
-		Autopsia.Laudo laudo = new Autopsia.Laudo(List.of(a.reserva0(), bCadeiaR0), List.of(a.reserva1(), bModelo.reserva1()),
-				List.of(f.montante, chegou0), List.of(f.montante, chegou0), List.of(chegou0, chegou1),
-				List.of(chegou0, chegou1), -1, "", "84800812");
+		Autopsia.Laudo laudo = new Autopsia.Laudo(List.of(a.reserva0(), bCadeiaR0),
+				List.of(a.reserva1(), bModelo.reserva1()), List.of(f.montante, chegou0), List.of(f.montante, chegou0),
+				List.of(chegou0, chegou1), List.of(chegou0, chegou1), -1, "", "84800812");
 
 		Map<String, Object> registro = autopsia().comparar(f.achado, f.chamada, laudo);
 
@@ -106,25 +109,31 @@ class AutopsiaTest {
 		assertEquals(true, registro.get("callback_conhecido"));
 	}
 
-	// 24/09 12:44: perna 0 com 50% de imposto na compra e a perna 1 revertendo por consequência. A culpa é
-	// do imposto — e ele fica gravado, para o portão tirar o par do grafo. Antes, a culpada era a perna que
-	// reverteu (inocente) e o token taxado seguia gerando fantasma.
+	
+	
+	
+	
+	
 	@Test
 	void impostoAntesDoRevertLevaACulpaEFicaGravado() {
 
-		PoolV2 a = new PoolV2(new BigInteger("500000000000000000000000"), new BigInteger("650000000000000000000"), 2500);
-		PoolV2 b = new PoolV2(new BigInteger("700000000000000000000"), new BigInteger("600000000000000000000000"), 2500);
+		PoolV2 a = new PoolV2(new BigInteger("500000000000000000000000"), new BigInteger("650000000000000000000"),
+				2500);
+		PoolV2 b = new PoolV2(new BigInteger("700000000000000000000"), new BigInteger("600000000000000000000000"),
+				2500);
 		Fixture f = fixture(a, b);
 
 		BigInteger prometido0 = new Travessia(a, Direcao.ZERO_PARA_UM).aplicar(f.montante).saida();
 		BigInteger chegou0 = prometido0.divide(BigInteger.TWO);
 
-		Autopsia.Laudo laudo = new Autopsia.Laudo(List.of(a.reserva0(), b.reserva0()), List.of(a.reserva1(), b.reserva1()),
-				List.of(f.montante, BigInteger.ZERO), List.of(f.montante, BigInteger.ZERO), List.of(prometido0, BigInteger.ZERO),
+		Autopsia.Laudo laudo = new Autopsia.Laudo(List.of(a.reserva0(), b.reserva0()),
+				List.of(a.reserva1(), b.reserva1()), List.of(f.montante, BigInteger.ZERO),
+				List.of(f.montante, BigInteger.ZERO), List.of(prometido0, BigInteger.ZERO),
 				List.of(chegou0, BigInteger.ZERO), 1, "ds-math-sub-underflow", "84800812");
 
 		Impostos impostos = new Impostos();
-		Autopsia autopsia = new Autopsia(new RpcDoEnsaio(), new Quarentena(), impostos, Path.of("target", "autopsia-teste.jsonl"));
+		Autopsia autopsia = new Autopsia(new RpcDoEnsaio(), new Quarentena(), impostos,
+				Path.of("target", "autopsia-teste.jsonl"));
 		Map<String, Object> registro = autopsia.comparar(f.achado, f.chamada, laudo);
 
 		@SuppressWarnings("unchecked")
@@ -133,7 +142,8 @@ class AutopsiaTest {
 		assertEquals(0, culpada.get("indice"));
 
 		autopsia.gravarImpostosDasPernas(registro);
-		// A perna 0 entregou metade do prometido: imposto de COMPRA de ~50% no token que sai dela.
+		
+		
 		assertTrue(impostos.compra(HexFormat.of().parseHex(POOL_A), HexFormat.of().parseHex(WBNB)).getAsInt() >= 4_999,
 				"o imposto de compra de 50% não ficou gravado na direção certa");
 	}
@@ -159,8 +169,9 @@ class AutopsiaTest {
 		assertEquals(2500, Autopsia.perda(BigInteger.valueOf(100), BigInteger.valueOf(75)));
 	}
 
-	// Contra a BSC: a rota de 2 pernas do log de 23/09 tem de voltar com laudo, e a pool do empréstimo
-	// tem de chamar um callback que o Executor conhece.
+	
+	
+	
 	@Test
 	void laudoDaCadeiaDeVerdade() {
 
@@ -170,9 +181,9 @@ class AutopsiaTest {
 		com.google.gson.JsonObject override = new com.google.gson.JsonObject();
 		override.add("0xcdf83fc9c7c62e3545c4891b7e26e4d6a27c97e5", codigo);
 
-		Optional<Autopsia.Laudo> laudo = new RpcDoEnsaio()
-				.chamarComOverride("e5c933480364616cbc0319a5a5841bc3d0e3eb94", "cdf83fc9c7c62e3545c4891b7e26e4d6a27c97e5",
-						HexFormat.of().formatHex(Autopsia.calldata(rota, new BigInteger("1000000000000000000"))), override)
+		Optional<Autopsia.Laudo> laudo = new RpcDoEnsaio().chamarComOverride("e5c933480364616cbc0319a5a5841bc3d0e3eb94",
+				"cdf83fc9c7c62e3545c4891b7e26e4d6a27c97e5",
+				HexFormat.of().formatHex(Autopsia.calldata(rota, new BigInteger("1000000000000000000"))), override)
 				.flatMap(Autopsia::lerLaudo);
 
 		assertTrue(laudo.isPresent(), "a cadeia não devolveu laudo");
@@ -181,9 +192,11 @@ class AutopsiaTest {
 		assertFalse(laudo.get().chegou().get(1).signum() <= 0);
 	}
 
-	// Contra a BSC: a 7a3eb6e7 cobra 5 bps dos seus dois chamadores e 10% de quem chama o par direto. A
-	// bisseção tem de achar os 10% que ela cobra de NÓS — medido à mão em 23/09: "LL: K" até 900 bps,
-	// passa em 1.000.
+	
+	
+	
+	
+	
 	@Test
 	void achaATaxaQueAPoolCobraDeNos() {
 
@@ -208,18 +221,21 @@ class AutopsiaTest {
 	private record Fixture(Achado achado, RotaDoModelo.Chamada chamada, BigInteger montante) {
 	}
 
-	// USDT → WBNB na A (token0 = USDT), WBNB → USDT na B (token0 = WBNB).
+	
 	private static Fixture fixture(PoolV2 a, PoolV2 b) {
 
 		byte[] usdt = HexFormat.of().parseHex(USDT);
 		byte[] wbnb = HexFormat.of().parseHex(WBNB);
 		BigInteger montante = new BigInteger("10000000000000000000");
 
-		List<Travessia> travessias = List.of(new Travessia(a, Direcao.ZERO_PARA_UM), new Travessia(b, Direcao.ZERO_PARA_UM));
+		List<Travessia> travessias = List.of(new Travessia(a, Direcao.ZERO_PARA_UM),
+				new Travessia(b, Direcao.ZERO_PARA_UM));
 		BigInteger saida = travessias.get(1).aplicar(travessias.get(0).aplicar(montante).saida()).saida();
 
-		Achado achado = new Achado(1, new Ciclo(List.of(new Perna(HexFormat.of().parseHex(POOL_A), usdt, wbnb),
-				new Perna(HexFormat.of().parseHex(POOL_B), wbnb, usdt))), new Oportunidade(montante, saida), travessias);
+		Achado achado = new Achado(1,
+				new Ciclo(List.of(new Perna(HexFormat.of().parseHex(POOL_A), usdt, wbnb),
+						new Perna(HexFormat.of().parseHex(POOL_B), wbnb, usdt))),
+				new Oportunidade(montante, saida), travessias);
 
 		RotaDoModelo.Chamada chamada = new RotaDoModelo.Chamada(
 				List.of(new Salto(POOL_A, USDT, WBNB, false, 25), new Salto(POOL_B, WBNB, USDT, false, 25)), montante,
@@ -229,10 +245,12 @@ class AutopsiaTest {
 	}
 
 	private static Autopsia autopsia() {
-		return new Autopsia(new RpcDoEnsaio(), new Quarentena(), new Impostos(), Path.of("target", "autopsia-teste.jsonl"));
+		return new Autopsia(new RpcDoEnsaio(), new Quarentena(), new Impostos(),
+				Path.of("target", "autopsia-teste.jsonl"));
 	}
 
-	// O que o par recusa por REGRA não passa com o tempo — vai pela pena longa, não pelos 30 min de estado.
+	
+	
 	@Test
 	void proibicaoDoParNaoEhEstadoPassageiro() {
 		org.junit.jupiter.api.Assertions.assertTrue(Autopsia.proibicao("DEMAX PAIR : FORBIDDEN"));

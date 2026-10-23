@@ -24,26 +24,13 @@ import br.com.node.catalogo.Eventos;
 import br.com.node.repository.PoolsNoGerenteRepository;
 import br.com.node.vo.Log;
 
-// Varre a história dos dois gerentes atrás dos `Initialize` — o único lugar onde o `PoolKey` aparece — e
-// grava no banco, de onde o catálogo pede a chave da pool que mexeu.
-//
-// Por que um RPC à parte (`RPC_LOGS`): o nascimento de uma pool pode ter sido há 78 milhões de blocos, os
-// pares do p2p servem recibo de ~100 mil para trás, e o RPC público recusa `eth_getLogs` ("limit
-// exceeded", medido em 25/09). Sem a variável o varredor não sobe, e o node segue só com as pools que
-// nascerem ao vivo.
-//
-// RETOMA de onde o banco parou até a cabeça, a CADA subida: isso cobre também os blocos em que o node
-// esteve fora do ar, que o cursor ao vivo nunca viu. A primeira vez custou ~3.100 chamadas de 50 mil
-// blocos (25/09: 256.349 pools na V4 em 29 min, 147.692 no Infinity em 23 min); depois, poucas.
 public final class VarredorDeGerentes implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(VarredorDeGerentes.class.getName());
 
-	// O teto do provedor medido em 25/09 (NodeReal): "exceed maximum block range: 50000".
 	private static final int FAIXA = 49_999;
 	private static final int TENTATIVAS = 6;
 
-	// O bloco em que cada gerente passou a ter código, achado por busca binária no `eth_getCode` em 25/09.
 	private static final Map<String, Long> NASCIMENTO = Map.of(HexFormat.of().formatHex(Eventos.GERENTE_V4),
 			45_970_610L, HexFormat.of().formatHex(Eventos.GERENTE_INFINITY_CL), 47_214_308L);
 
@@ -80,7 +67,8 @@ public final class VarredorDeGerentes implements Closeable {
 				varrer(gerente);
 			} catch (RuntimeException falhou) {
 				estado.put(HexFormat.of().formatHex(gerente), "parou: " + falhou.getMessage());
-				LOG.warning(() -> "varredura de " + HexFormat.of().formatHex(gerente) + " parou: " + falhou.getMessage());
+				LOG.warning(
+						() -> "varredura de " + HexFormat.of().formatHex(gerente) + " parou: " + falhou.getMessage());
 			}
 		}
 	}
@@ -115,11 +103,9 @@ public final class VarredorDeGerentes implements Closeable {
 		LOG.info(() -> "varredura de " + nome + " completa: " + gravadas + " pools novas");
 		estado.put(nome, Map.of("completa_ate", cabeca, "pools_gravadas", gravadas));
 
-		// As pools que o catálogo pediu e o banco ainda não tinha podem ser pedidas de novo.
 		aoAvancar.run();
 	}
 
-	// As chaves que nasceram no gerente entre `de` e `ate`, inclusive. Sem banco: é a leitura pura.
 	List<ChaveDaPool> faixa(byte[] gerente, long de, long ate) {
 
 		byte[] topico = java.util.Arrays.equals(gerente, Eventos.GERENTE_V4) ? Eventos.INICIALIZAR_V4
@@ -159,9 +145,6 @@ public final class VarredorDeGerentes implements Closeable {
 		return Long.decode(pedir("eth_blockNumber", new JsonArray()).getAsString());
 	}
 
-	// Erro do provedor é passageiro (limite de taxa, nó atrasado): espera e tenta de novo, com espera
-	// crescente. Esgotadas as tentativas a varredura PARA em voz alta — o marco no banco garante que a
-	// próxima subida retoma da última faixa gravada, sem furo.
 	private JsonElement pedir(String metodo, JsonArray parametros) {
 
 		JsonObject corpo = new JsonObject();
@@ -176,9 +159,10 @@ public final class VarredorDeGerentes implements Closeable {
 
 			try {
 
-				HttpResponse<String> resposta = http.send(HttpRequest.newBuilder(URI.create(url))
-						.timeout(Duration.ofSeconds(60)).header("Content-Type", "application/json")
-						.POST(HttpRequest.BodyPublishers.ofString(corpo.toString())).build(),
+				HttpResponse<String> resposta = http.send(
+						HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(60))
+								.header("Content-Type", "application/json")
+								.POST(HttpRequest.BodyPublishers.ofString(corpo.toString())).build(),
 						HttpResponse.BodyHandlers.ofString());
 
 				JsonObject json = JsonParser.parseString(resposta.body()).getAsJsonObject();

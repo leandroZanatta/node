@@ -14,9 +14,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.catalogo.ChaveDaPool;
 import br.com.node.repository.postgres.Postgres;
 
-// O `PoolKey` e o marco da varredura contra o Postgres de verdade. O gerente é SORTEADO para o teste não
-// tocar no marco dos gerentes reais: apagar ou avançar aquele marco faria a varredura do node pular
-// história.
 class PoolsNoGerenteRepositoryTest {
 
 	private final SecureRandom sorteio = new SecureRandom();
@@ -48,7 +45,8 @@ class PoolsNoGerenteRepositoryTest {
 				assertEquals(123L, lida.altura());
 				assertEquals(1_000L, repo.varridoAte(gerente).getAsLong());
 
-				// Regravar é idempotente, e um marco menor (faixa repetida) não recua a varredura.
+				
+				
 				repo.gravarFaixa(gerente, List.of(chave), 500L);
 				assertEquals(1_000L, repo.varridoAte(gerente).getAsLong());
 
@@ -72,7 +70,8 @@ class PoolsNoGerenteRepositoryTest {
 
 		banco.executar(conexao -> {
 			for (String tabela : List.of("pools_no_gerente", "varredura_de_gerente")) {
-				try (PreparedStatement comando = conexao.prepareStatement("delete from " + tabela + " where gerente = ?")) {
+				try (PreparedStatement comando = conexao
+						.prepareStatement("delete from " + tabela + " where gerente = ?")) {
 					comando.setBytes(1, gerente);
 					comando.executeUpdate();
 				}

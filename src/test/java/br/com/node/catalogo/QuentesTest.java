@@ -13,7 +13,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-// O conjunto quente da camada rápida: quem entra, quando, e que sobrevive ao reinício.
 class QuentesTest {
 
 	@TempDir

@@ -1,10 +1,5 @@
 package br.com.node.sessao;
 
-// QUEM ENTREGA PRIMEIRO. Conta as vezes em que um par foi o primeiro dos nossos a nos mandar um hash pendente
-// (o observatório de mempool anota). Com meia-vida: o que o par entregou há `meiaVidaMs` pesa a metade. Assim
-// a lotação prefere quem entrega AGORA, e não quem entregou bem numa hora que já passou.
-//
-// Sem sinal de tempo no construtor: quem chama passa o instante, o que deixa o teste determinístico.
 final class PlacarDePrimeiros {
 
 	private final long meiaVidaMs;

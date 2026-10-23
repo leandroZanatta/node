@@ -10,17 +10,18 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonParser;
+import com.sun.net.httpserver.HttpServer;
 
 class TransferenciasInternasTest {
 
 	@Test
 	void achaTransferenciaFeitaPeloContratoDentroDaTransacao() {
-		// Como a transação vencedora de fato se parece: topo com valor 0; um subcall do contrato manda BNB ao
-		// endereço de pagamento da BlockRazor (1266…); o resto são chamadas sem valor.
+		
+		
+		
 		String trace = """
 				{"type":"CALL","from":"0x2222","to":"0x5894","value":"0x0",
 				 "calls":[
@@ -28,8 +29,8 @@ class TransferenciasInternasTest {
 				  {"type":"CALL","from":"0x5894","to":"0x1266c6be60392a8ff346e8d5eccd3e69dd9c5f20","value":"0x1019e0ef1c0c9"}
 				 ]}
 				""";
-		List<TransferenciasInternas.Transferencia> achadas = TransferenciasInternas.doTrace(
-				JsonParser.parseString(trace).getAsJsonObject());
+		List<TransferenciasInternas.Transferencia> achadas = TransferenciasInternas
+				.doTrace(JsonParser.parseString(trace).getAsJsonObject());
 
 		assertEquals(1, achadas.size());
 		assertEquals("5894", achadas.get(0).de());
@@ -69,7 +70,8 @@ class TransferenciasInternasTest {
 	void tentaProximoRpcQuandoAnteriorRespondeErroJsonRpc() throws IOException {
 		AtomicInteger chamadasPrimeiro = new AtomicInteger();
 		AtomicInteger chamadasSegundo = new AtomicInteger();
-		HttpServer primeiro = servidor("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32000,\"message\":\"missing trie node\"}}",
+		HttpServer primeiro = servidor(
+				"{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32000,\"message\":\"missing trie node\"}}",
 				chamadasPrimeiro);
 		HttpServer segundo = servidor("""
 				{"jsonrpc":"2.0","id":1,"result":{"type":"CALL","from":"0x1","to":"0x2","value":"0x1","calls":[]}}

@@ -10,19 +10,8 @@ import java.util.Map;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-// A PERGUNTA de cada tentativa: se não levamos, foi por quanto? Quem levou, pagou quanto?
-//
-// Cruza três coisas que o nó já tem: a nossa tentativa (o lance que oferecemos e o lucro que víamos), o
-// desfecho (quem levou a fenda, em que posição do bloco) e o pagamento MEDIDO no bloco do vencedor
-// (`PagamentosDeBloco`: quanto BNB saiu de cada remetente para o endereço de uma builder).
-//
-// Frações são em milésimos do lucro em BNB: `fracaoRival = pagoRival × 1000 / lucro`.
-// Se o vencedor não tem transferência visível para a builder, o veredito diz isso, em vez de inventar um valor:
-// pagamento interno ao contrato não aparece sem trace, e é preciso dizer que não sabemos.
 public final class Disputa {
 
-	// Quantas posições ao redor da posição do vencedor olhamos para achar o pagamento dele (o mesmo critério
-	// do `PagamentosDeBloco.pagamentoAoBuilder`: o pagamento pode vir numa tx vizinha).
 	static final int JANELA_POSICAO = 3;
 
 	private static final BigInteger MIL = BigInteger.valueOf(1000);
@@ -30,14 +19,10 @@ public final class Disputa {
 	private Disputa() {
 	}
 
-	// `despacho`: uma entrada de /despachos. `pagamentos`: as linhas de pagamentos.jsonl do bloco do vencedor
-	// (quem chama filtra por altura). Função pura.
 	public static Map<String, Object> analisar(JsonObject despacho, List<JsonObject> pagamentos) {
 		return analisar(despacho, pagamentos, null);
 	}
 
-	// Com o registro do vencedor (`vencedores.jsonl`), o casamento é exato, pelo hash da transação vencedora.
-	// Sem ele, cai no critério antigo por posição, que é só aproximação.
 	public static Map<String, Object> analisar(JsonObject despacho, List<JsonObject> pagamentos, JsonObject vencedor) {
 		if (vencedor != null && vencedor.has("hash_vencedor")) {
 			return analisarComVencedor(despacho, vencedor);
@@ -51,8 +36,9 @@ public final class Disputa {
 		Integer posicao = inteiro(desfecho, "posicao");
 		String quem = semPrefixo(texto(desfecho, "quem"));
 
-		BigInteger nosso = big(envio.has("lance") && envio.get("lance").isJsonObject()
-				? envio.getAsJsonObject("lance") : null, "pagamento_direto_builder_bnb_wei");
+		BigInteger nosso = big(
+				envio.has("lance") && envio.get("lance").isJsonObject() ? envio.getAsJsonObject("lance") : null,
+				"pagamento_direto_builder_bnb_wei");
 		BigInteger lucro = big(envio, "lucro_previsto_bnb_wei");
 
 		boolean perdemos = classe.startsWith("rival") || classe.startsWith("pool_mexida");
@@ -76,12 +62,12 @@ public final class Disputa {
 			List<JsonObject> vizinhos = new ArrayList<>();
 			for (JsonObject p : pagamentos) {
 				Integer posPag = inteiro(p, "posicao");
-				if (inteiro(p, "altura") != null && inteiro(p, "altura") == blocoDoVencedor
-						&& posPag != null && Math.abs(posPag - posicao) <= JANELA_POSICAO) {
+				if (inteiro(p, "altura") != null && inteiro(p, "altura") == blocoDoVencedor && posPag != null
+						&& Math.abs(posPag - posicao) <= JANELA_POSICAO) {
 					vizinhos.add(p);
 				}
 			}
-			// Mesmo remetente que o vencedor, se soubermos quem é; senão, a transferência mais perto da posição.
+
 			pagoPeloVencedor = maisProximo(vizinhos.stream()
 					.filter(p -> quem != null && quem.equalsIgnoreCase(semPrefixo(texto(p, "de")))).toList(), posicao);
 			if (pagoPeloVencedor != null) {
@@ -92,11 +78,11 @@ public final class Disputa {
 			}
 		}
 
-		BigInteger pagoVencedor = pagoPeloVencedor == null ? null : new BigInteger(texto(pagoPeloVencedor, "valor_wei"));
+		BigInteger pagoVencedor = pagoPeloVencedor == null ? null
+				: new BigInteger(texto(pagoPeloVencedor, "valor_wei"));
 		r.put("vencedor_pagou_bnb_wei", pagoVencedor == null ? null : pagoVencedor.toString());
-		r.put("pagamento_direto_builder_status", classe.startsWith("rival")
-				? pagoVencedor == null ? "nao_detectado" : "detectado"
-				: "nao_aplicavel");
+		r.put("pagamento_direto_builder_status",
+				classe.startsWith("rival") ? pagoVencedor == null ? "nao_detectado" : "detectado" : "nao_aplicavel");
 		r.put("pagamento_total_builder_wei", null);
 		r.put("pagamento_total_builder_status", rival ? "nao_verificado_sem_trace" : "nao_aplicavel");
 		r.put("lance_total_rival_wei", null);
@@ -106,30 +92,31 @@ public final class Disputa {
 		r.put("fracao_do_vencedor_milha", fracao(pagoVencedor, lucro));
 
 		BigInteger faltou = rival && pagoVencedor != null && nosso != null && pagoVencedor.compareTo(nosso) > 0
-				? pagoVencedor.subtract(nosso) : null;
+				? pagoVencedor.subtract(nosso)
+				: null;
 		r.put("faltou_bnb_wei", faltou == null ? null : faltou.toString());
 
-		r.put("veredito", !rival && classe.startsWith("pool_mexida")
-				? "pool alterada por transacao sem arbitragem rival confirmada"
-				: veredito(classe, perdemos, levamos, nosso, pagoVencedor, faltou, casamento));
+		r.put("veredito",
+				!rival && classe.startsWith("pool_mexida")
+						? "pool alterada por transacao sem arbitragem rival confirmada"
+						: veredito(classe, perdemos, levamos, nosso, pagoVencedor, faltou, casamento));
 		return r;
 	}
 
-	// O vencedor é a transação registrada: o que ele enviou direto à builder, a taxa dele e a lista de pagamentos do bloco.
 	private static Map<String, Object> analisarComVencedor(JsonObject despacho, JsonObject vencedor) {
 
 		JsonObject envio = despacho.getAsJsonObject("envio");
 		JsonObject desfecho = despacho.getAsJsonObject("desfecho");
 		String classe = texto(desfecho, "classe");
 		long altura = envio.get("altura").getAsBigDecimal().longValue();
-		BigInteger nosso = big(envio.has("lance") && envio.get("lance").isJsonObject()
-				? envio.getAsJsonObject("lance") : null, "pagamento_direto_builder_bnb_wei");
+		BigInteger nosso = big(
+				envio.has("lance") && envio.get("lance").isJsonObject() ? envio.getAsJsonObject("lance") : null,
+				"pagamento_direto_builder_bnb_wei");
 		BigInteger lucro = big(envio, "lucro_previsto_bnb_wei");
 		boolean perdemos = classe.startsWith("rival") || classe.startsWith("pool_mexida");
 		boolean rival = classe.startsWith("rival");
 		boolean levamos = "incluida".equals(classe);
 
-		// O que o vencedor mandou à builder, na própria tx ou numa vizinha do mesmo remetente (ver VencedorDoLeilao).
 		BigInteger pagoDireto = big(vencedor, "pagamento_do_vencedor_wei");
 		BigInteger gasPriceReceipt = big(vencedor, "gas_preco_efetivo_wei");
 		BigInteger gasPriceTransaction = big(vencedor, "gas_price_wei");
@@ -152,8 +139,7 @@ public final class Disputa {
 		Map<String, Object> r = new LinkedHashMap<>();
 		r.put("altura", altura);
 		r.put("classe", classe);
-		// Em rival_* o vencedor é a arbitragem de outro bot. Em pool_mexida é a transação que mexeu na pool,
-		// que pode nem ser um lance: não chame de "vencedor do leilão" sem olhar o tipo.
+
 		r.put("tipo_do_vencedor", classe.startsWith("rival") ? "arbitragem_do_rival" : "transacao_que_moveu_a_pool");
 		r.put("posicao_do_vencedor", inteiro(desfecho, "posicao"));
 		r.put("nosso_lance_bnb_wei", nosso == null ? null : nosso.toString());
@@ -167,9 +153,10 @@ public final class Disputa {
 		r.put("pagamento_direto_builder_status", statusPagamentoDireto);
 		r.put("pagamento_direto_builder_escopo", texto(vencedor, "pagamento_direto_builder_escopo"));
 		r.put("pagamento_total_builder_wei", texto(vencedor, "pagamento_total_builder_wei"));
-		r.put("pagamento_total_builder_status", !rival ? "nao_aplicavel"
-				: texto(vencedor, "pagamento_total_builder_status") == null
-				? "nao_verificado_sem_trace" : texto(vencedor, "pagamento_total_builder_status"));
+		r.put("pagamento_total_builder_status",
+				!rival ? "nao_aplicavel"
+						: texto(vencedor, "pagamento_total_builder_status") == null ? "nao_verificado_sem_trace"
+								: texto(vencedor, "pagamento_total_builder_status"));
 		r.put("lance_total_rival_wei", null);
 		r.put("lance_total_rival_status", rival ? "desconhecido" : "nao_aplicavel");
 		r.put("vencedor_gas_price_wei", gasPriceTransaction == null ? null : gasPriceTransaction.toString());
@@ -188,12 +175,13 @@ public final class Disputa {
 		r.put("lance_48club_pontuacao_minima_wei",
 				pontuacao48ClubMinima == null ? null : pontuacao48ClubMinima.toString());
 		r.put("lance_48club_pagamento_status", statusPagamento48Club);
-		r.put("lance_48club_status", !rival ? "nao_aplicavel"
-				: taxa == null ? "gas_da_arbitragem_nao_medido"
-						: "limite_inferior_unicidade_e_builder_nao_confirmados");
+		r.put("lance_48club_status",
+				!rival ? "nao_aplicavel"
+						: taxa == null ? "gas_da_arbitragem_nao_medido"
+								: "limite_inferior_unicidade_e_builder_nao_confirmados");
 		r.put("fracao_do_vencedor_milha", fracao(pagoDireto, lucro));
-		r.put("comparacao_pagamento_status", rival
-				? "somente_componente_direto_lance_total_desconhecido" : "nao_aplicavel_sem_rival_confirmado");
+		r.put("comparacao_pagamento_status",
+				rival ? "somente_componente_direto_lance_total_desconhecido" : "nao_aplicavel_sem_rival_confirmado");
 		r.put("pagamentos_a_builder_no_bloco", vencedor.get("pagamentos_a_builder_no_bloco"));
 		r.put("pagamentos_48club_no_bloco", vencedor.get("pagamentos_48club_no_bloco"));
 		r.put("transferencias_de_valor_no_bloco", vencedor.get("transferencias_de_valor_no_bloco"));
@@ -203,7 +191,8 @@ public final class Disputa {
 		r.put("casamento_do_pagamento", "hash");
 
 		BigInteger faltou = rival && nosso != null && pagoDireto != null && pagoDireto.compareTo(nosso) > 0
-				? pagoDireto.subtract(nosso) : null;
+				? pagoDireto.subtract(nosso)
+				: null;
 		r.put("diferenca_pagamento_direto_bnb_wei", faltou == null ? null : faltou.toString());
 		r.put("faltou_bnb_wei", faltou == null ? null : faltou.toString());
 
@@ -229,18 +218,18 @@ public final class Disputa {
 		return r;
 	}
 
-	static String veredito(String classe, boolean perdemos, boolean levamos, BigInteger nosso,
-			BigInteger pagoVencedor, BigInteger faltou, String casamento) {
+	static String veredito(String classe, boolean perdemos, boolean levamos, BigInteger nosso, BigInteger pagoVencedor,
+			BigInteger faltou, String casamento) {
 
 		if (levamos) {
 			return "levamos";
 		}
 		if (!perdemos) {
 			return switch (classe) {
-				case "recusada_pelo_relay" -> "não entrou: o relay recusou o bundle";
-				case "ninguem" -> "ninguém levou a fenda";
-				case "invalida" -> "bundle inválido, não entrou";
-				default -> classe;
+			case "recusada_pelo_relay" -> "não entrou: o relay recusou o bundle";
+			case "ninguem" -> "ninguém levou a fenda";
+			case "invalida" -> "bundle inválido, não entrou";
+			default -> classe;
 			};
 		}
 		if (pagoVencedor == null) {
@@ -250,13 +239,13 @@ public final class Disputa {
 			return "perdemos: vencedor pagou " + pagoVencedor + " wei, e nós não tínhamos lance registrado";
 		}
 		if (faltou != null) {
-			return "perdemos por lance: vencedor pagou " + pagoVencedor + " wei, nós " + nosso + " wei; faltaram " + faltou
-					+ " wei" + ("posicao".equals(casamento) ? " (pagamento casado por posição, não por remetente)" : "");
+			return "perdemos por lance: vencedor pagou " + pagoVencedor + " wei, nós " + nosso + " wei; faltaram "
+					+ faltou + " wei"
+					+ ("posicao".equals(casamento) ? " (pagamento casado por posição, não por remetente)" : "");
 		}
 		return "perdemos com lance igual ou maior: a diferença não é preço, é ordem ou tempo";
 	}
 
-	// Resumo para o endpoint: quantas caíram em cada veredito, e o quanto faltou no total.
 	public static Map<String, Object> resumir(List<Map<String, Object>> analises) {
 		Map<String, Long> porVeredito = new LinkedHashMap<>();
 		BigInteger faltouTotal = BigInteger.ZERO;
@@ -314,9 +303,9 @@ public final class Disputa {
 		r.put("diferenca_total_pagamento_direto_bnb_wei", faltouTotal.toString());
 		r.put("perdas_sem_pagamento_visivel", semVisivel);
 		r.put("perdas_sem_pagamento_direto_detectado", semVisivel);
-		r.put("pagamentos_diretos_builder", Map.of("detectados", pagamentoDiretoDetectado,
-				"nao_detectados", pagamentoDiretoNaoDetectado, "nao_medidos", pagamentoDiretoNaoMedido,
-				"nao_aplicaveis", pagamentoDiretoNaoAplicavel));
+		r.put("pagamentos_diretos_builder",
+				Map.of("detectados", pagamentoDiretoDetectado, "nao_detectados", pagamentoDiretoNaoDetectado,
+						"nao_medidos", pagamentoDiretoNaoMedido, "nao_aplicaveis", pagamentoDiretoNaoAplicavel));
 		r.put("perdas_com_lance_total_desconhecido", lanceTotalDesconhecido);
 		r.put("perdas_com_limite_inferior_48club_calculavel", lance48ClubCalculavel);
 		r.put("pagamento_48club_medidos_com_trace", pagamento48ClubMedidoComTrace);

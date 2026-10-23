@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import br.com.node.NodeDeTeste;
 import br.com.node.cadeia.Crivo;
@@ -32,11 +32,6 @@ import br.com.node.sondagem.Rpc;
 import br.com.node.sondagem.Sondagem;
 import br.com.node.util.Resources;
 
-// Liveness: a projeção da mempool SÓ vale se ela acertar quais transações se concretizam. Segue a
-// cabeça, registra os swaps que o modelo PROJETA (decodifica, mapeia para pool conhecida e projeta
-// o efeito) e, no fim, confere na cadeia quantos de fato entraram num bloco. Passa com > 85% de
-// acerto — abaixo disso, a projeção está prevendo fenda sobre swap que não consolida, e o trabalho
-// é entender no fonte por que uma tx projeta e outra não, e por que uma consolida e outra não.
 class AcuraciaDaProjecaoTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
@@ -48,8 +43,9 @@ class AcuraciaDaProjecaoTest {
 	private static final int PERTO_DA_CABECA = 3;
 
 	private static final long DURACAO_MS = 10L * 60 * 1000;
-	// Só se cobra inclusão de quem teve tempo de minerar: transação vista nos últimos segundos ainda
-	// pode estar pendente, e contá-la como "não consolidou" seria injusto.
+	
+	
+	
 	private static final long CARENCIA_MS = 30_000;
 
 	private static final double PISO = 0.85;
@@ -59,7 +55,7 @@ class AcuraciaDaProjecaoTest {
 
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-	// hash projetado -> instante em que o vimos.
+	
 	private final Map<String, Long> projetadas = new ConcurrentHashMap<>();
 
 	@Test
@@ -135,8 +131,9 @@ class AcuraciaDaProjecaoTest {
 		}
 	}
 
-	// Espera a carência (para os últimos verem bloco) e confere a inclusão de cada projetado que
-	// teve tempo de minerar. Acerto = tem recibo / projetados conferíveis.
+	
+	
+	
 	private void conferir() throws InterruptedException {
 
 		Thread.sleep(CARENCIA_MS);
@@ -162,15 +159,16 @@ class AcuraciaDaProjecaoTest {
 
 		System.out.println();
 		System.out.println("==== ACURÁCIA DA PROJEÇÃO ====");
-		System.out.println("projetados conferíveis: " + conferiveis + " · consolidaram: " + consolidados
-				+ " · acerto: " + Math.round(acerto * 1000) / 10.0 + "%");
+		System.out.println("projetados conferíveis: " + conferiveis + " · consolidaram: " + consolidados + " · acerto: "
+				+ Math.round(acerto * 1000) / 10.0 + "%");
 
 		assertTrue(conferiveis >= 20, "amostra pequena demais para afirmar acerto: " + conferiveis);
-		assertTrue(acerto >= PISO, "acerto " + Math.round(acerto * 1000) / 10.0 + "% abaixo do piso de "
-				+ (PISO * 100) + "%: a projeção prevê fenda sobre swap que não consolida");
+		assertTrue(acerto >= PISO, "acerto " + Math.round(acerto * 1000) / 10.0 + "% abaixo do piso de " + (PISO * 100)
+				+ "%: a projeção prevê fenda sobre swap que não consolida");
 	}
 
-	// Consolidou = tem recibo com bloco. Recibo nulo é pendente/derrubado/substituído.
+	
+	
 	private boolean consolidou(String hash) {
 
 		String corpo = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getTransactionReceipt\",\"params\":[\"0x" + hash
@@ -196,7 +194,7 @@ class AcuraciaDaProjecaoTest {
 						&& raiz.getAsJsonObject("result").has("blockNumber");
 
 			} catch (Exception transporte) {
-				// próximo nó
+				
 			}
 		}
 

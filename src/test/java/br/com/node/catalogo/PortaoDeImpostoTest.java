@@ -9,12 +9,6 @@ import java.util.OptionalInt;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// O imposto POR DIREÇÃO, sem rede e determinístico.
-//
-// Desde 27/09 o imposto entra na CONTA da perna: `Impostos.venda(pool, token)` é o que o token perde ao ser
-// transferido ao par, `Impostos.compra(pool, token)` o que perde quando o par o envia. Vazio é perna que não
-// se pode fazer (honeypot, suspeito, venda de token sabidamente taxado que ninguém mediu por esta pool). A
-// chave segue por (POOL, token): o imposto é do par de destino (BlackSwan: 1300 num par, 0 noutro).
 class PortaoDeImpostoTest {
 
 	@Test
@@ -33,9 +27,11 @@ class PortaoDeImpostoTest {
 		impostos.medidaVenda(pool, taxado, 1300);
 		impostos.honeypot(pool, honeypot);
 
-		assertEquals(OptionalInt.of(0), impostos.venda(pool, naoMedido), "não-medido entra com zero (a simulação filtra)");
+		assertEquals(OptionalInt.of(0), impostos.venda(pool, naoMedido),
+				"não-medido entra com zero (a simulação filtra)");
 		assertEquals(OptionalInt.of(0), impostos.venda(pool, limpo));
-		assertEquals(OptionalInt.of(1300), impostos.venda(pool, taxado), "taxado tinha de voltar como 1300 bps, não barrado");
+		assertEquals(OptionalInt.of(1300), impostos.venda(pool, taxado),
+				"taxado tinha de voltar como 1300 bps, não barrado");
 		assertTrue(impostos.venda(pool, honeypot).isEmpty(), "honeypot não se vende");
 		assertTrue(impostos.compra(pool, honeypot).isEmpty(), "nem se compra");
 	}
@@ -65,7 +61,8 @@ class PortaoDeImpostoTest {
 		byte[] pool = endereco(22);
 		byte[] token = endereco(23);
 
-		// As linhas de antes de 27/09 guardam o maior dos dois lados; semeadas, caem no lado da venda.
+		
+		
 		impostos.semear(java.util.List.of(new br.com.node.vo.ProvaDeImposto(pool, token, 500, false)));
 
 		assertEquals(OptionalInt.of(500), impostos.compra(pool, token),

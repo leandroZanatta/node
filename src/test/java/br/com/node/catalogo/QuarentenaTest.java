@@ -13,7 +13,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-// O que a cadeia ensinou não pode se perder num restart, e o erro que se repete tem de pesar mais.
 class QuarentenaTest {
 
 	private static final byte[] POOL = HexFormat.of().parseHex("7a3eb6e7ffbf9f8b65afd40c0ab0ac2bab0c5d8e");

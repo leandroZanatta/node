@@ -2,7 +2,6 @@ package br.com.node.ensaio;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -13,33 +12,8 @@ import br.com.node.catalogo.Tarifario;
 import br.com.node.nucleo.Direcao;
 import br.com.node.nucleo.Par;
 import br.com.node.nucleo.Pool;
-import br.com.node.nucleo.PoolV2;
 import br.com.node.nucleo.PoolV3;
 
-// Traduz o que o MODELO decidiu para o que o CONTRATO executa.
-//
-// É a peça que fecha o circuito fictício: o `Achado` carrega `nucleo.Travessia`
-// (pool + estado + direção), o `Executor` exige (pool, entra, sai, tipo, taxa).
-// Cada campo da tradução é uma hipótese do modelo posta à prova:
-//
-//  - `entra`/`sai`: o SENTIDO. Vêm do `Par` do catálogo + `Direcao` da travessia.
-//    Trocar inverte a rota inteira — e rota invertida é TokenForaDaPool, não lucro.
-//  - `v3`: o TIPO. Vem da classe da pool (`PoolV3` ou não). Curva errada erra por
-//    ordens de grandeza, não por margem.
-//  - `taxaBps`: a TAXA. Vem do `Tarifario` — identidade da factory vence, prova por
-//    troca decide o resto. É o número que mais custou no projeto anterior
-//    (5 bps gravados onde se cobrava 1000 — 13 reverts num dia).
-//  - `montante`: a ENTRADA. É a `Oportunidade.entrada` do achado, em wei do token
-//    de partida. O contrato lê o saldo que a primeira perna deixa, então o
-//    montante do flash tem de ser exatamente o que o modelo dimensionou.
-//  - `lucroMinimo`: o piso econômico calculado pelo chamador, incluindo custo estimado do gás,
-//    pagamento ao builder e a reserva líquida positiva. Não é o lucro previsto inteiro: a arb pode
-//    encolher e ainda ser incluída se cobrir todos os custos exigidos.
-//
-// Vazio quando o modelo não tem o que o contrato exige: pool sem par no catálogo,
-// sem taxa no tarifário, ou direção que não casa com nenhum dos dois tokens do par.
-// Recusar aqui é o tradutor dizendo "o modelo está incompleto" — e isso é LACUNA,
-// não veredito da cadeia.
 public final class RotaDoModelo {
 
 	private RotaDoModelo() {
@@ -59,8 +33,6 @@ public final class RotaDoModelo {
 
 		for (int i = 0; i < achado.travessias().size(); i++) {
 
-			// O endereço vive na perna (topologia); o preço vive na travessia.
-			// Andam em paralelo, na mesma posição — o Cotador montou assim.
 			byte[] pool = achado.ciclo().pernas().get(i).pool();
 			br.com.node.nucleo.Travessia travessia = achado.travessias().get(i);
 
@@ -79,15 +51,13 @@ public final class RotaDoModelo {
 			return Optional.empty();
 		}
 
-		// O chamador fornece o chão econômico (piso + pagamento ao builder, quando houver), não o lucro
-		// inteiro previsto. Qualquer lucro acima desse chão permanece líquido para a arbitragem.
 		BigInteger lucroMinimo = pisoEmWei.max(BigInteger.ZERO);
 
 		return Optional.of(new Chamada(List.copyOf(rota), montante, lucroMinimo));
 	}
 
-	private static Optional<Salto> traduzir(byte[] pool, br.com.node.nucleo.Travessia travessia,
-			Catalogo catalogo, Tarifario tarifario) {
+	private static Optional<Salto> traduzir(byte[] pool, br.com.node.nucleo.Travessia travessia, Catalogo catalogo,
+			Tarifario tarifario) {
 
 		if (Catalogo.deGerente(pool)) {
 			return traduzirDoGerente(pool, travessia, catalogo);
@@ -109,10 +79,6 @@ public final class RotaDoModelo {
 
 		int taxaBps = taxa.get();
 
-		// O contrato lê a taxa num uint16 em PONTOS-BASE, e a pool V2 guarda em
-		// milionésimos. 25 bps = 2500 milionésimos. Sem a conversão, a pool pagaria
-		// 100x a taxa — lucro certo no modelo, SemLucro certo na cadeia.
-		// V3: a taxa já está no endereço (a identidade provou); o contrato a ignora.
 		if (!(travessia.pool() instanceof PoolV3)) {
 			if (taxaBps % Pool.PONTO_BASE != 0) {
 				return Optional.empty();
@@ -120,14 +86,9 @@ public final class RotaDoModelo {
 			taxaBps = taxaBps / Pool.PONTO_BASE;
 		}
 
-		return Optional.of(new Salto(hex(pool), hex(entra), hex(sai), travessia.pool() instanceof PoolV3,
-				taxaBps));
+		return Optional.of(new Salto(hex(pool), hex(entra), hex(sai), travessia.pool() instanceof PoolV3, taxaBps));
 	}
 
-	// A perna de GERENTE: `pool` é o gerente, a pool mesma vai na `chave`, e a taxa não vai (o contrato não a
-	// usa: quem cobra é o gerente). Entra e sai pelos LADOS da pool, em WBNB onde ela é de BNB nativo — o
-	// Executor embrulha na borda. A chave tem de dar o próprio `poolId` (`confere`): chave errada é pedir ao
-	// gerente uma pool que não é a do modelo.
 	private static Optional<Salto> traduzirDoGerente(byte[] pool, br.com.node.nucleo.Travessia travessia,
 			Catalogo catalogo) {
 

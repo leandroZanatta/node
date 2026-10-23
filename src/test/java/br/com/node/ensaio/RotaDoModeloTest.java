@@ -24,9 +24,6 @@ import br.com.node.nucleo.PoolV2;
 import br.com.node.nucleo.Travessia;
 import br.com.node.vo.Log;
 
-// O tradutor se prova contra a decisão que o `Avaliador` tomou: a rota que ele
-// monta tem de dizer os mesmos tokens, o mesmo montante e o mesmo piso que o
-// achado — e a taxa do contrato tem de ser a do tarifário em pontos-base.
 class RotaDoModeloTest {
 
 	private static final byte[] TOKEN_A = hex("aa".repeat(20));
@@ -42,14 +39,17 @@ class RotaDoModeloTest {
 		Catalogo catalogo = catalogo();
 		Tarifario tarifario = new Tarifario(catalogo, taxas(catalogo), new Fabricas());
 
-		// Ida A->B na pool AB, volta B->A na mesma pool: ciclo de duas pernas. Estas são as
-		// travessias do NÚCLEO (pool + direção), não os saltos do contrato — o tradutor as lê.
+		
+		
+		
+		
 		Travessia ida = new Travessia(new PoolV2(reserva(1_000_000), reserva(1_000_000), 2_500), Direcao.ZERO_PARA_UM);
 		Travessia volta = new Travessia(new PoolV2(reserva(1_000_000), reserva(1_010_000), 2_500),
 				Direcao.UM_PARA_ZERO);
 
-		// Lucro bem ACIMA do gás: o `lucroMinimo` é só o piso — exigir `lucro − piso` fazia reverter uma arb
-		// que encolheu no caminho mas ainda pagava o gás com sobra.
+		
+		
+		
 		BigInteger entrada = BigInteger.TEN.pow(18);
 		BigInteger lucro = BigInteger.TEN.pow(15);
 
@@ -70,7 +70,7 @@ class RotaDoModeloTest {
 		assertEquals(hex(TOKEN_B), rota.get(0).sai());
 		assertEquals(hex(TOKEN_B), rota.get(1).entra());
 		assertEquals(hex(TOKEN_A), rota.get(1).sai());
-		// 2500 milionésimos no núcleo = 25 pontos-base no contrato.
+		
 		assertEquals(25, rota.get(0).taxaBps());
 	}
 
@@ -85,8 +85,9 @@ class RotaDoModeloTest {
 		Travessia volta = new Travessia(new PoolV2(reserva(1_000_000), reserva(1_010_000), 2_500),
 				Direcao.UM_PARA_ZERO);
 
-		// Lucro só um wei acima do piso: `lucro − piso` seria 1 wei, e o contrato fecharia uma arb com
-		// lucro muito abaixo do gás. Com o máximo, ele exige o piso inteiro.
+		
+		
+		
 		BigInteger entrada = BigInteger.TEN.pow(18);
 		BigInteger lucro = GAS.add(BigInteger.ONE);
 
@@ -99,7 +100,6 @@ class RotaDoModeloTest {
 		assertTrue(chamada.isPresent());
 		assertEquals(GAS, chamada.get().lucroMinimo(), "abaixo do piso o contrato não pode fechar");
 	}
-
 
 	private static Catalogo catalogo() {
 

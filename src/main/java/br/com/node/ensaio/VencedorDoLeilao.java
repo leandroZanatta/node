@@ -6,37 +6,26 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.HexFormat;
 import java.util.logging.Logger;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-// QUEM GANHOU cada leilão que perdemos, e QUANTO levou.
-//
-// Para uma tentativa perdida, o desfecho diz a posição do vencedor no bloco dele. Aqui lemos esse bloco e
-// registramos: a transação vencedora (hash, remetente, destinatário, valor, preço do gás, gás usado), o minerador
-// do bloco (a builder que o montou) e todo pagamento direto às builders naquele bloco. A linha é ligada à NOSSA
-// tentativa pelo hash, então a junção não depende de posição nem de endereço inferido dos logs.
-//
-// `valor_wei` é o BNB que a transação vencedora enviou direto a uma builder. Se for zero, o vencedor não pagou
-// em BNB direto: pagou pela taxa de gás (`taxa_wei`) ou por um contrato, que só um trace mostraria.
 public final class VencedorDoLeilao {
 
 	private static final Logger LOG = Logger.getLogger(VencedorDoLeilao.class.getName());
-	// Quantas posições ao redor da transação vencedora olhamos para achar o pagamento dela.
+
 	static final int JANELA_POSICAO = 3;
 	static final String ENDERECO_48CLUB = HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB);
 
 	private VencedorDoLeilao() {
 	}
 
-	// Função pura: o bloco do vencedor (com transações completas) e a posição dele. `gasUsado` entra depois, pelo
-	// recibo, e fica nulo se o recibo não chegou.
 	public static JsonObject extrair(String nossoHash, String classe, long alturaDoVencedor, int posicao,
 			JsonObject bloco, Set<String> enderecosDeBuilder) {
 
@@ -86,11 +75,9 @@ public final class VencedorDoLeilao {
 		r.add("pagamentos_a_builder_no_bloco", pagamentos);
 		r.add("pagamentos_48club_no_bloco", pagamentos48Club);
 		r.addProperty("pagamento_48club_bnb_wei", pagamento48Club.toString());
-		r.addProperty("pagamento_48club_status", pagamento48Club.signum() > 0
-				? "direto_medido_trace_pendente" : "direto_nao_detectado_trace_pendente");
+		r.addProperty("pagamento_48club_status",
+				pagamento48Club.signum() > 0 ? "direto_medido_trace_pendente" : "direto_nao_detectado_trace_pendente");
 
-		// O pagamento do VENCEDOR: BNB que o remetente dele mandou a uma builder, na própria tx ou numa tx vizinha
-		// (o lance costuma ser uma transferência separada, do mesmo remetente, logo depois da arbitragem).
 		String de = semPrefixo(texto(tx, "from"));
 		BigInteger pagoPeloVencedor = BigInteger.ZERO;
 		for (PagamentosDeBloco.Pagamento p : PagamentosDeBloco.interpretar(bloco, enderecosDeBuilder)) {
@@ -99,16 +86,12 @@ public final class VencedorDoLeilao {
 			}
 		}
 		r.addProperty("pagamento_do_vencedor_wei", pagoPeloVencedor.toString());
-		r.addProperty("pagamento_direto_builder_status",
-				pagoPeloVencedor.signum() > 0 ? "detectado" : "nao_detectado");
+		r.addProperty("pagamento_direto_builder_status", pagoPeloVencedor.signum() > 0 ? "detectado" : "nao_detectado");
 		r.addProperty("pagamento_direto_builder_escopo",
 				"bnb_nativo_para_enderecos_conhecidos_mesmo_remetente_janela_3");
 		r.add("pagamento_total_builder_wei", com.google.gson.JsonNull.INSTANCE);
 		r.addProperty("pagamento_total_builder_status", "nao_verificado_sem_trace");
 
-		// TODAS as transferências de valor do bloco, sem filtro de destino nem de posição. O filtro acima só olha
-		// o remetente exato e três builders conhecidas: se o lance foi para outro endereço (payout, coinbase,
-		// contrato), ele aparece aqui, e a conclusão não fica presa à nossa suposição de forma de busca.
 		JsonArray valores = new JsonArray();
 		JsonArray todas = txs.getAsJsonArray();
 		for (int i = 0; i < todas.size(); i++) {
@@ -135,9 +118,8 @@ public final class VencedorDoLeilao {
 		}
 		String deVencedor = semPrefixo(texto(linha, "de"));
 		JsonElement internas = linha.get("transferencias_internas");
-		boolean traceCompleto = internas != null && internas.isJsonArray()
-				&& linha.has("sucesso_vencedor") && linha.get("sucesso_vencedor").getAsBoolean()
-				&& linha.has("fonte_transferencias_internas");
+		boolean traceCompleto = internas != null && internas.isJsonArray() && linha.has("sucesso_vencedor")
+				&& linha.get("sucesso_vencedor").getAsBoolean() && linha.has("fonte_transferencias_internas");
 		if (traceCompleto) {
 			for (JsonElement elemento : internas.getAsJsonArray()) {
 				JsonObject transferencia = elemento.getAsJsonObject();
@@ -155,17 +137,15 @@ public final class VencedorDoLeilao {
 				: total.signum() > 0 ? "limite_inferior_sem_trace" : "nao_detectado_sem_trace");
 	}
 
-	// Acrescenta uma linha. Chamado de uma thread de fundo: a escrita é serializada para não misturar linhas.
 	public static synchronized void gravar(Path arquivo, JsonObject linha) {
 		try {
-			Files.write(arquivo, (linha.toString() + "\n").getBytes(StandardCharsets.UTF_8),
-					StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+			Files.write(arquivo, (linha.toString() + "\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE,
+					StandardOpenOption.APPEND);
 		} catch (IOException e) {
 			LOG.warning(() -> "vencedor do leilão não gravado: " + e.getMessage());
 		}
 	}
 
-	// Pagamentos que a própria transação vencedora fez a uma builder, pela lista do bloco. Usado pelo /disputa.
 	public static List<PagamentosDeBloco.Pagamento> doBloco(JsonObject bloco, Set<String> enderecosDeBuilder) {
 		return PagamentosDeBloco.interpretar(bloco, enderecosDeBuilder);
 	}

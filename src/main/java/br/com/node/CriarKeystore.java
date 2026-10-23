@@ -11,13 +11,6 @@ import br.com.node.util.Keccak;
 import br.com.node.util.Keystore;
 import br.com.node.util.Secp256k1;
 
-// Ferramenta de uma vez: cifra a chave privada do operador (hoje em texto puro no `operador.chave`)
-// num keystore protegido por senha. Roda LOCAL — a chave nunca passa por mais ninguém.
-//
-//   OPERADOR_SENHA=... java -cp ... br.com.node.CriarKeystore [entrada] [saida]
-//
-// Imprime só o ENDEREÇO derivado (nunca a chave), para você conferir que é o operador autorizado
-// (0xe5c9…eb94). Depois de gerar o keystore, apague o `operador.chave` em texto puro.
 public final class CriarKeystore {
 
 	private static final Logger LOG = Logger.getLogger(CriarKeystore.class.getName());

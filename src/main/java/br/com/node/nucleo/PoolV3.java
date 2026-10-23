@@ -2,26 +2,6 @@ package br.com.node.nucleo;
 
 import java.math.BigInteger;
 
-// O estado de uma pool de liquidez concentrada, no tick corrente.
-//
-// Não tem reserva: tem preço e liquidez, e os dois vêm prontos no evento `Swap`
-// (`sqrtPriceX96`, `liquidity`, `tick`). Por isso o modelo do V3 não deriva — foi o
-// V2, com taxa inferida, que era o inconfiável.
-//
-// A liquidez ativa muda também por `Mint`/`Burn` cuja faixa cobre o tick corrente.
-// Entre dois swaps, ignorar esses dois deltas é ler aporte de liquidez como variação
-// de preço — e é o que cegou o projeto anterior.
-//
-// SOBRE CRUZAR TICK: fora da faixa corrente a liquidez é outra, e o mapa de ticks
-// exigiria história desde a criação da pool, que os pares não guardam (medido: eles
-// servem recibo de 100 mil blocos atrás, não de 1 milhão). Então `aplicar` RECUSA o
-// que cruza, e `maximoNoTick` diz até onde vai. Liquidez concentrada mais trade
-// pequeno raramente cruza — a borda é teto, não obstáculo.
-//
-// COM `MapaDeTicks` A RECUSA ACABA — dentro da faixa que o mapa conhece. O swap anda pelo laço do contrato
-// (`SwapMath.computeSwapStep` + `SqrtPriceMath`, idêntico na Uniswap V3, na PancakeSwap V3, na Uniswap V4 e no
-// Infinity CL), com os MESMOS arredondamentos: entrada para cima, saída para baixo, taxa cobrada passo a passo,
-// e a liquidez trocando pelo `liquidityNet` de cada tick inicializado cruzado. Sem mapa, tudo como antes.
 public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int taxa, int tickSpacing,
 		MapaDeTicks ticks) implements Pool {
 
@@ -33,7 +13,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		this(sqrtPrecoX96, liquidez, tick, taxa, tickSpacing, null);
 	}
 
-	// A mesma pool com o mapa de ticks — só onde o mapa existe e cobre o tick corrente.
 	public PoolV3 comTicks(MapaDeTicks mapa) {
 		return mapa == null || tick < mapa.tickMinimo() || tick > mapa.tickMaximo() ? this
 				: new PoolV3(sqrtPrecoX96, liquidez, tick, taxa, tickSpacing, mapa);
@@ -72,9 +51,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return new Passo(saida, new PoolV3(proximoSqrt, liquidez, tick, taxa, tickSpacing));
 	}
 
-	// O laço de swap do contrato, entrada exata. Cada passo vai até o próximo tick inicializado (ou a borda da
-	// faixa conhecida); chegando nele com entrada sobrando, cruza e troca a liquidez. Passar da borda da faixa
-	// é recusado: além dela o mapa não sabe o que há.
 	private Passo atravessar(boolean zeroParaUm, BigInteger entrada) {
 
 		BigInteger restante = entrada;
@@ -89,10 +65,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 				throw new IllegalArgumentException("Entrada cruza ticks demais");
 			}
 
-			// `TickBitmap.nextInitializedTickWithinOneWord`: o passo para no próximo tick inicializado OU na
-			// fronteira da palavra do bitmap (256 ticks comprimidos), o que vier antes — mesmo sem liquidez ali.
-			// Cada parada é um passo de arredondamento a mais: ir direto ao tick inicializado dava 1 wei A MAIS
-			// que a cadeia num swap real que atravessou 62 ticks e uma fronteira de palavra.
 			int comprimido = Math.floorDiv(t, tickSpacing);
 			Integer candidato = zeroParaUm ? ticks.abaixoOuIgual(t) : ticks.acima(t);
 			Integer inicializado;
@@ -112,7 +84,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 
 			alvo = Math.max(-TickMath.TICK_MAXIMO, Math.min(TickMath.TICK_MAXIMO, alvo));
 
-			// Além da faixa que o mapa conhece não se sabe se há tick inicializado: não se passa dela.
 			if (alvo < ticks.tickMinimo() || alvo > ticks.tickMaximo()) {
 				throw new IllegalArgumentException("Entrada sai da faixa conhecida de ticks");
 			}
@@ -152,7 +123,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return new Passo(saida, new PoolV3(sqrt, l, t, taxa, tickSpacing, ticks));
 	}
 
-	// `SwapMath.computeSwapStep`, entrada exata: {√P seguinte, entrada usada, saída, taxa cobrada}.
 	private BigInteger[] passo(boolean zeroParaUm, BigInteger sqrt, BigInteger sqrtAlvo, BigInteger l,
 			BigInteger restante) {
 
@@ -174,7 +144,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return new BigInteger[] { sqrtProximo, entrou, saiu, cobrada };
 	}
 
-	// `SqrtPriceMath.getAmount0Delta`.
 	private static BigInteger delta0(BigInteger a, BigInteger b, BigInteger l, boolean paraCima) {
 
 		BigInteger menor = a.min(b);
@@ -186,7 +155,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 				: numerador1.multiply(numerador2).divide(maior).divide(menor);
 	}
 
-	// `SqrtPriceMath.getAmount1Delta`.
 	private static BigInteger delta1(BigInteger a, BigInteger b, BigInteger l, boolean paraCima) {
 
 		BigInteger diferenca = a.max(b).subtract(a.min(b));
@@ -194,7 +162,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return paraCima ? divCima(l.multiply(diferenca), Q96) : l.multiply(diferenca).divide(Q96);
 	}
 
-	// `getNextSqrtPriceFromAmount0RoundingUp`, somando: √P' = ⌈L·2^96·√P / (L·2^96 + x·√P)⌉.
 	private static BigInteger proximoPorToken0(BigInteger sqrt, BigInteger l, BigInteger quantia) {
 
 		if (quantia.signum() == 0) {
@@ -206,7 +173,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return divCima(numerador1.multiply(sqrt), numerador1.add(quantia.multiply(sqrt)));
 	}
 
-	// `getNextSqrtPriceFromAmount1RoundingDown`, somando: √P' = √P + ⌊x·2^96 / L⌋.
 	private static BigInteger proximoPorToken1(BigInteger sqrt, BigInteger l, BigInteger quantia) {
 		return sqrt.add(quantia.shiftLeft(96).divide(l));
 	}
@@ -216,10 +182,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return qr[1].signum() == 0 ? qr[0] : qr[0].add(BigInteger.ONE);
 	}
 
-	// Os coeficientes saem de substituir `semTaxa(x) = x·k/E` nas duas fórmulas exatas do
-	// contrato e reagrupar. O `semTaxa` real arredonda a taxa para CIMA, e aqui ela é
-	// linear: a diferença é de um wei na entrada líquida, e serve para dimensionar, não
-	// para prometer saída — quem promete é o `aplicar`.
 	@Override
 	public Curva curva(Direcao direcao) {
 
@@ -229,8 +191,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		BigInteger quadradoDoPreco = sqrtPrecoX96.multiply(sqrtPrecoX96);
 		BigInteger quadradoDeQ96 = Q96.multiply(Q96);
 
-		// A simetria não é estética: entrar com token0 e entrar com token1 trocam √P² por
-		// Q96² nos dois primeiros coeficientes, e é assim que o contrato é escrito.
 		BigInteger deCima = direcao == Direcao.ZERO_PARA_UM ? quadradoDoPreco : quadradoDeQ96;
 		BigInteger deBaixo = direcao == Direcao.ZERO_PARA_UM ? quadradoDeQ96 : quadradoDoPreco;
 
@@ -238,9 +198,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 				Q96.multiply(sqrtPrecoX96).multiply(liquido));
 	}
 
-	// O maior montante que ainda fica dentro da faixa de liquidez corrente. A faixa
-	// vai de um múltiplo de tickSpacing ao seguinte, porque só ali a liquidez pode
-	// mudar.
 	public BigInteger maximoNoTick(Direcao direcao) {
 
 		int inferior = Math.floorDiv(tick, tickSpacing) * tickSpacing;
@@ -254,8 +211,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return comTaxa(liquida);
 	}
 
-	// A taxa sai da entrada antes do swap, e o contrato arredonda a taxa para CIMA.
-	// Copiamos: entrada líquida para baixo é subestimar a saída, que é o lado certo.
 	private BigInteger semTaxa(BigInteger entrada) {
 
 		BigInteger escala = BigInteger.valueOf(ESCALA_DA_TAXA);
@@ -272,7 +227,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return liquida.multiply(escala).divide(escala.subtract(BigInteger.valueOf(taxa)));
 	}
 
-	// token0 entra: o preço CAI. Forma exata do contrato, sem perder precisão.
 	private BigInteger sqrtAposToken0(BigInteger entrada) {
 
 		BigInteger numerador = liquidez.multiply(Q96);
@@ -280,7 +234,6 @@ public record PoolV3(BigInteger sqrtPrecoX96, BigInteger liquidez, int tick, int
 		return numerador.multiply(sqrtPrecoX96).divide(numerador.add(entrada.multiply(sqrtPrecoX96)));
 	}
 
-	// token1 entra: o preço SOBE.
 	private BigInteger sqrtAposToken1(BigInteger entrada) {
 		return sqrtPrecoX96.add(entrada.multiply(Q96).divide(liquidez));
 	}

@@ -11,8 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.vo.AnuncioBloco;
 
-// A `Cabeca` guarda os marcos de cada bloco (feito → anunciado → aplicado), que o `Disparo` completa
-// até o relay.
 class CabecaLinhaDoTempoTest {
 
 	private static final byte[] HASH = HexFormat.of().parseHex("ab".repeat(32));

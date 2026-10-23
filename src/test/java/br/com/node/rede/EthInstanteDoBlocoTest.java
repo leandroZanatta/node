@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.rlp.Rlp;
 import br.com.node.rlp.RlpItem;
 
-// O instante do bloco em ms: segundos no `timestamp` (campo 11), milissegundo no `mixHash` (campo 13).
-// Os números são os do bloco 123894823, da fenda de 5,03 USDT perdida em 25/09: 05:42:32 e 800 ms.
 class EthInstanteDoBlocoTest {
 
 	private static final long SEGUNDOS = 1_790_314_952L;

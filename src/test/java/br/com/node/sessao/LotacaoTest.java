@@ -8,10 +8,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.NodeDeTeste;
 import br.com.node.cadeia.Crivo;
 
-// O pool de 25 foi onde o projeto anterior morreu: sessão morta em silêncio
-// ocupava um slot para sempre, `completar()` não repunha, e o backoff exponencial
-// de 30 min barrava os pares bons. Este teste não mede quantas abrem — mede se
-// elas SE MANTÊM, que é a propriedade que faltava.
 class LotacaoTest {
 
 	private static final int ESPERA_PARA_ABRIR = 120;
@@ -44,8 +40,9 @@ class LotacaoTest {
 
 			System.out.println("ativas depois de abrir: " + abertas);
 
-			// A propriedade que importa: passado o tempo, ainda há conversa de pé. Se a
-			// lotação não repõe, ou se o leitor não responde o Ping do par, isto cai a zero.
+			
+			
+			
 			long menor = abertas;
 
 			for (int segundo = 0; segundo < TEMPO_DE_SUSTENTACAO; segundo += 5) {

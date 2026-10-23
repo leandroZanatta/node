@@ -11,9 +11,9 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import br.com.node.NodeDeTeste;
 import br.com.node.cadeia.Forks;
 import br.com.node.cadeia.ParametrosBsc;
-import br.com.node.NodeDeTeste;
 import br.com.node.vo.Disconnect;
 import br.com.node.vo.ForkId;
 import br.com.node.vo.GetReceipts;
@@ -53,8 +53,8 @@ class ApertoRlpxTest {
 
 				Status status = trocarStatus(conexao);
 
-				// No eth/68 a BSC troca UpgradeStatus depois do Status. Não responder é
-				// levar Disconnect por erro de subprotocolo.
+				
+				
 				conexao.enviar(new UpgradeStatus(false));
 
 				fechados++;
@@ -87,8 +87,8 @@ class ApertoRlpxTest {
 
 		conexao.enviar(new GetReceipts(pedidoId, List.of(status.melhorBloco())));
 
-		// O par intercala Ping do p2p com a resposta. Não responder é levar
-		// Disconnect 0x0b — "ficamos calados tempo demais".
+		
+		
 		for (int tentativa = 0; tentativa < 12; tentativa++) {
 
 			MensagemRlpx resposta = conexao.ler();
@@ -129,11 +129,11 @@ class ApertoRlpxTest {
 
 	private Status trocarStatus(ConexaoTcp conexao) {
 
-		// Sem cursor ainda: anunciamos o genesis como nossa cabeça e dificuldade zero.
-		// É o que faz um par nos tratar como leech — e é exatamente o que este teste
-		// mede, porque a resposta dele diz se conseguimos recibo assim.
-		conexao.enviar(new Status(68, ParametrosBsc.REDE, BigInteger.ZERO, ParametrosBsc.GENESIS,
-				ParametrosBsc.GENESIS, nosso()));
+		
+		
+		
+		conexao.enviar(new Status(68, ParametrosBsc.REDE, BigInteger.ZERO, ParametrosBsc.GENESIS, ParametrosBsc.GENESIS,
+				nosso()));
 
 		for (int tentativa = 0; tentativa < 6; tentativa++) {
 
@@ -155,8 +155,8 @@ class ApertoRlpxTest {
 		throw new IllegalStateException("Status não chegou");
 	}
 
-	// Só quem declara O MESMO corte que nós. Um par num fork anterior recusa por
-	// EIP-2124 e é correto que recuse: ele não conhece o nosso hash.
+	
+	
 	private List<NoRemoto> acharParesDaBsc(NodeDeTeste node) throws InterruptedException {
 
 		node.iniciar();

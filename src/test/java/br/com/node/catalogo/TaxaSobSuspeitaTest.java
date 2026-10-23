@@ -26,21 +26,6 @@ import br.com.node.sincronizacao.Frente;
 import br.com.node.util.Resources;
 import br.com.node.vo.ProvaDeTaxa;
 
-// A pool 7a3eb6e7 sob suspeita, com a própria cadeia como juiz.
-//
-// O novo prova 500 milionésimos (5 bps). A cicatriz do anterior diz que ela cobra "1000" — e o
-// anterior media em base 10.000 (`10_000L - bps` na `SondaDeCurva`), então a cicatriz afirma
-// DEZ POR CENTO numa USDT/WBNB de meio milhão de dólares. As duas não podem valer para o mesmo
-// chamador.
-//
-// O juiz é o invariante K. Quem chama escolhe a saída e o par só confere, então a saída ACEITA
-// limita por cima a taxa cobrada daquele chamador: se ela é o máximo de uma pool de 5 bps, uma
-// pool de 10% a teria recusado. Agrupa-se por quem chamou `swap` porque, se o K concordar com
-// 5 bps, a hipótese que sobra é taxa que depende do chamador — o executor do anterior chamava o
-// par direto, e terceiros passam por roteador.
-//
-// De carona, a mesma corrida mede o que a correção da palavra do Mint e o empate de truncagem
-// fizeram com a cobertura, e quantos tokens o portão de imposto deixa passar.
 class TaxaSobSuspeitaTest {
 
 	private static final byte[] SUSPEITA = HexFormat.of().parseHex("7a3eb6e7ffbf9f8b65afd40c0ab0ac2bab0c5d8e");
@@ -52,7 +37,7 @@ class TaxaSobSuspeitaTest {
 	private static final int POR_LOTE = 16;
 	private static final int RECUO = BLOCOS + 100;
 
-	// Dez por cento é o que a cicatriz afirma; o degrau da busca é o ponto-base.
+	
 	private static final int TETO_DA_BUSCA = 100_000;
 
 	@Test
@@ -69,7 +54,8 @@ class TaxaSobSuspeitaTest {
 		List<TrocaObservada> trocas = new ArrayList<>();
 		Map<String, ReservasV2> antesPorTransacao = new HashMap<>();
 
-		// O gancho de persistência, com chamador vivo: a evidência que um banco guardaria.
+		
+		
 		List<ProvaDeTaxa> provas = new ArrayList<>();
 		taxas.aoProvar(provas::add);
 
@@ -106,14 +92,17 @@ class TaxaSobSuspeitaTest {
 		assertTrue(andados > 0, "o cursor não avançou bloco nenhum");
 		assertTrue(!trocas.isEmpty(), "a 7a3eb6e7 não negociou com estado anterior conhecido: sem troca não há juiz");
 
-		// A conclusão do julgamento, escrita como fato do módulo: movimentada e fechada a poucos
-		// chamadores, a taxa provada dela não é a nossa.
-		//
-		// E o controle do outro lado, que derrubou a primeira versão da heurística: pool negociada só
-		// pelo roteador público é aberta a todos e não pode sair do grafo por isso.
-		assertTrue(catalogo.pools().stream().filter(taxas::fechadaAChamadores)
-				.noneMatch(pool -> taxas.provadoresPorTaxa(pool).values().stream().flatMap(java.util.Set::stream)
-						.anyMatch(Taxas::roteadorPublico)),
+		
+		
+		
+		
+		
+		
+		
+		assertTrue(
+				catalogo.pools().stream().filter(taxas::fechadaAChamadores)
+						.noneMatch(pool -> taxas.provadoresPorTaxa(pool).values().stream()
+								.flatMap(java.util.Set::stream).anyMatch(Taxas::roteadorPublico)),
 				"pool com roteador público entre os chamadores foi tratada como fechada");
 		assertTrue(taxas.fechadaAChamadores(SUSPEITA),
 				"a 7a3eb6e7 negociou " + trocas.size() + " vezes e não foi reconhecida como fechada a chamadores");
@@ -130,9 +119,11 @@ class TaxaSobSuspeitaTest {
 		}
 	}
 
-	// O estado de antes vem do `Sync` da MESMA transação — é a regra que a `Taxas` passou a
-	// seguir depois do defeito do pendente pendurado, e o juiz não pode usar regra mais frouxa
-	// que o réu.
+	
+	
+	
+	
+	
 	private void registrar(Transicao transicao, Map<String, ReservasV2> antesPorTransacao,
 			List<TrocaObservada> trocas) {
 
@@ -170,14 +161,14 @@ class TaxaSobSuspeitaTest {
 				antes.taxaQueFecha(direcao, entrada, saida), teto(antes, direcao, entrada, saida)));
 	}
 
-	// A saída cai quando a taxa sobe, então o primeiro degrau cuja saída máxima fica ABAIXO da
-	// aceita marca o limite: o degrau anterior a ele é o teto.
+	
+	
+	
 	private int teto(ReservasV2 antes, Direcao direcao, BigInteger entrada, BigInteger saida) {
 
 		for (int taxa = 0; taxa <= TETO_DA_BUSCA; taxa += Pool.PONTO_BASE) {
 
-			BigInteger maxima = new PoolV2(antes.reserva0(), antes.reserva1(), taxa).aplicar(direcao, entrada)
-					.saida();
+			BigInteger maxima = new PoolV2(antes.reserva0(), antes.reserva1(), taxa).aplicar(direcao, entrada).saida();
 
 			if (maxima.compareTo(saida) < 0) {
 				return taxa - Pool.PONTO_BASE;
@@ -202,9 +193,12 @@ class TaxaSobSuspeitaTest {
 				+ " tributados");
 	}
 
-	// A pergunta que a 7a3eb6e7 deixou: taxa que depende de quem chama é exceção ou padrão?
-	// Por log ela só aparece quando dois chamadores DISCORDAM, então é nas pools com mais de uma
-	// taxa que se procura — e foi aqui que se viu que a discordância era fórmula de robô.
+	
+	
+	
+	
+	
+	
 	private void relatarProvadores(Catalogo catalogo, Taxas taxas) {
 
 		System.out.println();
@@ -214,8 +208,8 @@ class TaxaSobSuspeitaTest {
 
 			Map<Integer, java.util.Set<String>> porTaxa = taxas.provadoresPorTaxa(HexFormat.of().parseHex(pool));
 
-			System.out.println("   0x" + pool + " → " + taxas.de(HexFormat.of().parseHex(pool)).map(String::valueOf)
-					.orElse("ambígua"));
+			System.out.println("   0x" + pool + " → "
+					+ taxas.de(HexFormat.of().parseHex(pool)).map(String::valueOf).orElse("ambígua"));
 			porTaxa.forEach((taxa, quem) -> System.out.println("      " + taxa + " · " + quem.size() + " chamadores · "
 					+ quem.stream().limit(3).map(chamador -> "0x" + chamador.substring(0, 8)).toList()));
 		});
@@ -224,8 +218,8 @@ class TaxaSobSuspeitaTest {
 
 		for (byte[] pool : catalogo.pools()) {
 
-			long chamadores = taxas.provadoresPorTaxa(pool).values().stream().flatMap(java.util.Set::stream)
-					.distinct().count();
+			long chamadores = taxas.provadoresPorTaxa(pool).values().stream().flatMap(java.util.Set::stream).distinct()
+					.count();
 
 			if (chamadores > 0) {
 				distribuicao.merge(chamadores >= 6 ? "6+" : String.valueOf(chamadores), 1, Integer::sum);
@@ -240,13 +234,15 @@ class TaxaSobSuspeitaTest {
 		System.out.println("pools movimentadas e fechadas a poucos chamadores: " + fechadas.size() + " " + fechadas);
 	}
 
-	// A regra velha e a nova sobre a MESMA janela. A velha apagava a pool ao ver a segunda taxa,
-	// e a evidência guardada basta para dizer o que ela teria decidido.
+	
+	
+	
 	private void compararRegras(Catalogo catalogo, Taxas taxas, List<ProvaDeTaxa> provas) {
 
 		Map<String, java.util.Set<Integer>> taxasPorPool = new HashMap<>();
 
-		provas.forEach(prova -> taxasPorPool.computeIfAbsent(HexFormat.of().formatHex(prova.pool()), pool -> new java.util.HashSet<>())
+		provas.forEach(prova -> taxasPorPool
+				.computeIfAbsent(HexFormat.of().formatHex(prova.pool()), pool -> new java.util.HashSet<>())
 				.add(prova.taxa()));
 
 		long velhaProva = taxasPorPool.values().stream().filter(conjunto -> conjunto.size() == 1).count();
@@ -258,14 +254,17 @@ class TaxaSobSuspeitaTest {
 
 		System.out.println();
 		System.out.println("regras sobre a mesma janela");
-		System.out.println("   pools com evidência de taxa: " + taxasPorPool.size() + " · com mais de uma taxa: " + comMaisDeUma);
+		System.out.println(
+				"   pools com evidência de taxa: " + taxasPorPool.size() + " · com mais de uma taxa: " + comMaisDeUma);
 		System.out.println("   'contradição apaga' provaria:  " + velhaProva);
-		System.out.println("   'o K ordena' prova:            " + novaProva + " · ambíguas: " + taxas.quantasAmbiguas());
+		System.out
+				.println("   'o K ordena' prova:            " + novaProva + " · ambíguas: " + taxas.quantasAmbiguas());
 		System.out.println("   e sem as fechadas a chamadores: " + precificaveisPelaTaxa + " (tira " + fechadas + ")");
 	}
 
-	// O que a heurística tira, pool a pool, para conferir no explorador que não se tirou pool
-	// aberta: par, taxa, fechamentos e chamadores distintos.
+	
+	
+	
 	private void relatarFechadas(Catalogo catalogo, Taxas taxas, List<ProvaDeTaxa> provas) {
 
 		System.out.println();
@@ -286,19 +285,23 @@ class TaxaSobSuspeitaTest {
 					+ taxas.de(pool).map(String::valueOf).orElse("ambígua") + " · "
 					+ dela.stream().mapToLong(ProvaDeTaxa::fechamentos).sum() + " · "
 					+ dela.stream().map(ProvaDeTaxa::chamador).distinct()
-							.map(c -> "0x" + c.substring(0, 8) + (Taxas.roteadorPublico(c) ? "(roteador)" : "")).toList());
+							.map(c -> "0x" + c.substring(0, 8) + (Taxas.roteadorPublico(c) ? "(roteador)" : ""))
+							.toList());
 		}
 	}
 
-	// O gancho `semear` com chamador vivo e com prova: a evidência agregada por (pool, taxa,
-	// chamador), como uma tabela a guardaria, reconstrói EXATAMENTE as mesmas decisões. Se não
-	// reconstruísse, a regra estaria morando em dois lugares.
+	
+	
+	
+	
+	
 	private void conferirSemeadura(Catalogo catalogo, Taxas taxas, List<ProvaDeTaxa> provas) {
 
 		Map<String, Long> agregadas = new TreeMap<>();
 
-		provas.forEach(prova -> agregadas.merge(HexFormat.of().formatHex(prova.pool()) + "|" + prova.taxa() + "|"
-				+ prova.chamador(), prova.fechamentos(), Long::sum));
+		provas.forEach(prova -> agregadas.merge(
+				HexFormat.of().formatHex(prova.pool()) + "|" + prova.taxa() + "|" + prova.chamador(),
+				prova.fechamentos(), Long::sum));
 
 		List<ProvaDeTaxa> linhas = agregadas.entrySet().stream().map(entrada -> {
 			String[] partes = entrada.getKey().split("\\|");
@@ -326,9 +329,9 @@ class TaxaSobSuspeitaTest {
 		System.out.println("   altura · chamador · direção · taxa exata · teto compatível (milionésimos)");
 
 		trocas.stream().limit(60)
-				.forEach(troca -> System.out.println("   " + troca.altura() + " · 0x" + troca.chamador() + " · "
-						+ troca.direcao() + " · " + troca.exata().map(String::valueOf).orElse("—") + " · "
-						+ troca.teto()));
+				.forEach(troca -> System.out
+						.println("   " + troca.altura() + " · 0x" + troca.chamador() + " · " + troca.direcao() + " · "
+								+ troca.exata().map(String::valueOf).orElse("—") + " · " + troca.teto()));
 
 		Map<String, List<TrocaObservada>> porChamador = new TreeMap<>();
 

@@ -14,25 +14,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-import com.google.gson.JsonArray;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import br.com.node.catalogo.Eventos;
 
-// RECALL da projeção — a métrica HONESTA que a precisão escondia: dos swaps que movem pool num
-// bloco, quantos o nosso decodificador consegue projetar? Precisão (o que projetamos confirma) era
-// ~100% e vazia; recall (do bloco, quanto pegamos) é o que decide se a gente PREVÊ o bloco ou só
-// detecta algumas transações.
-//
-// Puro RPC: amostra blocos recentes, pega por log quais tx moveram pool (Swap V2/V3), e para cada
-// uma testa se `Roteamento.decodificar` pega o calldata. Recall = pegos / total. O histograma dos
-// seletores PERDIDOS diz exatamente que tipo de swap decodificar em seguida — é o guia do ajuste
-// do modelo. Começa vermelho (meta 80% dos V2) e sobe conforme o decodificador melhora.
 class RecallDaProjecaoTest {
 
 	private static final List<String> NOS = List.of("https://bsc-rpc.publicnode.com",
@@ -69,8 +59,8 @@ class RecallDaProjecaoTest {
 
 			String bloco = "0x" + Long.toHexString(b);
 
-			Map<String, Boolean> swaps = swapsDoBloco(bloco); // txHash -> ehV2 (tem log Swap V2)
-			Map<String, String> entradas = entradasDoBloco(bloco); // txHash -> calldata
+			Map<String, Boolean> swaps = swapsDoBloco(bloco); 
+			Map<String, String> entradas = entradasDoBloco(bloco); 
 
 			for (Map.Entry<String, Boolean> swap : swaps.entrySet()) {
 
@@ -103,8 +93,8 @@ class RecallDaProjecaoTest {
 
 		System.out.println();
 		System.out.println("==== RECALL DA PROJEÇÃO (" + BLOCOS + " blocos) ====");
-		System.out.println("swaps V2 no bloco: " + v2Total + " · projetáveis: " + v2Pego + " · recall V2: "
-				+ pct(recallV2));
+		System.out.println(
+				"swaps V2 no bloco: " + v2Total + " · projetáveis: " + v2Pego + " · recall V2: " + pct(recallV2));
 		System.out.println("swaps totais (V2+V3): " + todosTotal + " · projetáveis: " + todosPego + " · recall geral: "
 				+ pct(recallTodos));
 		System.out.println();
@@ -112,17 +102,22 @@ class RecallDaProjecaoTest {
 		perdidosPorSeletor.entrySet().stream().sorted((a, b) -> b.getValue() - a.getValue()).limit(12)
 				.forEach(e -> System.out.println("   0x" + e.getKey() + " : " + e.getValue()));
 
-		// Não é portão numa meta: é medidor. O recall por decodificação de calldata tem teto baixo na
-		// BSC (o fluxo é dominado por agregador e bot privado, opacos), então cravar 80% aqui seria
-		// vermelho eterno. O NÚMERO impresso é o resultado; o histograma diz o que ainda dá pra ganhar.
+		
+		
+		
+		
+		
+		
 		System.out.println();
-		System.out.println(recallV2 >= META_V2 ? "recall na meta" : "recall abaixo de " + pct(META_V2)
-				+ " — teto do decode; recall alto de verdade só simulando a tx crua na EVM");
+		System.out.println(recallV2 >= META_V2 ? "recall na meta"
+				: "recall abaixo de " + pct(META_V2)
+						+ " — teto do decode; recall alto de verdade só simulando a tx crua na EVM");
 
 		assertTrue(v2Total >= 20, "amostra de swaps V2 pequena demais: " + v2Total);
 	}
 
-	// txHash -> tem log de Swap V2 (senão é V3). Um filtro getLogs por topic0 nos três Swap.
+	
+	
 	private Map<String, Boolean> swapsDoBloco(String bloco) {
 
 		String params = "{\"fromBlock\":\"" + bloco + "\",\"toBlock\":\"" + bloco + "\",\"topics\":[[\"0x" + SWAP_V2
@@ -159,7 +154,8 @@ class RecallDaProjecaoTest {
 			return entradas;
 		}
 
-		for (JsonElement tx : resposta.get().getAsJsonObject().getAsJsonObject("result").getAsJsonArray("transactions")) {
+		for (JsonElement tx : resposta.get().getAsJsonObject().getAsJsonObject("result")
+				.getAsJsonArray("transactions")) {
 			JsonObject o = tx.getAsJsonObject();
 			entradas.put(o.get("hash").getAsString(), o.get("input").getAsString());
 		}
@@ -191,7 +187,7 @@ class RecallDaProjecaoTest {
 				}
 
 			} catch (Exception transporte) {
-				// próximo nó
+				
 			}
 		}
 

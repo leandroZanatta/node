@@ -15,8 +15,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.nucleo.Arbitragem;
 import br.com.node.vo.Log;
 
-// O detector por fluxo de `Transfer`: acha a arbitragem em qualquer DEX, e separa dela o swap comum,
-// a compra com BNB nativo e o recebedor de taxa — sem conhecer ABI de pool nenhuma.
 class DetectorTest {
 
 	private static final byte[] A = end("aa");
@@ -40,10 +38,10 @@ class DetectorTest {
 	void cicloV2() {
 
 		List<Log> logs = new ArrayList<>();
-		logs.add(transfer(B, PAR2, PAR1, 50)); // o par 2 empresta B ao par 1 (flash)
+		logs.add(transfer(B, PAR2, PAR1, 50)); 
 		logs.add(transfer(A, PAR1, BOT, 100));
 		logs.addAll(par(PAR1));
-		logs.add(transfer(A, BOT, PAR2, 95)); // paga o par 2 em A
+		logs.add(transfer(A, BOT, PAR2, 95)); 
 		logs.addAll(par(PAR2));
 
 		Arbitragem arb = detector.em(logs).orElseThrow();
@@ -81,7 +79,7 @@ class DetectorTest {
 		logs.add(transfer(A, USUARIO, PAR1, 100));
 		logs.add(transfer(B, PAR1, PAR2, 50));
 		logs.addAll(par(PAR1));
-		logs.add(transfer(A, PAR2, USUARIO, 0)); // valor zero não conta
+		logs.add(transfer(A, PAR2, USUARIO, 0)); 
 		logs.add(transfer(WBNB, PAR2, USUARIO, 10));
 		logs.addAll(par(PAR2));
 
@@ -125,14 +123,14 @@ class DetectorTest {
 	void desembrulhoSaiDaConta() {
 
 		List<Log> logs = new ArrayList<>();
-		logs.add(transfer(WBNB, PAR1, BOT, 606)); // empréstimo
+		logs.add(transfer(WBNB, PAR1, BOT, 606)); 
 		logs.add(log(WBNB, List.of(Eventos.assinatura("Withdrawal(address,uint256)"), palavra(BOT)), valor(606)));
-		logs.add(log(GERENTE_V4, List.of(SWAP_V4, palavra(1)), new byte[64])); // paga em nativo
+		logs.add(log(GERENTE_V4, List.of(SWAP_V4, palavra(1)), new byte[64])); 
 		logs.add(transfer(A, GERENTE_V4, BOT, 472));
 		logs.add(transfer(A, BOT, PAR2, 472));
 		logs.add(transfer(WBNB, PAR2, BOT, 606));
 		logs.addAll(par(PAR2));
-		logs.add(transfer(WBNB, BOT, PAR1, 606)); // devolve o empréstimo
+		logs.add(transfer(WBNB, BOT, PAR1, 606)); 
 		logs.addAll(par(PAR1));
 
 		assertTrue(detector.em(logs).isEmpty(), "o WBNB desembrulhado antes de voltar tem de ser descontado");

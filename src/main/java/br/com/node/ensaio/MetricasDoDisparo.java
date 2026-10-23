@@ -74,8 +74,7 @@ final class MetricasDoDisparo {
 		return copia;
 	}
 
-	Map<String, Object> resumo(BigInteger saldoOperador, BigInteger saldoExecutorWBNB,
-			long vereditoSemEstadoDoBloco) {
+	Map<String, Object> resumo(BigInteger saldoOperador, BigInteger saldoExecutorWBNB, long vereditoSemEstadoDoBloco) {
 		Map<String, Object> r = new LinkedHashMap<>();
 		milisPorCaminho.forEach((caminho, amostras) -> r.put(caminho, amostras.resumo()));
 		Map<String, Object> etapas = new LinkedHashMap<>();

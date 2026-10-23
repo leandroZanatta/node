@@ -19,7 +19,8 @@ class Lance48ClubTest {
 
 	@Test
 	void bnbDiretoValeIntegralmenteEPrecoGasDesconhecidoNaoViraZero() {
-		assertEquals(new BigInteger("239"), Lance48Club.pontuacaoMinima(BigInteger.valueOf(100), BigInteger.valueOf(149)));
+		assertEquals(new BigInteger("239"),
+				Lance48Club.pontuacaoMinima(BigInteger.valueOf(100), BigInteger.valueOf(149)));
 		assertNull(Lance48Club.taxaGas(BigInteger.valueOf(21_000), null));
 		assertNull(Lance48Club.pontuacaoMinima(null, BigInteger.ZERO));
 	}

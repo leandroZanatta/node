@@ -32,22 +32,6 @@ import br.com.node.sincronizacao.Cursor;
 import br.com.node.sincronizacao.Frente;
 import br.com.node.util.Resources;
 
-// O que o node produz, conferido contra o próprio contrato na mesma altura.
-//
-// Os testes anteriores provaram a aritmética e acharam cinco defeitos pelo dossiê — todos no DADO de
-// entrada. Mas um dossiê ainda é o node falando de si. Aqui a testemunha é independente: o estado do
-// contrato lido por `eth_call`, que não passa pelos eventos que o node leu.
-//
-// A COMPARAÇÃO É EXATA, e pode ser: tudo que muda reserva de V2 emite `Sync`, e tudo que muda preço ou
-// liquidez ativa de V3 emite `Swap`, `Mint` ou `Burn`. Se o node aplicou todos os eventos até a altura
-// H, o estado dele em H é o do contrato em H, wei a wei.
-//
-// E confere a IDENTIDADE: a factory que o node deduz do endereço da pool contra a `factory()` que o
-// contrato devolve, e a taxa e o espaçamento que o `Tarifario` usa para precificar contra `fee()`,
-// `tickSpacing()` e a cotação do roteador.
-//
-// O QUE NÃO SE CONFERE AQUI, e fica dito: imposto de token (exige simular a transferência) e a taxa
-// cobrada de QUEM CHAMA O PAR DIRETO (exige simular com saldo forjado).
 class ConferenciaNaCadeiaTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
@@ -57,22 +41,26 @@ class ConferenciaNaCadeiaTest {
 	private static final int BLOCOS_DE_APRENDIZADO = 256;
 	private static final int POR_LOTE = 16;
 
-	// Nós públicos guardam estado por 90 a 110 blocos (medido). A foto tem de ser tirada perto da cabeça,
-	// e a cadeia anda enquanto se aprende — por isso rodadas curtas até chegar perto.
+	
+	
+	
+	
 	private static final int PERTO_DA_CABECA = 5;
 	private static final int RODADAS_ATE_A_CABECA = 6;
 
-	// Procedência: `RoteadorDaFactory.ROUTERS` do projeto anterior. A cicatriz que o criou: perguntar
-	// sempre ao roteador da PancakeSwap fez 528 de 550 conferências não dizerem nada, porque
-	// `getAmountsOut` deriva o par da factory DELE.
-	private static final Map<String, String> ROTEADOR_DA_FACTORY = Map.of(
-			"ca143ce32fe78f1f7019d7d551a6402fc5350c73", "10ed43c718714eb63d5aa57b78b54704e256024e", // PancakeSwap V2
-			"bcfccbde45ce874adcb698cc183debcf17952812", "05ff2b0db69458a0750badebc4f9e13add608c7f", // PancakeSwap V1
-			"858e3312ed3a876947ea49d572a7c42de08af7ee", "3a6d8ca21d1cf76f653a67577fa0d27453350dd8", // Biswap
-			"0841bd0b734e4f5853f0dd8d7ea041c241fb0da6", "cf0febd3f17cef5b47b0cd257acf6025c5bff3b7", // ApeSwap
-			"01bf7c66c6bd861915cdaae475042d3c4bae16a7", "cde540d7eafe93ac5fe6233bee57e1270d3e330f", // BakerySwap
-			"3cd1c46068daea5ebb0d3f55f6915b10648062b8", "7dae51bd3e3376b8c7c4900e9107f12be3af1ba8", // MDEX
-			"c35dadb65012ec5796536bd9864ed8773abc74c4", "1b02da8cb0d097eb8d57a175b88c7d8b47997506"); // SushiSwap
+	
+	
+	
+	
+	
+	private static final Map<String, String> ROTEADOR_DA_FACTORY = Map.of("ca143ce32fe78f1f7019d7d551a6402fc5350c73",
+			"10ed43c718714eb63d5aa57b78b54704e256024e", 
+			"bcfccbde45ce874adcb698cc183debcf17952812", "05ff2b0db69458a0750badebc4f9e13add608c7f", 
+			"858e3312ed3a876947ea49d572a7c42de08af7ee", "3a6d8ca21d1cf76f653a67577fa0d27453350dd8", 
+			"0841bd0b734e4f5853f0dd8d7ea041c241fb0da6", "cf0febd3f17cef5b47b0cd257acf6025c5bff3b7", 
+			"01bf7c66c6bd861915cdaae475042d3c4bae16a7", "cde540d7eafe93ac5fe6233bee57e1270d3e330f", 
+			"3cd1c46068daea5ebb0d3f55f6915b10648062b8", "7dae51bd3e3376b8c7c4900e9107f12be3af1ba8", 
+			"c35dadb65012ec5796536bd9864ed8773abc74c4", "1b02da8cb0d097eb8d57a175b88c7d8b47997506"); 
 
 	private static final String GET_RESERVES = Abi.seletor("getReserves()");
 	private static final String TOKEN0 = Abi.seletor("token0()");
@@ -110,8 +98,9 @@ class ConferenciaNaCadeiaTest {
 
 		try {
 
-			// A cabeça vem do ANÚNCIO (`NewBlockHashes`), não do `Status`: com o `Status` a foto saiu a 168
-			// blocos da cabeça da rede, porque ele é a cabeça do par no aperto de mão.
+			
+			
+			
 			Cabeca cabeca = new Cabeca();
 
 			node.iniciar();
@@ -178,8 +167,9 @@ class ConferenciaNaCadeiaTest {
 		}
 	}
 
-	// Anda em rodadas até ficar a poucos blocos da cabeça, sempre contíguo: cada rodada parte do bloco
-	// seguinte ao último aplicado, então o catálogo nunca pula uma altura.
+	
+	
+	
 	private long chegarPertoDaCabeca(NodeDeTeste node, Cabeca cabeca, Catalogo catalogo, Taxas taxas, long ultima) {
 
 		for (int rodada = 0; rodada < RODADAS_ATE_A_CABECA; rodada++) {
@@ -202,8 +192,9 @@ class ConferenciaNaCadeiaTest {
 		return ultima;
 	}
 
-	// Devolve, por pool V2 e na mesma ordem, [token0, token1, factory] da cadeia — é com eles, e não com os
-	// do catálogo, que se pede a cotação.
+	
+	
+	
 	private List<String[]> conferirEstado(Catalogo catalogo, Tarifario tarifario, Fabricas fabricas, long altura,
 			Placar placar) throws InterruptedException {
 
@@ -239,7 +230,8 @@ class ConferenciaNaCadeiaTest {
 	private String[] conferirV2(byte[] pool, Catalogo catalogo, Fabricas fabricas, List<Optional<String>> r,
 			Placar placar) {
 
-		// "Sem resposta" separado por leitura: fork que não expõe `factory()` não diz nada sobre reservas.
+		
+		
 		if (r.get(0).isEmpty()) {
 			placar.semResposta("v2 reservas");
 			return null;
@@ -282,7 +274,8 @@ class ConferenciaNaCadeiaTest {
 		BigInteger liquidez = Abi.palavra(r.get(1).get(), 0);
 		String onde = Abi.hex(pool) + " (altura do node " + nosso.altura() + ")";
 
-		placar.conferir("v3 preço", sqrt.equals(nosso.sqrtPrecoX96()), onde + " node " + nosso.sqrtPrecoX96() + " contrato " + sqrt);
+		placar.conferir("v3 preço", sqrt.equals(nosso.sqrtPrecoX96()),
+				onde + " node " + nosso.sqrtPrecoX96() + " contrato " + sqrt);
 		placar.conferir("v3 tick", tick == nosso.tick(), onde + " node " + nosso.tick() + " contrato " + tick);
 		placar.conferir("v3 liquidez", liquidez.equals(nosso.liquidez()),
 				onde + " node " + nosso.liquidez() + " contrato " + liquidez);
@@ -298,10 +291,11 @@ class ConferenciaNaCadeiaTest {
 		conferirTarifarioV3(pool, tarifario, r.get(4), r.get(5), placar);
 	}
 
-	// O que se confere é a taxa e o espaçamento que o `Tarifario` USA para precificar — não o que alguma
-	// procedência isolada diria. É isso que tem de bater com o contrato.
-	private void conferirTarifarioV3(byte[] pool, Tarifario tarifario, Optional<String> fee, Optional<String> espacamento,
-			Placar placar) {
+	
+	
+	
+	private void conferirTarifarioV3(byte[] pool, Tarifario tarifario, Optional<String> fee,
+			Optional<String> espacamento, Placar placar) {
 
 		Optional<Integer> taxa = tarifario.taxa(pool);
 		OptionalInt espacamentoUsado = tarifario.espacamento(pool);
@@ -318,8 +312,10 @@ class ConferenciaNaCadeiaTest {
 		int doContrato = Abi.palavra(fee.get(), 0).intValueExact();
 		int espacamentoDoContrato = Abi.comSinal(espacamento.get(), 0);
 
-		placar.conferir("v3 taxa", taxa.get() == doContrato, Abi.hex(pool) + " tarifário " + taxa.get() + " contrato " + doContrato);
-		placar.conferir("v3 espaçamento", espacamentoUsado.isPresent() && espacamentoUsado.getAsInt() == espacamentoDoContrato,
+		placar.conferir("v3 taxa", taxa.get() == doContrato,
+				Abi.hex(pool) + " tarifário " + taxa.get() + " contrato " + doContrato);
+		placar.conferir("v3 espaçamento",
+				espacamentoUsado.isPresent() && espacamentoUsado.getAsInt() == espacamentoDoContrato,
 				Abi.hex(pool) + " tarifário " + espacamentoUsado + " contrato " + espacamentoDoContrato);
 	}
 
@@ -332,8 +328,9 @@ class ConferenciaNaCadeiaTest {
 				Abi.hex(pool) + " node " + nosso0 + "/" + nosso1 + " contrato " + tokens[0] + "/" + tokens[1]);
 	}
 
-	// A factory que o node DEDUZIU do endereço contra a que o contrato DECLARA. Só se confere pool que o node
-	// identificou: pool de factory desconhecida não afirma nada sobre a origem.
+	
+	
+	
 	private static void conferirIdentidade(String categoria, byte[] pool, Par par, Fabricas fabricas, String factory,
 			Placar placar) {
 
@@ -346,9 +343,11 @@ class ConferenciaNaCadeiaTest {
 		});
 	}
 
-	// A taxa V2 não tem leitura no contrato; quem a revela é o roteador da factory da pool, cotando a mesma
-	// entrada sobre as reservas da mesma altura. Pool de factory fora do mapa não é cotada: "não sabemos
-	// perguntar", nunca "diverge".
+	
+	
+	
+	
+	
 	private void conferirCotacoes(Catalogo catalogo, Tarifario tarifario, long altura, List<String[]> tokensDaCadeia,
 			Placar placar) throws InterruptedException {
 
@@ -380,7 +379,8 @@ class ConferenciaNaCadeiaTest {
 
 			cotadas.add(pool);
 			contas.add(new BigInteger[] { entrada, nossa, BigInteger.valueOf(taxa.get()) });
-			chamadas.add(new Chamada("0x" + ROTEADOR_DA_FACTORY.get(tokens[2]), getAmountsOut(entrada, tokens[0], tokens[1])));
+			chamadas.add(new Chamada("0x" + ROTEADOR_DA_FACTORY.get(tokens[2]),
+					getAmountsOut(entrada, tokens[0], tokens[1])));
 		}
 
 		List<Optional<String>> respostas = rpc.chamarAgregado(chamadas, altura);
@@ -411,7 +411,11 @@ class ConferenciaNaCadeiaTest {
 			Optional<Par> par = catalogo.par(pool);
 
 			if (par.isEmpty()) {
-				if (v3) { semParV3++; } else { semParV2++; }
+				if (v3) {
+					semParV3++;
+				} else {
+					semParV2++;
+				}
 				continue;
 			}
 
@@ -421,20 +425,27 @@ class ConferenciaNaCadeiaTest {
 			porFabrica.merge(nome, 1, Integer::sum);
 
 			if (v3) {
-				if (tarifario.taxa(pool).isPresent()) { v3Precificaveis++; } else { v3Fora++; }
+				if (tarifario.taxa(pool).isPresent()) {
+					v3Precificaveis++;
+				} else {
+					v3Fora++;
+				}
 			}
 		}
 
 		System.out.println();
-		System.out.println("identidade das pools pelo endereço (" + fabricas.quantasIdentificadas() + " identificadas):");
+		System.out
+				.println("identidade das pools pelo endereço (" + fabricas.quantasIdentificadas() + " identificadas):");
 		porFabrica.forEach((nome, quantas) -> System.out.printf("   %-30s %5d%n", nome, quantas));
 		System.out.println("   sem par aprendido: " + semParV2 + " V2, " + semParV3 + " V3");
-		System.out.println("   V3 precificáveis: " + v3Precificaveis + " · V3 fora (sem identidade ou em conflito): " + v3Fora);
+		System.out.println(
+				"   V3 precificáveis: " + v3Precificaveis + " · V3 fora (sem identidade ou em conflito): " + v3Fora);
 		System.out.println("   pools em conflito identidade × prova por troca: " + tarifario.quantasEmConflito());
 	}
 
 	private static String getAmountsOut(BigInteger entrada, String token0, String token1) {
-		return GET_AMOUNTS_OUT + Abi.palavra(entrada) + Abi.palavra(BigInteger.valueOf(0x40)) + Abi.palavra(BigInteger.TWO)
-				+ "000000000000000000000000" + token0 + "000000000000000000000000" + token1;
+		return GET_AMOUNTS_OUT + Abi.palavra(entrada) + Abi.palavra(BigInteger.valueOf(0x40))
+				+ Abi.palavra(BigInteger.TWO) + "000000000000000000000000" + token0 + "000000000000000000000000"
+				+ token1;
 	}
 }

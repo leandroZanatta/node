@@ -11,28 +11,11 @@ import java.util.Set;
 import br.com.node.catalogo.Fabricas;
 import br.com.node.vo.SwapPendente;
 
-// Decodifica swaps do roteador Solidly/ThenaFi (BSC: 0xd4ae6eCA985340Dd434D38F470aCCce4DC78d109).
-//
-// O layout é diferente do V2 padrão: em vez de `address[] path`, usa um array de structs
-// `Route { address from; address to; bool stable; }`. O flag `stable` determina a curva
-// (volatile = xy=k, stable = x³y+xy³=k) e o byte no sal do CREATE2.
-//
-// Os endereços dos pares são calculados por CREATE2 contra a factory ThenaFi conhecida.
-// Se uma perna não bater na factory, o swap inteiro é descartado — projetar numa pool errada
-// é pior que não projetar.
 final class RoteadorSolidly {
 
-	// token→token e token→ETH (mesmo layout: amountIn na palavra 0, offset de routes na palavra 2)
-	static final Set<String> SELECOES_TOKEN = Set.of(
-			"f41766d8",  // swapExactTokensForTokens(uint256,uint256,(address,address,bool)[],address,uint256)
-			"6cc1ae13",  // swapExactTokensForTokensSupportingFeeOnTransferTokens(...)
-			"18a13086",  // swapExactTokensForETH(uint256,uint256,(address,address,bool)[],address,uint256)
-			"7af728c8"); // swapExactTokensForETHSupportingFeeOnTransferTokens(...)
+	static final Set<String> SELECOES_TOKEN = Set.of("f41766d8", "6cc1ae13", "18a13086", "7af728c8");
 
-	// ETH→token: amountIn = tx.value (fora do calldata); offset de routes na palavra 1
-	static final Set<String> SELECOES_ETH = Set.of(
-			"67ffb66a",  // swapExactETHForTokens(uint256,(address,address,bool)[],address,uint256)
-			"76c72751"); // swapExactETHForTokensSupportingFeeOnTransferTokens(...)
+	static final Set<String> SELECOES_ETH = Set.of("67ffb66a", "76c72751");
 
 	private static final HexFormat HEX = HexFormat.of();
 	private static final byte[] FACTORY = HEX.parseHex("afd89d21bdb66d00817d4153e055830b1c2b3970");
@@ -42,7 +25,6 @@ final class RoteadorSolidly {
 	private RoteadorSolidly() {
 	}
 
-	// `valor` é o value da tx (amountIn nos swaps ETH→token). Ignorado para token→token.
 	static Optional<SwapPendente> decodificar(byte[] calldata, BigInteger valor) {
 
 		if (calldata == null || calldata.length < SELETOR_LEN + PALAVRA * 3) {
@@ -81,13 +63,13 @@ final class RoteadorSolidly {
 		}
 
 		List<byte[]> tokens = new ArrayList<>();
-		List<byte[]> pools  = new ArrayList<>();
+		List<byte[]> pools = new ArrayList<>();
 		int base = offRoutes + PALAVRA;
 
 		for (int i = 0; i < n; i++) {
 			int r = base + i * 3 * PALAVRA;
-			byte[] from   = Arrays.copyOfRange(calldata, r + 12, r + PALAVRA);
-			byte[] to     = Arrays.copyOfRange(calldata, r + PALAVRA + 12, r + 2 * PALAVRA);
+			byte[] from = Arrays.copyOfRange(calldata, r + 12, r + PALAVRA);
+			byte[] to = Arrays.copyOfRange(calldata, r + PALAVRA + 12, r + 2 * PALAVRA);
 			boolean stable = calldata[r + 3 * PALAVRA - 1] != 0;
 
 			Optional<byte[]> pool = Fabricas.parSolidly(FACTORY, from, to, stable);

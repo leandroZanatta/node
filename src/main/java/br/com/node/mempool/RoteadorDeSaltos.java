@@ -10,16 +10,6 @@ import br.com.node.catalogo.Eventos;
 import br.com.node.util.Keccak;
 import br.com.node.vo.SwapPendente;
 
-// O roteador de SALTOS 0x1de460f3…, seletor `4d819a2a`:
-//
-//   swap((uint8 tipo, address entra, address sai, address pool, uint24 taxa, int24 espacamento,
-//         address hooks, bytes dadosDoHook, address gerente, bytes32 parametros)[] saltos,
-//        address destino, uint256 montante, uint256 minimo, uint256 prazo)
-//
-// Cada salto diz a POOL — o endereço (V2/V3) ou a chave inteira (gerente) —, então não há o que adivinhar.
-// Tipos lidos contra os eventos de 26/09: 0 = V2, 1 = V3, 3 = Infinity CL (gerente e `parametros` no fim);
-// 2 = V4, pelo mesmo desenho. MEDIDO no servidor: era o contrato que mais aparecia entre os gatilhos de
-// arbitragens alheias recebidos e NÃO decodificados (26 de 235).
 final class RoteadorDeSaltos {
 
 	static final String SELETOR = "4d819a2a";
@@ -37,7 +27,7 @@ final class RoteadorDeSaltos {
 		try {
 			return ler(calldata);
 		} catch (RuntimeException e) {
-			// calldata mentirosa (offset fora, tamanho absurdo): não decodificável, como qualquer outra
+
 			return Optional.empty();
 		}
 	}
@@ -67,16 +57,15 @@ final class RoteadorDeSaltos {
 			byte[] sai = endereco(calldata, salto + 2 * PALAVRA);
 
 			Optional<byte[]> pool = switch (tipo) {
-				case 0, 1 -> Optional.of(endereco(calldata, salto + 3 * PALAVRA));
-				case 2, 3 -> Optional.of(poolId(calldata, salto, tipo, entra, sai));
-				default -> Optional.empty();
+			case 0, 1 -> Optional.of(endereco(calldata, salto + 3 * PALAVRA));
+			case 2, 3 -> Optional.of(poolId(calldata, salto, tipo, entra, sai));
+			default -> Optional.empty();
 			};
 
 			if (pool.isEmpty()) {
 				return Optional.empty();
 			}
 
-			// O catálogo fala em WBNB: o BNB nativo de uma pool de gerente é o WBNB dela (`Catalogo.lados`).
 			if (i == 0) {
 				caminho.add(emWbnb(entra));
 			}
@@ -87,9 +76,6 @@ final class RoteadorDeSaltos {
 		return Optional.of(new SwapPendente(montante, caminho, pools));
 	}
 
-	// O `poolId` que o gerente calcula: keccak do `abi.encode` da chave, moedas em ordem crescente.
-	//   V4:       moeda0, moeda1, taxa, espaçamento, hooks
-	//   Infinity: moeda0, moeda1, hooks, gerente, taxa, parametros
 	private static byte[] poolId(byte[] calldata, int salto, int tipo, byte[] entra, byte[] sai) {
 
 		boolean crescente = new BigInteger(1, entra).compareTo(new BigInteger(1, sai)) < 0;
@@ -101,8 +87,7 @@ final class RoteadorDeSaltos {
 		byte[] hooks = Arrays.copyOfRange(calldata, salto + 6 * PALAVRA, salto + 7 * PALAVRA);
 		byte[] parametros = Arrays.copyOfRange(calldata, salto + 9 * PALAVRA, salto + CAMPOS_DO_SALTO * PALAVRA);
 
-		byte[] chave = tipo == 2
-				? concatenar(emPalavra(moeda0), emPalavra(moeda1), taxa, espacamento, hooks)
+		byte[] chave = tipo == 2 ? concatenar(emPalavra(moeda0), emPalavra(moeda1), taxa, espacamento, hooks)
 				: concatenar(emPalavra(moeda0), emPalavra(moeda1), hooks, emPalavra(Eventos.GERENTE_INFINITY_CL), taxa,
 						parametros);
 

@@ -42,31 +42,6 @@ import br.com.node.nucleo.ReservasV2;
 import br.com.node.nucleo.Travessia;
 import br.com.node.vo.Log;
 
-// A AUTÓPSIA DO MERCADO: cada arbitragem ALHEIA confirmada, passada pelo NOSSO modelo, no estado das pools
-// IMEDIATAMENTE ANTES da transação do rival. A pergunta é uma só — por que não fomos nós? — e ela tem
-// respostas que pedem correções OPOSTAS, então cada arbitragem sai com UMA classe:
-//
-//   nao_linear             o rival dividiu a rota ou passou por algo que não é troca de dois tokens
-//   pool_fora              uma perna passa por pool que o grafo não liga (o motivo vai junto)
-//   sem_estado_antes       conhecemos a pool, mas não tínhamos o estado dela antes da troca
-//   nao_cota               o portão do cotador recusou (imposto, quarentena, taxa, espaçamento)
-//   modelo_sem_lucro       o ciclo exato do rival, no estado exato dele, dá PREJUÍZO no nosso modelo —
-//                          o rival lucrou, então é o MODELO que está errado ali (taxa, imposto, hook)
-//   achamos                a nossa busca emitiu a mesma fenda (mesmo conjunto de pools)
-//   aberta_no_mesmo_bloco  a fenda nasceu de uma tx anterior NO MESMO BLOCO: a cauda, que lê o bloco
-//                          pronto, não alcança — só o N+1 pela mempool
-//   raiz_nao_numeraria     o ciclo não passa por WBNB/USDT: a busca só ancora nos numerários
-//   mais_de_4_pernas       a busca da cauda para em 4 pernas
-//   abaixo_do_piso         o modelo vê o lucro, mas ele não paga o nosso gás (o rival paga menos)
-//   sem_flash              nenhuma perna V2 sai de WBNB/USDT: o Executor publicado só empresta de V2 na ponta,
-//                          então a busca descarta o ciclo — é CONTRATO, não busca. Medido em 27/09: 144 de 182
-//                          "deveríamos ter achado" (US$ 32 de 34) eram isto.
-//   deveriamos_ter_achado  fenda de bloco anterior, pools no grafo, lucro acima do piso, e a busca não
-//                          emitiu: DEFEITO DA BUSCA — é a classe que mais importa
-//
-// O estado "antes" é FOTOGRAFADO pelo cursor antes de aplicar cada transação: os estados do catálogo são
-// registros imutáveis, então guardar a referência basta e custa uma consulta por log. O resto roda numa
-// thread própria, fora do caminho do bloco.
 public final class AutopsiaDoMercado implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(AutopsiaDoMercado.class.getName());
@@ -75,12 +50,9 @@ public final class AutopsiaDoMercado implements Closeable {
 	private static final byte[] USDT = HexFormat.of().parseHex("55d398326f99059ff775485246999027b3197955");
 	private static final int PERNAS_DA_BUSCA = 4;
 
-	// O que se sabia da pool antes da troca: reserva (V2), preço e liquidez (V3 e gerente), e a taxa que o
-	// gerente cobrou no último swap. Referências a registros imutáveis do catálogo.
 	record Foto(ReservasV2 v2, EstadoV3 v3, Integer taxaDoGerente) {
 	}
 
-	// Uma perna como o RIVAL a executou: a pool, o que entrou nela e o que saiu, e onde apareceu no recibo.
 	record PernaObservada(byte[] pool, byte[] entra, byte[] sai, int ordem) {
 	}
 
@@ -96,42 +68,33 @@ public final class AutopsiaDoMercado implements Closeable {
 	private static final int BUFFER_RECENTES = 500;
 	private final java.util.ArrayDeque<Map<String, Object>> recentes = new java.util.ArrayDeque<>(BUFFER_RECENTES);
 
-	// Uma thread, com ATRASO: a chave de uma pool de gerente vista pela primeira vez vem do banco de forma
-	// assíncrona, e analisar na hora deixava a perna sem tokens (23 de 280 na primeira medida). E um teto de
-	// fila: se a análise não der conta, perde-se amostra, nunca se atrasa o cursor.
 	private static final long ATRASO_MS = 1_500;
 	private static final int TETO_DA_FILA = 2_000;
-	private final java.util.concurrent.ScheduledThreadPoolExecutor fila = new java.util.concurrent.ScheduledThreadPoolExecutor(1,
-			tarefa -> {
+	private final java.util.concurrent.ScheduledThreadPoolExecutor fila = new java.util.concurrent.ScheduledThreadPoolExecutor(
+			1, tarefa -> {
 				Thread thread = new Thread(tarefa, "autopsia-do-mercado");
 				thread.setDaemon(true);
 				return thread;
 			});
 
-	// Escritos e lidos só pela thread do cursor (`antes` e depois `confirmar`, em sequência por transação).
 	private List<Log> logsDaTransacao = List.of();
 	private Map<String, Foto> fotos = Map.of();
 
-	// A VERIFICAÇÃO NA CADEIA da sobra que o detector estima pelos logs. Existe porque a estimativa mentiu, e
-	// muito: em 26/09 "arbitragens" de 0,13 e 0,44 WBNB deixaram o contrato do rival com saldo intacto, e uma de
-	// 0,1274 rendeu ~0,000025 — BNB nativo pago a pool de gerente não emite `Transfer`. Para cada sobra grande,
-	// lê-se o saldo do executor no fim do bloco anterior e no fim do bloco da tx: WBNB + BNB nativo (o mesmo
-	// dinheiro) quando o lucro é em WBNB, o próprio token quando não.
 	public interface Saldos {
 		Optional<BigInteger> bnb(byte[] conta, long bloco);
 
 		Optional<BigInteger> token(byte[] token, byte[] conta, long bloco);
 	}
 
-	private static final BigInteger VERIFICAR_A_PARTIR_DE = BigInteger.valueOf(2_000_000_000_000_000L); // 0,002 BNB
+	private static final BigInteger VERIFICAR_A_PARTIR_DE = BigInteger.valueOf(2_000_000_000_000_000L);
 	private volatile Saldos saldos;
 
-	// A versão do Executor publicado (o `Disparo` a lê na subida): abaixo de 3 só empresta de V2 na ponta.
 	private volatile int versaoDoExecutor = 1;
 
 	public void versaoDoExecutor(int versao) {
 		this.versaoDoExecutor = versao;
 	}
+
 	private final Map<String, BigInteger> valorVerificadoPorClasse = new LinkedHashMap<>();
 	private final AtomicLong verificadas = new AtomicLong();
 
@@ -156,7 +119,6 @@ public final class AutopsiaDoMercado implements Closeable {
 		this.arquivo = arquivo;
 	}
 
-	// Thread do cursor, ANTES de aplicar a transação: a foto das pools que ela vai tocar.
 	public void antes(List<Log> logs, long altura) {
 
 		Map<String, Foto> tiradas = new HashMap<>();
@@ -184,7 +146,6 @@ public final class AutopsiaDoMercado implements Closeable {
 		fotos = tiradas;
 	}
 
-	// Thread do cursor, quando o observatório confirma uma arbitragem nesta transação.
 	public void confirmar(Arbitragem arbitragem, long altura, int indice, int gatilho) {
 
 		List<Log> logs = logsDaTransacao;
@@ -218,23 +179,23 @@ public final class AutopsiaDoMercado implements Closeable {
 		List<PernaObservada> observadas = pernas(arbitragem, logs);
 
 		List<String> descricao = new ArrayList<>();
-		observadas.forEach(p -> descricao.add(hex(p.pool()) + ":" + (p.entra() == null ? "?" : hex(p.entra()).substring(0, 8))
-				+ ">" + (p.sai() == null ? "?" : hex(p.sai()).substring(0, 8))));
+		observadas.forEach(
+				p -> descricao.add(hex(p.pool()) + ":" + (p.entra() == null ? "?" : hex(p.entra()).substring(0, 8))
+						+ ">" + (p.sai() == null ? "?" : hex(p.sai()).substring(0, 8))));
 		registro.put("pernas", descricao);
 
 		List<List<PernaObservada>> ciclos = ciclos(observadas, arbitragem.token());
 
 		if (ciclos.isEmpty()) {
 			String porque = observadas.size() < 2 ? "menos de 2 trocas"
-					: observadas.stream().anyMatch(p -> p.entra() == null) ? "perna sem tokens" : "sem ciclo simples no lucro";
+					: observadas.stream().anyMatch(p -> p.entra() == null) ? "perna sem tokens"
+							: "sem ciclo simples no lucro";
 			naoLinearPorque.computeIfAbsent(porque, k -> new AtomicLong()).incrementAndGet();
 			registro.put("porque", porque);
 			fechar(registro, "nao_linear", arbitragem);
 			return;
 		}
 
-		// A rota do rival pode ser DIVIDIDA (a entrada repartida entre caminhos que se juntam) ou ter mais de uma
-		// arbitragem: avalia-se cada ciclo simples dentro dela como NÓS o faríamos, e vale o melhor.
 		int usadas = ciclos.stream().mapToInt(List::size).max().orElse(0);
 		registro.put("rota_dividida", ciclos.size() > 1 || usadas < observadas.size());
 		registro.put("ciclos_simples", ciclos.size());
@@ -300,27 +261,25 @@ public final class AutopsiaDoMercado implements Closeable {
 			return;
 		}
 
-		// Sem perna V2 saindo de numerário, o Executor publicado (< 3) não tem de onde emprestar: não é defeito
-		// da busca, e contá-lo em "deveríamos" escondia os defeitos de verdade.
-		if (versaoDoExecutor < 3 && pernas.stream().noneMatch(p -> (Arrays.equals(p.entra(), WBNB) || Arrays.equals(p.entra(), USDT))
-				&& catalogo.reservas(p.pool()).isPresent())) {
+		if (versaoDoExecutor < 3
+				&& pernas.stream().noneMatch(p -> (Arrays.equals(p.entra(), WBNB) || Arrays.equals(p.entra(), USDT))
+						&& catalogo.reservas(p.pool()).isPresent())) {
 			fechar(registro, "sem_flash", arbitragem);
 			return;
 		}
 
 		BigInteger lucroDoModelo = oportunidade.lucro();
-		LOG.info(() -> "mercado: DEVERÍAMOS TER ACHADO — altura " + altura + " · " + pernas.size() + " pernas · lucro do modelo "
-				+ lucroDoModelo + " (raiz " + hex(raiz).substring(0, 8) + ") · pools " + conjunto);
+		LOG.info(() -> "mercado: DEVERÍAMOS TER ACHADO — altura " + altura + " · " + pernas.size()
+				+ " pernas · lucro do modelo " + lucroDoModelo + " (raiz " + hex(raiz).substring(0, 8) + ") · pools "
+				+ conjunto);
 		fechar(registro, "deveriamos_ter_achado", arbitragem);
 	}
 
-	// O veredito do NOSSO modelo sobre UM ciclo simples, no estado de antes. `oportunidade` só existe quando
-	// o modelo vê lucro; senão `classe` diz onde parou, na ordem do portão.
 	record Resultado(String classe, List<PernaObservada> pernas, List<Travessia> travessias, Oportunidade oportunidade,
 			Map<String, Object> detalhes) {
 
-		private static final List<String> ORDEM = List.of("pool_fora", "sem_estado_antes", "nao_cota", "modelo_sem_lucro",
-				"lucro");
+		private static final List<String> ORDEM = List.of("pool_fora", "sem_estado_antes", "nao_cota",
+				"modelo_sem_lucro", "lucro");
 
 		boolean melhorQue(Resultado outro) {
 			int a = ORDEM.indexOf(classe);
@@ -364,8 +323,8 @@ public final class AutopsiaDoMercado implements Closeable {
 		Optional<List<Travessia>> travessias = cotador.travessias(new Ciclo(doCiclo), overlay);
 
 		if (travessias.isEmpty()) {
-			detalhes.put("motivo_por_perna", pernas.stream()
-					.map(p -> hex(p.pool()) + "=" + cotador.motivoDeFora(p.pool())).toList());
+			detalhes.put("motivo_por_perna",
+					pernas.stream().map(p -> hex(p.pool()) + "=" + cotador.motivoDeFora(p.pool())).toList());
 			return new Resultado("nao_cota", pernas, null, null, detalhes);
 		}
 
@@ -386,9 +345,6 @@ public final class AutopsiaDoMercado implements Closeable {
 		return new Resultado("lucro", pernas, travessias.get(), oportunidade.get(), detalhes);
 	}
 
-	// Os ciclos SIMPLES dentro das pernas do rival: caminhos que saem do token do lucro, andam pelas pernas
-	// (cada pool no máximo uma vez) e voltam a ele, com até 5 pernas. Rota linear dá um ciclo; rota dividida
-	// ou com duas arbitragens, vários.
 	static List<List<PernaObservada>> ciclos(List<PernaObservada> pernas, byte[] tokenDoLucro) {
 
 		List<List<PernaObservada>> achados = new ArrayList<>();
@@ -411,7 +367,8 @@ public final class AutopsiaDoMercado implements Closeable {
 
 		for (PernaObservada perna : pernas) {
 
-			if (!Arrays.equals(perna.entra(), atual) || caminho.stream().anyMatch(p -> Arrays.equals(p.pool(), perna.pool()))) {
+			if (!Arrays.equals(perna.entra(), atual)
+					|| caminho.stream().anyMatch(p -> Arrays.equals(p.pool(), perna.pool()))) {
 				continue;
 			}
 
@@ -427,10 +384,6 @@ public final class AutopsiaDoMercado implements Closeable {
 		}
 	}
 
-	// As pernas como o rival as executou, na ordem do recibo. Pool de endereço: o token que ENTROU nela e o
-	// que SAIU dela, pelos `Transfer`. Pool de gerente (identidade de 32 bytes): o `Swap` do gerente — a
-	// quantia negativa é a que entrou (visão de quem chama) — com os lados da chave. Endereço que recebe e
-	// manda o MESMO token (roteador, cofre de repasse) ou só recebe (quem cobra taxa) não é troca e fica fora.
 	List<PernaObservada> pernas(Arbitragem arbitragem, List<Log> logs) {
 
 		List<PernaObservada> pernas = new ArrayList<>();
@@ -438,8 +391,6 @@ public final class AutopsiaDoMercado implements Closeable {
 
 		for (byte[] pool : arbitragem.pools()) {
 
-			// O gerente emite um `Swap` por troca, e o observatório põe um `poolId` por `Swap`: a mesma pool pode
-			// vir repetida.
 			if (!vistas.add(hex(pool))) {
 				continue;
 			}
@@ -512,8 +463,6 @@ public final class AutopsiaDoMercado implements Closeable {
 		return Optional.empty();
 	}
 
-	// As pernas formam UM ciclo (a saída de cada uma é a entrada da seguinte, e a última volta à primeira)?
-	// Se sim, gira para começar no token do lucro — é por ele que o rival começou, e é ele que a busca ancora.
 	static Optional<List<PernaObservada>> emCiclo(List<PernaObservada> pernas, byte[] tokenDoLucro) {
 
 		if (pernas.size() < 2 || pernas.stream().anyMatch(p -> p.entra() == null)) {
@@ -554,7 +503,8 @@ public final class AutopsiaDoMercado implements Closeable {
 			return tarifario.taxa(pool).map(taxa -> new PoolV2(foto.v2().reserva0(), foto.v2().reserva1(), taxa));
 		}
 
-		Optional<Integer> taxa = foto.taxaDoGerente() != null ? Optional.of(foto.taxaDoGerente()) : tarifario.taxa(pool);
+		Optional<Integer> taxa = foto.taxaDoGerente() != null ? Optional.of(foto.taxaDoGerente())
+				: tarifario.taxa(pool);
 		OptionalInt espacamento = tarifario.espacamento(pool);
 
 		if (taxa.isEmpty() || espacamento.isEmpty() || foto.v3().liquidez().signum() <= 0) {
@@ -570,7 +520,8 @@ public final class AutopsiaDoMercado implements Closeable {
 		registro.put("classe", classe);
 		verificar(registro, classe, arbitragem);
 		porClasse.computeIfAbsent(classe, k -> new AtomicLong()).incrementAndGet();
-		if (recentes.size() >= BUFFER_RECENTES) recentes.pollFirst();
+		if (recentes.size() >= BUFFER_RECENTES)
+			recentes.pollFirst();
 		recentes.addLast(Map.copyOf(registro));
 		valorPorClasse.computeIfAbsent(classe, k -> new LinkedHashMap<>()).merge(hex(arbitragem.token()),
 				arbitragem.sobra(), BigInteger::add);
@@ -593,14 +544,10 @@ public final class AutopsiaDoMercado implements Closeable {
 	}
 
 	public synchronized List<Map<String, Object>> recentes(int n, String classeFilter) {
-		return recentes.stream()
-				.filter(e -> classeFilter == null || classeFilter.equals(e.get("classe")))
-				.skip(Math.max(0, recentes.size() - n))
-				.toList();
+		return recentes.stream().filter(e -> classeFilter == null || classeFilter.equals(e.get("classe")))
+				.skip(Math.max(0, recentes.size() - n)).toList();
 	}
 
-	// Sobra grande em WBNB ou USDT: confere o saldo do executor antes e depois do bloco. Mais de uma tx do
-	// executor no mesmo bloco contamina a diferença — é medida, não prova; o registro diz que é verificada.
 	private void verificar(Map<String, Object> registro, String classe, Arbitragem arbitragem) {
 
 		Saldos leitor = saldos;
@@ -616,8 +563,6 @@ public final class AutopsiaDoMercado implements Closeable {
 			return;
 		}
 
-		// Pelo câmbio VIVO do `CustoDeGas`. CICATRIZ de 26/09: era um 600 fixo (o BNB estava a 767), e sem
-		// cotação o valor virava zero em silêncio.
 		BigInteger emBnb = emBnb(arbitragem.token(), arbitragem.sobra());
 
 		if (emBnb.compareTo(VERIFICAR_A_PARTIR_DE) < 0) {
@@ -644,8 +589,7 @@ public final class AutopsiaDoMercado implements Closeable {
 		}
 
 		registro.put("executor", hex(conta));
-		// A sobra verificada é na unidade do TOKEN da arbitragem (USDT é USDT), e o registro diz qual — sem
-		// isto, em 26/09, 50 USDT de comissão de bot foram lidos como 50 BNB de arbitragem.
+
 		registro.put("sobra_verificada", verificada.toString());
 		registro.put("sobra_verificada_token", hex(arbitragem.token()));
 		verificadas.incrementAndGet();

@@ -18,10 +18,6 @@ import com.google.gson.JsonParser;
 import br.com.node.ensaio.RpcDoEnsaio;
 import br.com.node.vo.Log;
 
-// Contra a BSC: a simulação de uma tx real, no estado do bloco anterior, tem de emitir os MESMOS Sync
-// que o recibo dela — é esse o rótulo que o caderno de layouts vai aprender. Procura, no bloco recente,
-// a primeira tx cujo recibo tem Sync e que é a primeira a tocar aquelas pools (senão o estado anterior
-// do bloco já não é o dela).
 class SimuladorTest {
 
 	private static boolean mesmasPoolsEReservas(Set<String> simulados, Set<String> reais) {
@@ -37,9 +33,12 @@ class SimuladorTest {
 
 		for (String pool : sim.keySet()) {
 			for (int palavra = 0; palavra < 2; palavra++) {
-				java.math.BigInteger a = new java.math.BigInteger(sim.get(pool).substring(2 + 64 * palavra, 66 + 64 * palavra), 16);
-				java.math.BigInteger b = new java.math.BigInteger(real.get(pool).substring(2 + 64 * palavra, 66 + 64 * palavra), 16);
-				if (b.signum() > 0 && a.subtract(b).abs().multiply(java.math.BigInteger.valueOf(10_000)).compareTo(b) > 0) {
+				java.math.BigInteger a = new java.math.BigInteger(
+						sim.get(pool).substring(2 + 64 * palavra, 66 + 64 * palavra), 16);
+				java.math.BigInteger b = new java.math.BigInteger(
+						real.get(pool).substring(2 + 64 * palavra, 66 + 64 * palavra), 16);
+				if (b.signum() > 0
+						&& a.subtract(b).abs().multiply(java.math.BigInteger.valueOf(10_000)).compareTo(b) > 0) {
 					return false;
 				}
 			}
@@ -74,7 +73,8 @@ class SimuladorTest {
 			for (JsonElement l : recibos.get(i).getAsJsonObject().getAsJsonArray("logs")) {
 				JsonObject log = l.getAsJsonObject();
 				String pool = log.get("address").getAsString().toLowerCase();
-				if (log.getAsJsonArray("topics").size() > 0 && SYNC.equals(log.getAsJsonArray("topics").get(0).getAsString())) {
+				if (log.getAsJsonArray("topics").size() > 0
+						&& SYNC.equals(log.getAsJsonArray("topics").get(0).getAsString())) {
 					poolsDaTx.add(pool);
 					syncsReais.add(pool + ":" + log.get("data").getAsString().toLowerCase());
 				}
@@ -83,7 +83,8 @@ class SimuladorTest {
 			boolean primeira = poolsDaTx.stream().noneMatch(tocadasAntes::contains);
 			tocadasAntes.addAll(poolsDaTx);
 
-			if (syncsReais.isEmpty() || !primeira || !"0x1".equals(recibos.get(i).getAsJsonObject().get("status").getAsString())) {
+			if (syncsReais.isEmpty() || !primeira
+					|| !"0x1".equals(recibos.get(i).getAsJsonObject().get("status").getAsString())) {
 				continue;
 			}
 
@@ -105,8 +106,10 @@ class SimuladorTest {
 			p.add(pedido);
 			p.add("0x" + Long.toHexString(altura - 1));
 
-			// Reverter aqui é dependência de uma tx ANTERIOR do mesmo bloco (um approve do mesmo remetente,
-			// medido): o estado "antes do bloco" não é o dela. Na mempool simula-se no mais recente.
+			
+			
+			
+			
 			Optional<List<Log>> logs = Simulador.logs(rpc.chamar("eth_simulateV1", p).orElseThrow());
 			if (logs.isEmpty()) {
 				continue;
@@ -115,13 +118,16 @@ class SimuladorTest {
 			Set<String> syncsSimulados = new HashSet<>();
 			for (Log log : logs.get()) {
 				if (!log.topicos().isEmpty() && SYNC.equals("0x" + HexFormat.of().formatHex(log.topicos().get(0)))) {
-					syncsSimulados.add("0x" + HexFormat.of().formatHex(log.endereco()) + ":0x" + HexFormat.of().formatHex(log.dados()));
+					syncsSimulados.add("0x" + HexFormat.of().formatHex(log.endereco()) + ":0x"
+							+ HexFormat.of().formatHex(log.dados()));
 				}
 			}
 
-			// Mesmas pools, e reservas iguais a 0,01%: uma tx anterior do bloco pode ter mexido no saldo da
-			// pool sem emitir Sync (medido: diferença na 7ª casa). O rótulo que o caderno aprende é pool e
-			// direção — o que isto prova.
+			
+			
+			
+			
+			
 			assertTrue(mesmasPoolsEReservas(syncsSimulados, syncsReais),
 					"tx " + tx.get("hash") + ": simulado " + syncsSimulados + " × real " + syncsReais);
 			conferidas++;

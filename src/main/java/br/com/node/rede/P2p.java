@@ -13,11 +13,6 @@ import br.com.node.vo.MensagemP2p;
 import br.com.node.vo.PingP2p;
 import br.com.node.vo.PongP2p;
 
-// Traduz mensagem do protocolo base de e para RLP.
-//
-// Separado do Eth porque as duas famílias crescem por motivos diferentes e em
-// ritmos muito diferentes: esta tem quatro mensagens desde sempre, a outra ganha
-// uma a cada coisa que o cursor precisa.
 public final class P2p {
 
 	private P2p() {
@@ -71,7 +66,8 @@ public final class P2p {
 			List<RlpItem> par = Rlp.paraLista(bruto);
 
 			if (par.size() >= 2) {
-				capacidades.add(new Capacidade(new String(Rlp.paraBytes(par.get(0))), (int) Rlp.paraInteiro(par.get(1))));
+				capacidades
+						.add(new Capacidade(new String(Rlp.paraBytes(par.get(0))), (int) Rlp.paraInteiro(par.get(1))));
 			}
 		}
 
@@ -79,8 +75,6 @@ public final class P2p {
 				(int) Rlp.paraInteiro(campos.get(3)), Rlp.paraBytes(campos.get(4)));
 	}
 
-	// O geth manda o motivo dentro de uma lista; outros clientes mandam solto.
-	// Recusar uma das formas é perder a única explicação que existe de uma queda.
 	private static int motivo(byte[] corpo) {
 
 		RlpItem item = Rlp.decodificar(corpo);

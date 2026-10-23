@@ -15,15 +15,14 @@ import br.com.node.catalogo.Catalogo;
 import br.com.node.ensaio.AssinadorDeTransacao;
 import br.com.node.vo.Transactions;
 
-// Uma transferência de BNB chegando por broadcast derrubava o peer: o registro da tx anunciada lançava
-// "calldata sem seletor" e a exceção subia até a sessão. Na corrida de 23/09 18:33 foi metade das
-// quedas de sessão. A tx sem chamada tem de ser só ignorada — e a do lado, no mesmo lote, lida.
 class TransacaoSemChamadaTest {
 
-	private static final BigInteger CHAVE = new BigInteger("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 16);
+	private static final BigInteger CHAVE = new BigInteger(
+			"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 16);
 
-	// A tx EIP-1559 que o nosso próprio assinador produz tem de voltar com o destino e a calldata que
-	// entraram — era lida com as posições do tipo 1.
+	
+	
+	
 	@Test
 	void tipo1559DevolveDestinoValorEDados() {
 
@@ -52,11 +51,12 @@ class TransacaoSemChamadaTest {
 
 		assertDoesNotThrow(() -> mempool.observar(null, new Transactions(List.of(transferencia, aprovacao))));
 
-		// O lote é processado fora da leitora (virtual thread): espera ele terminar.
+		
 		mempool.aguardarLotes();
 
 		assertEquals(1L, mempool.resumo().get("transacoes_sem_chamada"));
 		assertEquals(0L, mempool.resumo().get("transacoes_ilegiveis"));
-		assertTrue((Long) mempool.resumo().get("transacoes_decodificadas") >= 1L, "a aprovação do mesmo lote se perdeu");
+		assertTrue((Long) mempool.resumo().get("transacoes_decodificadas") >= 1L,
+				"a aprovação do mesmo lote se perdeu");
 	}
 }

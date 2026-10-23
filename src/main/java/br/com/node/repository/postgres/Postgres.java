@@ -155,7 +155,7 @@ public final class Postgres implements AutoCloseable {
 		try {
 			conexao.setAutoCommit(true);
 		} catch (SQLException e) {
-			// conexão já ruim; o descarte cuida
+
 		}
 	}
 
@@ -164,7 +164,7 @@ public final class Postgres implements AutoCloseable {
 		try {
 			conexao.rollback();
 		} catch (SQLException e) {
-			// rollback em conexão morta não tem o que salvar
+
 		}
 	}
 

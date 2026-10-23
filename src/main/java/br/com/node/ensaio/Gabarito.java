@@ -15,23 +15,10 @@ import br.com.node.catalogo.Achado;
 import br.com.node.nucleo.Arbitragem;
 import br.com.node.nucleo.Perna;
 
-// O MERCADO como gabarito: valida a detecção sem depender de chegar a tempo.
-//
-// Da nossa máquina o bundle perde a corrida (o relay fica a 150–280 ms de ida), então "incluído" não
-// mede se o sistema acha as fendas certas. Mas os outros bots as pegam, e o observatório as vê
-// confirmadas no bloco. Cada fenda que achamos fica anotada pelo CONJUNTO de pools; cada arbitragem
-// alheia é conferida contra as anotações recentes:
-//   - ACERTO: alguém executou nas mesmas pools depois de nós termos achado — a fenda era real, e o que
-//     faltou foi velocidade. O lucro DELES é quanto ela valia.
-//   - PERDIDA: arbitragem alheia sem nenhuma fenda nossa nas pools dela — o que não estamos vendo.
-//   - Nossas fendas que ninguém executou — poeira, fantasma ou oportunidade que só nós vimos.
-// N+1 e confirmado contam separado: são sensores diferentes, e a pergunta é qual deles presta.
 public final class Gabarito {
 
 	private static final Logger LOG = Logger.getLogger(Gabarito.class.getName());
 
-	// Uma fenda nossa vale como previsão desta arbitragem se veio até JANELA_MS antes dela. Com bloco
-	// de ~450 ms, 10 s cobrem a fenda N+1 (que precede o bloco) e as de alguns blocos de confirmado.
 	private static final long JANELA_MS = 10_000;
 	private static final int TETO = 20_000;
 
@@ -40,9 +27,6 @@ public final class Gabarito {
 
 	private final Deque<Anotada> recentes = new ArrayDeque<>();
 
-	// COBERTURA: para cada pool de arbitragem alheia, está no nosso grafo? Se não, por quê. Medido em
-	// 23/09: 75% das projeções N+1 não tinham caminho de volta no grafo, e esta é a pergunta seguinte —
-	// as pools que os outros usam nós não temos, ou temos e recusamos?
 	private final java.util.function.Function<byte[], String> motivoDeFora;
 	private final Map<String, AtomicLong> poolsAlheiasPorMotivo = new LinkedHashMap<>();
 	private final Map<String, AtomicLong> alheiasPorCobertura = new LinkedHashMap<>();
@@ -74,8 +58,6 @@ public final class Gabarito {
 		}
 	}
 
-	// Alguma fenda nossa recente (dentro da janela) passou EXATAMENTE por estas pools? Para quem casa pelas
-	// pernas reconstruídas (`AutopsiaDoMercado`), e não pelos emissores de log da tx alheia.
 	public synchronized boolean viu(Set<String> pools) {
 
 		long agora = System.currentTimeMillis();
@@ -111,7 +93,6 @@ public final class Gabarito {
 				: noGrafo == 0 ? "nenhuma no grafo" : "parte no grafo";
 		alheiasPorCobertura.computeIfAbsent(cobertura, k -> new AtomicLong()).incrementAndGet();
 
-		// A mais recente de cada sensor que casa com o conjunto de pools dela.
 		Anotada n1 = null;
 		Anotada confirmado = null;
 

@@ -18,8 +18,6 @@ public final class Snappy {
 	private Snappy() {
 	}
 
-	// --- descompressão --------------------------------------------------------
-
 	public static byte[] descomprimir(byte[] entrada) {
 
 		LeituraSnappy cursor = new LeituraSnappy(entrada);
@@ -92,8 +90,6 @@ public final class Snappy {
 
 		return escrito;
 	}
-
-	// --- compressão -----------------------------------------------------------
 
 	public static byte[] comprimir(byte[] dados) {
 

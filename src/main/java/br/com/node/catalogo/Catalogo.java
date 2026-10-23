@@ -15,29 +15,13 @@ import br.com.node.nucleo.Par;
 import br.com.node.nucleo.ReservasV2;
 import br.com.node.vo.Log;
 
-// Guarda o estado de cada pool na altura do cursor.
-//
-// Só entra aqui o que a cadeia disse, e cada valor carrega a altura em que vale. Não
-// há campo de confiança, não há "estimada", não há idade: se a cobertura do cursor é
-// contínua até a cabeça, TODO valor daqui vale na cabeça — tenha mudado no último
-// bloco ou há seis meses.
-//
-// Era isso que o projeto anterior não conseguia afirmar, e por não conseguir inventou
-// `reserva_mais_velha`, `FORA_DA_JANELA`, `ConfiancaRpcEnum` e o cache anelar.
 public final class Catalogo {
 
 	private final Map<String, ReservasV2> v2 = new ConcurrentHashMap<>();
 	private final Map<String, EstadoV3> v3 = new ConcurrentHashMap<>();
 
-	// As pools de dentro de um gerente (V4, Infinity CL), pelo `poolId` — 32 bytes, e é o TAMANHO que as
-	// separa das pools de endereço (20). O `poolId` não se repete entre os dois gerentes: o do Infinity põe
-	// o próprio gerente no hash da chave. Só entram em `pools()` as de chave conhecida e modelável: sem o
-	// `PoolKey` não se sabe o par, o espaçamento nem os hooks.
 	private final Map<String, EstadoNoGerente> noGerente = new ConcurrentHashMap<>();
 
-	// O `PoolKey` das pools de gerente — SÓ das que mexeram (ou nasceram) enquanto o node está no ar. Há
-	// ~400 mil pools nos dois gerentes (varredura de 25/09) e quase todas mortas; guardar todas custaria
-	// memória para nada. A que falta se PEDE a quem sabe (o banco), uma vez, sem travar o cursor.
 	private final Map<String, ChaveDaPool> chaves = new ConcurrentHashMap<>();
 	private final java.util.Set<String> pedidas = ConcurrentHashMap.newKeySet();
 	private volatile java.util.function.BiConsumer<byte[], byte[]> aoFaltarChave = (gerente, poolId) -> {
@@ -45,19 +29,10 @@ public final class Catalogo {
 	private volatile java.util.function.Consumer<ChaveDaPool> aoNascer = chave -> {
 	};
 
-	// O par de cada pool, aprendido dos `Transfer` do próprio recibo: quem transfere de
-	// ou para o endereço da pool é token dela. Sem banco, sem eth_call, sem factory.
 	private final Map<String, Par> pares = new ConcurrentHashMap<>();
 
-	// Pool cujo estado ficou impossível (V3: palavra do Mint/liquidez; V2: reserva fora do uint112 ou
-	// zero), e quantas vezes. Contar em vez de calar: depois de corrigida a palavra do Mint isto deve
-	// ficar em zero, e número acima de zero aqui é defeito de decodificação voltando, ou — no V2 —
-	// contrato alheio emitindo o topic0 do `Sync` com payload inventado.
 	private final Map<String, Long> descartados = new ConcurrentHashMap<>();
 
-	// Quantas vezes cada pool moveu preço (`Sync`/`Swap`). Não é estado da pool — é o SINAL de onde o
-	// fluxo passa, para a sondagem provar primeiro a pool que mais mexe (é lá que a fenda nasce). Só
-	// conta, não decide nada aqui; quem prioriza lê isto.
 	private final Map<String, Long> atividade = new ConcurrentHashMap<>();
 
 	public Optional<ReservasV2> reservas(byte[] pool) {
@@ -73,9 +48,6 @@ public final class Catalogo {
 		return Optional.ofNullable(v3.get(chave(pool)));
 	}
 
-	// O par da pool de gerente vem da CHAVE, com o BNB nativo lido como WBNB: é em WBNB que o grafo, as
-	// pools de endereço e o empréstimo falam, e o Executor embrulha na borda. A pool nativo/WBNB não tem
-	// par — ali as duas pontas seriam o mesmo token.
 	public Optional<Par> par(byte[] pool) {
 
 		if (deGerente(pool)) {
@@ -85,12 +57,6 @@ public final class Catalogo {
 		return Optional.ofNullable(pares.get(chave(pool)));
 	}
 
-	// OS LADOS da pool: token0 e token1 na ordem em que ELA calcula o preço (√P = token1 por token0). Não é
-	// o `Par`, que ordena por endereço — e a diferença só aparece na pool de gerente com BNB nativo: a
-	// moeda 0 é o nativo (endereço zero), lida como WBNB (0xbb4c…) ela pode passar para trás do outro token
-	// no `Par`. Na nativo/USDT o `Par` diz token0 = USDT, e a pool diz token0 = BNB. Derivar a direção do
-	// `Par` ali inverteria o preço inteiro — fenda fantasma do tamanho do preço do BNB. Quem pergunta
-	// "qual lado entra" pergunta AQUI; quem pergunta "que tokens a pool tem" pergunta ao `par`.
 	public record Lados(byte[] token0, byte[] token1) {
 	}
 
@@ -118,8 +84,6 @@ public final class Catalogo {
 		return Arrays.equals(token0, token1) ? Optional.empty() : Optional.of(new Par(token0, token1));
 	}
 
-	// Registra o par quando e só quando dois tokens distintos apareceram. Um token só
-	// não identifica a pool, e três significam que atribuímos a quem não era pool.
 	public void aprenderPar(byte[] pool, List<byte[]> tokensVistos) {
 
 		if (tokensVistos.size() != 2) {
@@ -133,10 +97,6 @@ public final class Catalogo {
 		}
 	}
 
-	// As pools de ENDEREÇO de cada par, na ordem em que o par foi aprendido. Existe para o roteamento da
-	// mempool, que achava a pool de cada perna de um swap pendente VARRENDO o catálogo inteiro — lista refeita
-	// na hora, com o tarifário consultado pool a pool — em cada um dos ~212 mil swaps de uma noite, com o
-	// catálogo passando de 27 mil pools. Aqui é uma consulta.
 	private final Map<Par, java.util.Set<String>> poolsPorPar = new ConcurrentHashMap<>();
 
 	public List<byte[]> poolsDoPar(byte[] tokenA, byte[] tokenB) {
@@ -152,11 +112,6 @@ public final class Catalogo {
 		return lista;
 	}
 
-	// Aprende o par de cada pool CONHECIDA a partir dos `Transfer` do bloco: quem transfere de ou
-	// para o endereço de uma pool é token dela. É trabalho do catálogo, não do cursor — o cursor
-	// só avança o bloco; enriquecer a propriedade da pool é daqui. Uma passada sobre os logs que o
-	// cursor já separou por transação, e o `Transfer` vem ANTES do `Sync`, então se colhe o bloco
-	// inteiro e se atribui no fim, quando já se sabe quem é pool.
 	public void inferirPares(List<List<Log>> porTransacao) {
 
 		Map<String, Map<String, byte[]>> candidatos = new HashMap<>();
@@ -190,9 +145,6 @@ public final class Catalogo {
 		});
 	}
 
-	// Todas as pools que o fluxo mostrou, V2 e V3 juntas. Quem monta o grafo precisa
-	// PERCORRER o catálogo, não consultá-lo pool a pool: consultar exige já saber o
-	// endereço, e saber o endereço é justamente o que só o catálogo tem.
 	public List<byte[]> pools() {
 
 		List<byte[]> todas = new ArrayList<>();
@@ -217,7 +169,6 @@ public final class Catalogo {
 		return v2.containsKey(chave(pool)) || v3.containsKey(chave(pool)) || noGerente.containsKey(chave(pool));
 	}
 
-	// Pool de gerente é a de identidade de 32 bytes (`poolId`); as de endereço têm 20.
 	public static boolean deGerente(byte[] pool) {
 		return pool.length == 32;
 	}
@@ -226,7 +177,6 @@ public final class Catalogo {
 		return Optional.ofNullable(chaves.get(chave(poolId)));
 	}
 
-	// A taxa que o último `Swap` da pool COBROU (identidade + protocolo), e não a do `PoolKey`.
 	public Optional<Integer> taxaNoGerente(byte[] poolId) {
 		return Optional.ofNullable(noGerente.get(chave(poolId))).map(EstadoNoGerente::taxa);
 	}
@@ -235,7 +185,6 @@ public final class Catalogo {
 		return v2.size();
 	}
 
-	// Quantas vezes a pool moveu preço desde que a vimos — o sinal de prioridade da sondagem.
 	public long atividade(byte[] pool) {
 		return atividade.getOrDefault(chave(pool), 0L);
 	}
@@ -244,36 +193,10 @@ public final class Catalogo {
 		return v3.size();
 	}
 
-	// Devolve o estado ANTERIOR, porque quem prova taxa precisa da transição, não do
-	// estado. Devolver só o novo forçaria o consumidor a guardar uma cópia — e cópia
-	// de estado em dois lugares é como a terceira altura nasceu no projeto anterior.
-	//
-	// O estado só entra se for POSSÍVEL, como no V3. Um par UniswapV2 guarda cada reserva num
-	// `uint112` — o próprio par estoura em `Pancake: OVERFLOW` quando o saldo passaria disso.
-	// Logo valor ACIMA do teto não é estado de par: é log inventado, e log é dado
-	// NÃO-AUTENTICADO — qualquer contrato emite o topic0 do `Sync` com o payload que quiser.
-	// MEDIDO: numa corrida de 9 h os 7 despachos morreram TODOS em `Pancake: OVERFLOW`, e a
-	// varredura dos `Sync` reais da BSC não achou reserva acima de 7,1e26 (0,00001% do teto) —
-	// o número que estourou o par não veio de par nenhum.
-	//
-	// ZERO ENTRA, e isso é CICATRIZ do projeto anterior, com número. A regra de lá era
-	// `reserva > 0` ("zero não é reserva pequena, é pool sem lastro") e ela custou caro: quando a
-	// liquidez é RETIRADA o par emite `Sync(0,0)`, que é o fato mais FORTE que existe sobre aquela
-	// pool, e nós o recusávamos — ficando para sempre com a última reserva não-nula. MEDIDO lá: a
-	// pool 08bb0ff2… guardava 22,1 WBNB e 307 milhões de tokens como FATO enquanto a cadeia
-	// devolvia 0 e 0, e o grafo via 19% a 24% de retorno em duas pernas — o valor de uma pool que
-	// não existe mais. Aqui o resultado é o mesmo: o fantasma vira fenda inventada, que é pior que
-	// fenda nenhuma. Quem recusa pool sem lastro é a CURVA, que não se constrói com x = 0, e ela
-	// recusa no lugar certo (`Cotador` não cota, `ligarV2` não liga).
 	public Optional<ReservasV2> aplicarSync(Log log, long altura) {
 
 		String pool = chave(log.endereco());
 
-		// `Sync(uint112,uint112)` emite DUAS palavras, sempre. Payload mais curto não é um Sync — e
-		// esta guarda passou a ser OBRIGATÓRIA quando o ZERO virou estado legítimo: `palavra` devolve
-		// ZERO para a palavra AUSENTE, então sem ela um log truncado entraria como `Sync(0,0)` e
-		// APAGARIA a reserva boa da pool. É a porta de trás do mesmo erro que a plausibilidade tapa na
-		// frente.
 		if (log.dados() == null || log.dados().length < 64) {
 			descartados.merge(pool, 1L, Long::sum);
 			return Optional.empty();
@@ -295,22 +218,12 @@ public final class Catalogo {
 		return Optional.ofNullable(antes);
 	}
 
-	// O teto que o PRÓPRIO par impõe às reservas: `uint112`. Acima disto o par reverteria com
-	// OVERFLOW, então não existe estado legítimo ali.
 	private static final BigInteger TETO_UINT112 = BigInteger.TWO.pow(112).subtract(BigInteger.ONE);
 
-	// A mesma dúvida do V3, aplicada ao V2: em vez de aceitar e cotar sobre lixo, recusa e CONTA.
-	// O teto é a ÚNICA recusa: zero passa (é par sem lastro, não log inventado — quem não cota é a
-	// curva), e negativo é impossível de existir num campo sem sinal, então nem se pergunta.
 	private static boolean plausivel(BigInteger reserva) {
 		return reserva.signum() >= 0 && reserva.compareTo(TETO_UINT112) <= 0;
 	}
 
-	// Log com estado impossível é DESCARTADO, não corrigido e não gravado.
-	//
-	// A recusa fica mesmo depois de achada a causa do 1,41e48 — que era a palavra do Mint lida
-	// no lugar errado, não fork nenhum. Ela é barata, exata, e é o único filtro que DUVIDA: gas e
-	// retorno só sabem comparar, e aquele estado atravessou os dois.
 	public void aplicarSwapV3(Log log, long altura) {
 
 		try {
@@ -320,7 +233,8 @@ public final class Catalogo {
 			EstadoV3 antes = v3.put(chave(log.endereco()), depois);
 			atividade.merge(chave(log.endereco()), 1L, Long::sum);
 
-			EstadoV3.taxaEntre(antes, depois, Eventos.palavraComSinalGrande(log, 0), Eventos.palavraComSinalGrande(log, 1))
+			EstadoV3.taxaEntre(antes, depois, Eventos.palavraComSinalGrande(log, 0),
+					Eventos.palavraComSinalGrande(log, 1))
 					.ifPresent(taxa -> taxasObservadasV3.merge(chave(log.endereco()), new int[] { taxa, -1 },
 							(velhas, nova) -> new int[] { nova[0], velhas[0] }));
 
@@ -333,12 +247,8 @@ public final class Catalogo {
 		return descartados.size();
 	}
 
-	// As duas últimas taxas que cada V3 COBROU (`EstadoV3.taxaEntre`), a mais nova primeiro.
 	private final Map<String, int[]> taxasObservadasV3 = new ConcurrentHashMap<>();
 
-	// A taxa de uma V3 pelo que ela cobrou — só quando as duas últimas deduções BATEM (±1 milionésimo, o
-	// arredondamento). Pool de taxa dinâmica troca de taxa de um swap para o outro e fica de fora: cotar com a
-	// taxa de ontem é fenda fantasma.
 	public Optional<Integer> taxaObservadaV3(byte[] pool) {
 
 		int[] ultimas = taxasObservadasV3.get(chave(pool));
@@ -355,14 +265,11 @@ public final class Catalogo {
 		return Optional.ofNullable(noGerente.get(chave(poolId))).filter(e -> Arrays.equals(e.gerente(), gerente));
 	}
 
-	// Quantas pools deste gerente já mostraram estado.
 	public int poolsNoGerente(byte[] gerente) {
 
 		return (int) noGerente.values().stream().filter(e -> Arrays.equals(e.gerente(), gerente)).count();
 	}
 
-	// O `Swap` do gerente traz o estado ABSOLUTO depois da troca (palavras 2 a 4, as mesmas do V3
-	// deslocadas) e a taxa cobrada (palavra 5). Quem chama já conferiu o emissor.
 	public void aplicarSwapDeGerente(Log log, long altura) {
 
 		String pool = chave(log.topicos().get(1));
@@ -370,8 +277,10 @@ public final class Catalogo {
 		try {
 
 			noGerente.put(pool,
-					new EstadoNoGerente(log.endereco(), new EstadoV3(Eventos.palavra(log, 2), Eventos.palavra(log, 3),
-							(int) Eventos.palavraComSinal(log, 4), altura), Eventos.palavra(log, 5).intValueExact()));
+					new EstadoNoGerente(log.endereco(),
+							new EstadoV3(Eventos.palavra(log, 2), Eventos.palavra(log, 3),
+									(int) Eventos.palavraComSinal(log, 4), altura),
+							Eventos.palavra(log, 5).intValueExact()));
 			atividade.merge(pool, 1L, Long::sum);
 
 			if (!chaves.containsKey(pool) && pedidas.add(pool)) {
@@ -383,7 +292,6 @@ public final class Catalogo {
 		}
 	}
 
-	// A pool que nasceu agora: a chave entra na memória e segue para quem guarda.
 	public void aplicarInicializacao(Log log, long altura) {
 		ChaveDaPool.doInitialize(log, altura).ifPresent(chave -> {
 			aprenderChave(chave);
@@ -391,7 +299,6 @@ public final class Catalogo {
 		});
 	}
 
-	// A resposta de quem sabe (o banco), ou a pool que nasceu ao vivo.
 	public void aprenderChave(ChaveDaPool chave) {
 
 		String pool = chave(chave.poolId());
@@ -400,9 +307,6 @@ public final class Catalogo {
 		pedidas.remove(pool);
 	}
 
-	// Quem sabe NÃO sabia (a varredura ainda não passou pelo nascimento dela). A pool fica como pedida —
-	// pedir de novo a cada swap seria uma ida ao banco por swap para a mesma resposta — até a varredura
-	// avançar, quando todas as sem resposta podem ser pedidas outra vez.
 	public void liberarPedidas() {
 		pedidas.removeIf(pool -> !chaves.containsKey(pool));
 	}
@@ -415,7 +319,6 @@ public final class Catalogo {
 		this.aoFaltarChave = aoFaltarChave;
 	}
 
-	// Quem mantém os mapas de ticks: cada aporte ou retirada de liquidez, com as duas pontas e o delta com sinal.
 	@FunctionalInterface
 	public interface MudancaDeLiquidez {
 		void aoMudar(byte[] pool, int inferior, int superior, BigInteger delta, long altura);
@@ -432,8 +335,6 @@ public final class Catalogo {
 		this.aoNascer = aoNascer;
 	}
 
-	// Por gerente: pools com estado visto, com chave conhecida, e MODELÁVEIS (estado + chave sem hook e de
-	// taxa fixa) — a última é a que diz quanto do fluxo dos gerentes o grafo poderá ver.
 	public Map<String, Long> resumoDoGerente(byte[] gerente) {
 
 		long comEstado = 0;
@@ -466,9 +367,6 @@ public final class Catalogo {
 		return resumo;
 	}
 
-	// A mesma regra do Mint/Burn do V3 — só mexe na liquidez ATIVA a faixa que cobre o tick corrente —,
-	// com os ticks lidos do CORPO. Provado em 25/09 com logs reais: nos 4 casos de faixa cobrindo o tick,
-	// o swap seguinte trouxe exatamente liquidez anterior + delta; nos 6 de faixa fora, a mesma liquidez.
 	public void aplicarLiquidezDeGerente(Log log, long altura) {
 
 		String pool = chave(log.topicos().get(1));
@@ -486,12 +384,13 @@ public final class Catalogo {
 
 		EstadoV3 antes = atual.estado();
 
-		// Negativo aqui é o mesmo caso do V3: posição aberta antes da nossa janela, tirando mais do que
-		// sabemos que havia. Não sabemos a liquidez — e dizer isso é remover, não zerar.
 		try {
 
-			noGerente.put(pool, new EstadoNoGerente(atual.gerente(), new EstadoV3(antes.sqrtPrecoX96(),
-					antes.liquidez().add(Eventos.palavraComSinalGrande(log, 2)), antes.tick(), altura), atual.taxa()));
+			noGerente.put(pool,
+					new EstadoNoGerente(atual.gerente(),
+							new EstadoV3(antes.sqrtPrecoX96(),
+									antes.liquidez().add(Eventos.palavraComSinalGrande(log, 2)), antes.tick(), altura),
+							atual.taxa()));
 
 		} catch (IllegalArgumentException impossivel) {
 
@@ -501,12 +400,6 @@ public final class Catalogo {
 		}
 	}
 
-	// Mint e Burn só mexem na liquidez ATIVA quando a faixa cobre o tick corrente.
-	// Fora dela o aporte fica guardado para quando o preço chegar lá — e como não
-	// temos mapa de ticks, fora da faixa a gente simplesmente não sabe, e não finge.
-	//
-	// O evento se decodifica AQUI e não em quem chama: a posição do `amount` muda entre Mint e
-	// Burn, e foi exatamente essa posição, espalhada no chamador, que somou endereço à liquidez.
 	public void aplicarLiquidezV3(Log log, long altura) {
 
 		EstadoV3 atual = v3.get(chave(log.endereco()));
@@ -514,18 +407,13 @@ public final class Catalogo {
 		long tickInferior = Eventos.tickDoTopico(log, 2);
 		long tickSuperior = Eventos.tickDoTopico(log, 3);
 
-		// O mapa de ticks quer TODO aporte, dentro ou fora da faixa corrente: fora dela é o `liquidityNet` que o
-		// preço vai encontrar quando atravessar.
-		aoMudarLiquidez.aoMudar(log.endereco(), (int) tickInferior, (int) tickSuperior, Eventos.liquidezMovida(log), altura);
+		aoMudarLiquidez.aoMudar(log.endereco(), (int) tickInferior, (int) tickSuperior, Eventos.liquidezMovida(log),
+				altura);
 
 		if (atual == null || atual.tick() < tickInferior || atual.tick() >= tickSuperior) {
 			return;
 		}
 
-		// Liquidez negativa é possível aqui e NÃO é erro do contrato: a nossa base de liquidez
-		// começa no primeiro `Swap` que vimos, então um `Burn` de posição aberta antes da nossa
-		// janela pode tirar mais do que sabemos que havia. Zerar seria inventar um número;
-		// descartar é dizer "não sabemos a liquidez desta pool", que é a verdade.
 		try {
 
 			v3.put(chave(log.endereco()), new EstadoV3(atual.sqrtPrecoX96(),

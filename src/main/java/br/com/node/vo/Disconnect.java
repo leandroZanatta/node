@@ -7,10 +7,6 @@ public record Disconnect(int motivo) implements MensagemP2p {
 		return DISCONNECT;
 	}
 
-	// Conferido um a um contra `p2p/peer_error.go` do bnb-chain/bsc. A tabela
-	// anterior estava errada de 0x03 em diante, e o erro cegava justamente para o
-	// defeito que mais importa: o 0x0b é "ficamos calados tempo demais", e aparecia
-	// como "peer inútil".
 	public String descricao() {
 
 		return switch (motivo) {

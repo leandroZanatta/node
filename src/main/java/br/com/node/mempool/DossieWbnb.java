@@ -14,13 +14,6 @@ import br.com.node.catalogo.Catalogo;
 import br.com.node.nucleo.Arbitragem;
 import br.com.node.nucleo.Par;
 
-// Guarda as maiores arbitragens em WBNB já confirmadas, com o rastro da mempool que as previu.
-//
-// Saiu do `ObservatorioMempool` porque é outra responsabilidade: aquele INGERE a mempool e
-// projeta; este ACUMULA o dossiê — o lucro total em WBNB e um top-N conferível no explorador,
-// cada item cruzando a confirmação on-chain com a projeção que a antecipou. O acúmulo é
-// compartilhado (a thread que confirma escreve, a do relatório lê), então a trava é uma só e
-// mora aqui, não espalhada em `synchronized(this)` no observatório.
 final class DossieWbnb {
 
 	private static final int MAIORES = 10;
@@ -34,8 +27,6 @@ final class DossieWbnb {
 		this.catalogo = catalogo;
 	}
 
-	// Soma o lucro e guarda o item, mantendo só os `MAIORES` por lucro. `projecao` nulo é
-	// confirmação que nenhuma projeção da mempool antecipou — vira "nao_medido", não zero.
 	synchronized void registrar(Arbitragem arbitragem, long altura, Instant instante, Projecao projecao,
 			Long adiantamentoMs) {
 
@@ -52,7 +43,8 @@ final class DossieWbnb {
 		item.put("mempool_hash_correlato", projecao == null ? null : projecao.hash());
 		item.put("mempool_primeiro_visto", projecao == null ? null : projecao.instante().toString());
 		item.put("adiantamento_ms", adiantamentoMs);
-		item.put("status_temporal", adiantamentoMs == null ? "nao_medido" : adiantamentoMs >= 0 ? "adiantado" : "atrasado");
+		item.put("status_temporal",
+				adiantamentoMs == null ? "nao_medido" : adiantamentoMs >= 0 ? "adiantado" : "atrasado");
 		item.put("entrada_pendente_wei", projecao == null ? null : projecao.entrada().toString());
 		item.put("saida_pendente_wei", projecao == null ? null : projecao.saida().toString());
 

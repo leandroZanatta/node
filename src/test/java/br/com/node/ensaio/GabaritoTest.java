@@ -15,8 +15,6 @@ import br.com.node.nucleo.Ciclo;
 import br.com.node.nucleo.Oportunidade;
 import br.com.node.nucleo.Perna;
 
-// O gabarito casa a nossa fenda com a arbitragem alheia pelo CONJUNTO de pools — a ordem e o sentido
-// em que cada um percorre não importam — e separa o sensor que acertou.
 class GabaritoTest {
 
 	private static final byte[] WBNB = HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c");
@@ -35,9 +33,9 @@ class GabaritoTest {
 
 		gabarito.anotar(nosso, true);
 
-		// Eles percorreram no sentido contrário, começando pela V3: é a mesma fenda.
+		
 		gabarito.confirmar(new Arbitragem(List.of(V3, V2), WBNB, BigInteger.valueOf(70), 1, 1), 100);
-		// Outra arbitragem, em pools que não achamos: perdida.
+		
 		gabarito.confirmar(new Arbitragem(List.of(OUTRA, V2), WBNB, BigInteger.valueOf(5), 2, 0), 101);
 
 		Map<String, Object> resumo = gabarito.resumo();
@@ -45,6 +43,7 @@ class GabaritoTest {
 		assertEquals(Map.of("n+1", 1L), resumo.get("acertos"));
 		assertEquals("70", ((Map<String, Map<String, String>>) resumo.get("valor_acertado_por_token")).get("n+1")
 				.get(HexFormat.of().formatHex(WBNB)));
-		assertEquals("75", ((Map<String, String>) resumo.get("valor_alheio_por_token")).get(HexFormat.of().formatHex(WBNB)));
+		assertEquals("75",
+				((Map<String, String>) resumo.get("valor_alheio_por_token")).get(HexFormat.of().formatHex(WBNB)));
 	}
 }

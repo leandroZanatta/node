@@ -19,14 +19,6 @@ import br.com.node.nucleo.Passo;
 import br.com.node.vo.Log;
 import br.com.node.vo.SwapPendente;
 
-// O APRENDIZ: descobre ONDE, na calldata de um contrato, ficam o caminho de tokens e o montante de
-// entrada — olhando o que o bloco fechado provou. É o que converte o fluxo OPACO (bot privado, sem ABI
-// em base pública) em leitura local, sem RPC.
-//
-// As regras que estes testes fixam são as que a medição exigiu: consenso entre amostras (formato
-// instável não vira regra), homogeneidade por contrato E método, e — o caso que a medição achou em 46%
-// das perdas — a calldata que NÃO carrega o montante, que tem de virar "não projeta local" em vez de
-// chute.
 class AprendizDeLayoutTest {
 
 	private static final byte[] CONTRATO = endereco(70);
@@ -135,13 +127,15 @@ class AprendizDeLayoutTest {
 				BigInteger.valueOf(entrada));
 	}
 
-	// O mesmo formato com 32 bytes a mais ANTES dos tokens: o deslocamento deixa de se repetir.
+	
+	
 	private static ExemploDeMovimento exemploDeslocado(long entrada, byte[]... tokens) {
 		return new ExemploDeMovimento(new TransacaoAnunciada(CONTRATO, montar(32, entrada, tokens)), List.of(tokens),
 				BigInteger.valueOf(entrada));
 	}
 
-	// Caminho sem montante na calldata, e um montante observado que NÃO aparece nela.
+	
+	
 	private static ExemploDeMovimento exemploSemMontante(byte[]... tokens) {
 		return new ExemploDeMovimento(new TransacaoAnunciada(CONTRATO, caminhoPuro(tokens)), List.of(tokens),
 				BigInteger.valueOf(987_654_321_123L));
@@ -156,7 +150,7 @@ class AprendizDeLayoutTest {
 		return montar(0, entrada, tokens);
 	}
 
-	// [seletor 4][enchimento][montante 32][token 20]*
+	
 	private static byte[] montar(int enchimento, long entrada, byte[]... tokens) {
 
 		byte[] dados = new byte[4 + enchimento + 32 + 20 * tokens.length];
@@ -172,7 +166,7 @@ class AprendizDeLayoutTest {
 		return dados;
 	}
 
-	// [seletor 4][token 20]* — sem montante nenhum.
+	
 	private static byte[] caminhoPuro(byte[]... tokens) {
 
 		byte[] dados = new byte[4 + 20 * tokens.length];
@@ -205,8 +199,9 @@ class AprendizDeLayoutTest {
 		return palavra;
 	}
 
-	// Endereço pseudo-aleatório DETERMINÍSTICO: com bytes repetidos, uma janela de 20 bytes casaria
-	// deslizando e a descoberta de deslocamento viraria ruído.
+	
+	
+	
 	private static byte[] endereco(int semente) {
 		byte[] endereco = new byte[20];
 		new Random(semente).nextBytes(endereco);

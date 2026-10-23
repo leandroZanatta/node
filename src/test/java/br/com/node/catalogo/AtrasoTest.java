@@ -2,7 +2,6 @@ package br.com.node.catalogo;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,24 +14,12 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.NodeDeTeste;
 import br.com.node.cadeia.Crivo;
-import br.com.node.nucleo.Arbitragem;
 import br.com.node.sincronizacao.Cabeca;
 import br.com.node.sincronizacao.Cursor;
 import br.com.node.sincronizacao.Frente;
 import br.com.node.util.Resources;
-import br.com.node.vo.AnuncioBloco;
 import br.com.node.vo.Log;
 
-// Conseguimos pegar as arbitragens? E, quando não, por quanto chegamos atrás?
-//
-// A hora mediu que fenda confirmada é tomada por terceiro em ≤3 blocos. Este teste torna isso um
-// NÚMERO: segue a cabeça, detecta as arbitragens que terceiros de fato executaram (o `Detector` de
-// fluxo líquido), e para cada uma mede quanto tempo do ANÚNCIO do bloco até NÓS termos aplicado ele —
-// que é o quão tarde ficamos sabendo dela. E conta se sequer conhecíamos as pools.
-//
-// A verdade que a medição impõe: detectamos DEPOIS de aplicar o bloco, e a arbitragem já estava DENTRO
-// dele. Então, sem projeção da mempool, estamos por construção pelo menos um bloco atrás de quem
-// capturou — e o número diz por quanto. É o argumento medido para a próxima etapa (P21).
 class AtrasoTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
@@ -44,11 +31,12 @@ class AtrasoTest {
 	private static final long DURACAO_MS = 20L * 60 * 1000;
 	private static final long BLOCO_MS = 750;
 
-	// Por altura: quando a rede anunciou, e quando aplicamos. A diferença é o atraso para SABER.
+	
+	
 	private final Map<Long, Long> anunciadaEm = new ConcurrentHashMap<>();
 	private final Map<Long, Long> aplicadaEm = new ConcurrentHashMap<>();
 
-	// Arbitragens de terceiros: altura -> pools tocadas.
+	
 	private final Map<Long, List<byte[]>> arbitragensDeTerceiros = new HashMap<>();
 
 	@Test
@@ -63,7 +51,8 @@ class AtrasoTest {
 		Detector detector = new Detector(catalogo);
 		Cabeca cabeca = new Cabeca();
 
-		// Buffer da altura corrente para rodar o Detector por transação e no fim do bloco.
+		
+		
 		Map<Integer, List<Log>> daAltura = new HashMap<>();
 		long[] alturaCorrente = { -1 };
 
@@ -146,8 +135,8 @@ class AtrasoTest {
 		}
 
 		for (List<Log> transacao : daAltura.values()) {
-			detector.em(transacao).ifPresent(arb -> arbitragensDeTerceiros
-					.computeIfAbsent(altura, q -> new ArrayList<>(arb.pools())));
+			detector.em(transacao).ifPresent(
+					arb -> arbitragensDeTerceiros.computeIfAbsent(altura, q -> new ArrayList<>(arb.pools())));
 		}
 	}
 
@@ -181,8 +170,8 @@ class AtrasoTest {
 
 		System.out.println();
 		System.out.println("==== ATRASO: pegamos, e por quanto chegamos atrás ====");
-		System.out.println("blocos seguidos: " + seguidos + " · arbitragens de terceiros: "
-				+ arbitragensDeTerceiros.size());
+		System.out.println(
+				"blocos seguidos: " + seguidos + " · arbitragens de terceiros: " + arbitragensDeTerceiros.size());
 		System.out.printf("pools dessas arbitragens que CONHECÍAMOS: %d de %d (%.0f%%)%n", poolsConhecidas, totalPools,
 				100.0 * poolsConhecidas / Math.max(1, totalPools));
 
@@ -191,8 +180,8 @@ class AtrasoTest {
 
 		System.out.println();
 		System.out.println("Leitura: detectamos DEPOIS de aplicar o bloco, e a arbitragem estava DENTRO dele.");
-		System.out.println("Mesmo com atraso baixo, agir só é possível no bloco seguinte — pelo menos "
-				+ "um bloco (" + BLOCO_MS + " ms) atrás de quem capturou dentro do bloco. É a conta da mempool (P21).");
+		System.out.println("Mesmo com atraso baixo, agir só é possível no bloco seguinte — pelo menos " + "um bloco ("
+				+ BLOCO_MS + " ms) atrás de quem capturou dentro do bloco. É a conta da mempool (P21).");
 	}
 
 	private void imprimir(String rotulo, List<Long> ms) {

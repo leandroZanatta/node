@@ -8,11 +8,11 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.Test;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-
-import org.junit.jupiter.api.Test;
 
 class PagamentosDeBlocoTest {
 
@@ -48,8 +48,7 @@ class PagamentosDeBlocoTest {
 		txs.add(tx(OUTRO_REMETENTE, "ee00000000000000000000000000000000000005", "0x" + Long.toHexString(9L), 3));
 		txs.add(tx(VENCEDOR, OUTRO, "0x0", 4));
 
-		List<PagamentosDeBloco.Pagamento> achados = PagamentosDeBloco.interpretar(bloco(txs),
-				Set.of(BUILDER, OUTRO));
+		List<PagamentosDeBloco.Pagamento> achados = PagamentosDeBloco.interpretar(bloco(txs), Set.of(BUILDER, OUTRO));
 
 		assertEquals(2, achados.size());
 		assertEquals(new BigInteger("5000000000000000"), achados.get(0).valorWei());

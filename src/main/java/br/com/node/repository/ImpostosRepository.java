@@ -7,7 +7,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Logger;
@@ -15,16 +14,6 @@ import java.util.logging.Logger;
 import br.com.node.repository.postgres.Postgres;
 import br.com.node.vo.ProvaDeImposto;
 
-// Guarda a prova de imposto de cada (pool, token) entre execuções.
-//
-// É a metade que faltava do "provado, salvo no banco": a taxa já persistia, o imposto não. Sem isto,
-// no restart toda perna volta para "a provar" e a sonda reveta tudo — e vetar é o que mais demora.
-// Imposto de (pool, token) é imutável (o `_transfer` do token não muda de bloco a bloco), então
-// grava-se uma vez e vale.
-//
-// ANOTA NA MEMÓRIA, GRAVA EM LOTE, como a prova de taxa: a prova chega na thread da sondagem; uma ida
-// ao banco por prova seria uma volta a cada medição. `anotar` só soma na memória; `descarregar` grava
-// tudo numa instrução, chamada pela thread de gravação.
 public final class ImpostosRepository {
 
 	private static final Logger LOG = Logger.getLogger(ImpostosRepository.class.getName());
@@ -77,13 +66,14 @@ public final class ImpostosRepository {
 
 			List<ProvaDeImposto> provas = new ArrayList<>();
 
-			// A venda mora em `impostos_provados` (o nome de antes da direção); a compra, em `impostos_de_compra`.
 			for (boolean compra : new boolean[] { false, true }) {
-				try (PreparedStatement consulta = conexao.prepareStatement("select pool, token, bps from " + tabela(compra));
+				try (PreparedStatement consulta = conexao
+						.prepareStatement("select pool, token, bps from " + tabela(compra));
 						ResultSet linhas = consulta.executeQuery()) {
 
 					while (linhas.next()) {
-						provas.add(new ProvaDeImposto(linhas.getBytes(1), linhas.getBytes(2), linhas.getInt(3), compra));
+						provas.add(
+								new ProvaDeImposto(linhas.getBytes(1), linhas.getBytes(2), linhas.getInt(3), compra));
 					}
 				}
 			}
@@ -108,8 +98,6 @@ public final class ImpostosRepository {
 		return lote;
 	}
 
-	// Imposto de (pool, token) é imutável: gravar de novo é idempotente, então o conflito só reafirma o
-	// valor. Não soma nada, ao contrário da prova de taxa.
 	private static Void gravar(Connection conexao, List<ProvaDeImposto> lote) throws SQLException {
 
 		for (boolean compra : new boolean[] { false, true }) {
@@ -138,7 +126,6 @@ public final class ImpostosRepository {
 		return compra ? "impostos_de_compra" : "impostos_provados";
 	}
 
-	// A direção entra na chave: venda e compra do mesmo (pool, token) são duas provas.
 	private static String chave(ProvaDeImposto prova) {
 		return HexFormat.of().formatHex(prova.pool()) + ":" + HexFormat.of().formatHex(prova.token())
 				+ (prova.compra() ? ":compra" : ":venda");

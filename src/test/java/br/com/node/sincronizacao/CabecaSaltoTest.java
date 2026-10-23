@@ -6,9 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.vo.AnuncioBloco;
 
-// A queda de rede de 24/09: depois dela a cadeia tinha andado mais que o teto de salto, todo anúncio
-// verdadeiro virou "salto", e a cabeça ficou presa por mais de uma hora. O teto continua valendo para o
-// anúncio isolado — e cede à rajada coerente, que é a rede.
 class CabecaSaltoTest {
 
 	private static AnuncioBloco anuncio(long numero) {

@@ -28,9 +28,6 @@ public final class ConexaoTcp implements Closeable {
 
 	private static final int VERSAO_P2P = 5;
 
-	// Anunciamos só a versão cujo formato de Status está implementado. O eth/70
-	// acrescenta a faixa de blocos servida, e anunciá-lo sem produzi-la é mentir
-	// no protocolo — o par emudece e o sintoma não é erro, é silêncio.
 	private static final int VERSAO_ETH = 68;
 
 	private static final String CLIENTE = "node-java/0.1";
@@ -61,18 +58,12 @@ public final class ConexaoTcp implements Closeable {
 
 		quadros = new Quadros(aperto.aceitar(lerAck()));
 
-		enviar(new Hello(VERSAO_P2P, CLIENTE, List.of(new Capacidade(Capacidade.ETH, VERSAO_ETH)),
-				no.portaTcp(), chave.id()));
+		enviar(new Hello(VERSAO_P2P, CLIENTE, List.of(new Capacidade(Capacidade.ETH, VERSAO_ETH)), no.portaTcp(),
+				chave.id()));
 
-		// A ordem é obrigatória: o nosso Hello sai, o dele entra, e só então há
-		// compressão. Qualquer mensagem no meio vira quadro que o par descarta.
 		return esperar(Hello.class);
 	}
 
-	// SINCRONIZADAS porque duas threads escrevem nesta conexão: o leitor, que responde o
-	// Ping do par, e quem pede. E não é só o socket — `Quadros.escrever` avança o estado
-	// do MAC de saída, então dois quadros montados ao mesmo tempo saem com MAC trocado e
-	// o par derruba por "quebra de protocolo".
 	public synchronized void enviar(MensagemP2p mensagem) {
 		escrever(quadros.escrever(rlpx.escrever(mensagem)));
 	}
@@ -85,13 +76,6 @@ public final class ConexaoTcp implements Closeable {
 		return rlpx.ler(proximaCarga());
 	}
 
-	// Lê até chegar o que se espera, respondendo o Ping do par no caminho. Está aqui e
-	// não na sessão porque Ping/Pong é o protocolo DESTA conexão — manter o fluxo de
-	// pé é trabalho de quem o conduz.
-	//
-	// Limitado por PRAZO, não por contagem: o par intercala milhares de anúncios de
-	// mempool com a resposta — medido, 4.549 contra 256 de qualquer outra coisa.
-	// Contar tentativas desistiria antes da resposta chegar.
 	public <T extends MensagemRlpx> T esperar(Class<T> esperado) {
 
 		long limite = System.currentTimeMillis() + Resources.inteiro("rlpx.pedido.timeout.ms");
@@ -137,11 +121,8 @@ public final class ConexaoTcp implements Closeable {
 
 			socket = new Socket();
 
-			socket.connect(new InetSocketAddress(no.ip(), no.portaTcp()),
-					Resources.inteiro("rlpx.timeout.conexao.ms"));
+			socket.connect(new InetSocketAddress(no.ip(), no.portaTcp()), Resources.inteiro("rlpx.timeout.conexao.ms"));
 
-			// O defeito nº 1 do node anterior: socket sem isto, e a thread de leitura
-			// ficava presa para sempre num par morto, ocupando um dos 25 slots.
 			socket.setSoTimeout(Resources.inteiro("rlpx.timeout.leitura.ms"));
 
 			entrada = socket.getInputStream();
@@ -152,8 +133,6 @@ public final class ConexaoTcp implements Closeable {
 		}
 	}
 
-	// O ack vem com prefixo de dois bytes EM CLARO dizendo o tamanho — ele é
-	// anterior aos segredos, e o prefixo também entra no MAC do ECIES.
 	private byte[] lerAck() {
 
 		byte[] prefixo = exatos(PREFIXO_ACK);
@@ -168,9 +147,6 @@ public final class ConexaoTcp implements Closeable {
 		return ack;
 	}
 
-	// Um quadro pode vir picado em vários pacotes, e vários quadros podem vir no
-	// mesmo. Quem sabe onde um acaba é o `Quadros`, então alimenta-se ele até
-	// sobrar uma carga.
 	private byte[] proximaCarga() {
 
 		byte[] carga = quadros.ler(null);

@@ -11,13 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import br.com.node.nucleo.Par;
 
-// A identidade de pool pelo endereço, contra pools REAIS da BSC — sem rede.
-//
-// Cada endereço abaixo foi lido da cadeia (`getPair`/`getPool` da factory, `factory()` e `tickSpacing()`
-// da pool) antes de virar asserção. A conta do CREATE2 ou está exata ou não serve: um byte trocado no
-// sal, no deployer ou no hash dá um endereço que não existe, e a pool some da identificação em silêncio.
-// Por isso o caso negativo importa tanto quanto os positivos: pool de factory desconhecida tem de dar
-// VAZIO, e não a primeira factory da lista.
 class FabricasTest {
 
 	private static final String WBNB = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
@@ -32,7 +25,7 @@ class FabricasTest {
 		identifica("16b9a82891338f9ba80e2d6970fdda79d1eb0dae", WBNB, USDT, "PancakeSwap V2", OptionalInt.of(2500),
 				OptionalInt.empty());
 
-		// a pool em que a prova por troca dizia 3000 e o roteador 2000
+		
 		identifica("9361eb3333d96697de09cc616b93e02ba6cdc57c", WBNB, "f0effed6865b0d871e2301af24762620d9f9744c",
 				"PancakeSwap V1", OptionalInt.of(2000), OptionalInt.empty());
 	}
@@ -55,9 +48,11 @@ class FabricasTest {
 	@DisplayName("pool de factory desconhecida não é identificada — nem confundida com a primeira da lista")
 	void desconhecidaFicaVazia() {
 
-		// V3 com taxa 10000 e espaçamento 2000, de factory 0x73dc984d… que não publica tabela nem bate hash
-		assertTrue(fabricas.de(bytes("bfb3ffdc057744bf29d3554f9764f400354e2d76"),
-				new Par(bytes("40b8129b786d766267a7a118cf8c07e31cdb6fde"), bytes(WBNB))).isEmpty(),
+		
+		
+		assertTrue(
+				fabricas.de(bytes("bfb3ffdc057744bf29d3554f9764f400354e2d76"),
+						new Par(bytes("40b8129b786d766267a7a118cf8c07e31cdb6fde"), bytes(WBNB))).isEmpty(),
 				"a pool de fork desconhecido foi identificada como factory conhecida");
 	}
 

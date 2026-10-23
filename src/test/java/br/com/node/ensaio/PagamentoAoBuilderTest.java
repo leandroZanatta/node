@@ -21,7 +21,8 @@ class PagamentoAoBuilderTest {
 	@Test
 	@DisplayName("o necessário é (alvo − 0,9 × preço do gás) × gás: 0,15 gwei a 0,05 → 0,105 gwei × 372k")
 	void necessarioParaOAlvo() {
-		assertEquals(BigInteger.valueOf(105_000_000L).multiply(GAS), CalculadorDeLance.necessarioParaOAlvo(GWEI_015, GWEI_005, GAS));
+		assertEquals(BigInteger.valueOf(105_000_000L).multiply(GAS),
+				CalculadorDeLance.necessarioParaOAlvo(GWEI_015, GWEI_005, GAS));
 	}
 
 	@Test
@@ -56,7 +57,8 @@ class PagamentoAoBuilderTest {
 	@DisplayName("lucro no piso ou abaixo, ou nada a pagar: não paga")
 	void naoPaga() {
 		assertEquals(BigInteger.ZERO, CalculadorDeLance.pagamentoAoBuilder(E18, PISO, PISO, SEM_TETO));
-		assertEquals(BigInteger.ZERO, CalculadorDeLance.pagamentoAoBuilder(E18, PISO.subtract(BigInteger.ONE), PISO, SEM_TETO));
+		assertEquals(BigInteger.ZERO,
+				CalculadorDeLance.pagamentoAoBuilder(E18, PISO.subtract(BigInteger.ONE), PISO, SEM_TETO));
 		assertEquals(BigInteger.ZERO, CalculadorDeLance.pagamentoAoBuilder(BigInteger.ZERO, LUCRO, PISO, SEM_TETO));
 	}
 

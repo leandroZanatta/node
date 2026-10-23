@@ -14,17 +14,6 @@ import java.util.logging.Logger;
 import br.com.node.repository.postgres.Postgres;
 import br.com.node.vo.ProvaDeTaxa;
 
-// Guarda em lote a evidência de taxa entre uma execução e outra.
-//
-// EVIDÊNCIA, NÃO DECISÃO. A versão anterior guardava a taxa decidida com a regra "contradição é
-// permanente" embutida no banco, e a regra estava errada: o invariante K ordena as provas em vez de
-// contradizê-las. Banco que guarda decisão decide com a regra do dia em que gravou. Aqui só entra
-// (pool, taxa, chamador, fechamentos), e quem decide é `Taxas`, ao semear.
-//
-// ANOTA NA MEMÓRIA, GRAVA EM LOTE. A prova chega na thread do cursor, uma por fechamento — medido,
-// 14.585 fechamentos numa corrida de 256 blocos. Uma volta ao banco por fechamento é uma volta dentro
-// de cada bloco, e aplicar o bloco inteiro custa 1,1 ms. Então `anotar` só soma na memória, e
-// `descarregar` grava tudo numa instrução em lote, chamada pela thread de gravação do `Main`.
 public final class ProvasDeTaxaRepository {
 
 	private static final Logger LOG = Logger.getLogger(ProvasDeTaxaRepository.class.getName());
@@ -33,18 +22,12 @@ public final class ProvasDeTaxaRepository {
 
 	private final Postgres banco;
 
-	// Escrito pela thread do cursor (`anotar`) e drenado pela de gravação (`descarregar`). É por serem
-	// duas threads que o mapa é concorrente, e a soma por chave é o que torna o dreno seguro: prova
-	// anotada durante uma gravação cai numa entrada nova e vai no lote seguinte.
 	private final Map<String, ProvaDeTaxa> pendentes = new ConcurrentHashMap<>();
 
 	public ProvasDeTaxaRepository(Postgres banco) {
 		this.banco = banco;
 	}
 
-	// Recusa AQUI o que o banco recusaria depois, e sem lançar: `anotar` roda na thread do cursor, e
-	// exceção ali para o node. Pior ainda seria deixar entrar: uma linha que o banco rejeita derruba o
-	// lote inteiro, e como lote que falha volta para a memória, ela o derrubaria em toda rodada.
 	public void anotar(ProvaDeTaxa prova) {
 
 		if (prova.pool().length != BYTES_DE_ENDERECO || !enderecoEmHex(prova.chamador())) {
@@ -55,9 +38,6 @@ public final class ProvasDeTaxaRepository {
 		pendentes.merge(chave(prova), prova, ProvasDeTaxaRepository::somar);
 	}
 
-	// Devolve quantas linhas gravou. Se o banco falhar, o lote VOLTA para a memória antes de a exceção
-	// subir: a evidência é justamente o que mais demora a acumular, e perder um lote por uma queda de
-	// conexão seria jogar fora o trabalho que a persistência existe para guardar.
 	public int descarregar() {
 
 		List<ProvaDeTaxa> lote = drenar();
@@ -116,8 +96,6 @@ public final class ProvasDeTaxaRepository {
 		return lote;
 	}
 
-	// SOMA, nunca substitui: a mesma chave gravada em dois lotes são fechamentos de dois momentos, e
-	// substituir apagaria o primeiro — que é exatamente "provado por quantas trocas" deixando de valer.
 	private static Void gravar(Connection conexao, List<ProvaDeTaxa> lote) throws SQLException {
 
 		try (PreparedStatement comando = conexao.prepareStatement(

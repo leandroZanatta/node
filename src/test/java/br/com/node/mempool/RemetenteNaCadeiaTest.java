@@ -11,17 +11,13 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
-// A recuperação do remetente se prova contra a verdade do nó: pega transações reais do último
-// bloco, recupera o `from` da assinatura, e exige que bata com o `from` que o nó reporta. Se o
-// hash de assinatura ou o recovery id estivessem errados, o endereço não bateria — e o
-// eth_simulateV1 aplicaria o swap pendente com um remetente sem saldo, revertendo à toa.
 class RemetenteNaCadeiaTest {
 
 	private static final String NO = "https://bsc-rpc.publicnode.com";
@@ -75,11 +71,9 @@ class RemetenteNaCadeiaTest {
 
 		try {
 
-			HttpResponse<String> resposta = http.send(
-					HttpRequest.newBuilder(URI.create(NO)).timeout(Duration.ofSeconds(15))
-							.header("Content-Type", "application/json")
-							.POST(HttpRequest.BodyPublishers.ofString(corpo)).build(),
-					HttpResponse.BodyHandlers.ofString());
+			HttpResponse<String> resposta = http.send(HttpRequest.newBuilder(URI.create(NO))
+					.timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json")
+					.POST(HttpRequest.BodyPublishers.ofString(corpo)).build(), HttpResponse.BodyHandlers.ofString());
 
 			if (resposta.statusCode() / 100 != 2) {
 				return Optional.empty();

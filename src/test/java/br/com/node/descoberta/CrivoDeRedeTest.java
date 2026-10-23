@@ -23,14 +23,14 @@ class CrivoDeRedeTest {
 	@DisplayName("reconhece qualquer corte de fork da BSC, e recusa o de outra rede")
 	void reconheceOsCortesDaBsc() {
 
-		// CRC32(genesis da BSC) = 0x3f2e9ae4, e é o que os bootnodes publicam no ENR
-		// porque eles não seguem a cadeia. Aceitar só o corte de hoje os descartaria.
+		
+		
 		ForkId doGenesis = new ForkId(new byte[] { 0x3f, 0x2e, (byte) 0x9a, (byte) 0xe4 }, 5_184_000L);
 
-		// 0xd38cc282 é o corte "após Pasteur", que os pares vivos anunciam hoje.
+		
 		ForkId deHoje = new ForkId(new byte[] { (byte) 0xd3, (byte) 0x8c, (byte) 0xc2, (byte) 0x82 }, 0L);
 
-		// 0x22d523b2 foi o hash mais comum na DHT — 30% dos pares — e não é da BSC.
+		
 		ForkId deOutraRede = new ForkId(new byte[] { 0x22, (byte) 0xd5, 0x23, (byte) 0xb2 }, 0L);
 
 		Crivo crivo = Crivo.bsc();

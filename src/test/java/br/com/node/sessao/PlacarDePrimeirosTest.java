@@ -34,7 +34,7 @@ class PlacarDePrimeirosTest {
 		PlacarDePrimeiros p = new PlacarDePrimeiros(MEIA_VIDA);
 		p.anotar(0L);
 		p.anotar(MEIA_VIDA);
-		// 1 decaiu para 0,5 ao fim da meia-vida; mais 1 do momento dá 1,5.
+		
 		assertEquals(1.5, p.valor(MEIA_VIDA), 1e-9);
 	}
 }

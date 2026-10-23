@@ -20,14 +20,9 @@ final class VereditorDoContrato implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(VereditorDoContrato.class.getName());
 
-	private static final Map<String, String> NOMES = Map.of(
-			"7978d88b", "EmprestimoNaoV2",
-			"54c59343", "NaoPagou",
-			"f2beb76b", "SemLucro",
-			"7ad3ddd8", "TokenForaDaPool",
-			"b53161a2", "RotaDescontinua",
-			"e7eb56ec", "NaoAutorizado",
-			"5212cba1", "CurrencyNotSettled");
+	private static final Map<String, String> NOMES = Map.of("7978d88b", "EmprestimoNaoV2", "54c59343", "NaoPagou",
+			"f2beb76b", "SemLucro", "7ad3ddd8", "TokenForaDaPool", "b53161a2", "RotaDescontinua", "e7eb56ec",
+			"NaoAutorizado", "5212cba1", "CurrencyNotSettled");
 
 	private static final java.time.Duration PENA_DO_TOKEN_QUE_NAO_SE_MOVE = java.time.Duration.ofHours(3);
 	private static final String WRAPPED_ERROR = "90bfb865";
@@ -54,8 +49,8 @@ final class VereditorDoContrato implements Closeable {
 		this.rpcAlternativo = alternativo;
 	}
 
-	java.util.Optional<com.google.gson.JsonObject> rastrearChamada(String endereco, String contrato,
-			String dadosHex, long altura) {
+	java.util.Optional<com.google.gson.JsonObject> rastrearChamada(String endereco, String contrato, String dadosHex,
+			long altura) {
 		RpcDoEnsaio fonte = rpcAlternativo != null ? rpcAlternativo : rpc;
 		return fonte.rastrearChamada(endereco, contrato, dadosHex, "0x" + Long.toHexString(altura));
 	}
@@ -77,8 +72,7 @@ final class VereditorDoContrato implements Closeable {
 				vereditoSemEstadoDoBloco.incrementAndGet();
 				return "sem_veredito";
 			}
-			String nome = veredicto.texto().isBlank()
-					? NOMES.getOrDefault(veredicto.seletor(), veredicto.seletor())
+			String nome = veredicto.texto().isBlank() ? NOMES.getOrDefault(veredicto.seletor(), veredicto.seletor())
 					: veredicto.texto();
 			motivos.computeIfAbsent(nome, k -> new AtomicLong()).incrementAndGet();
 			if (naoSeMove(veredicto.texto())) {
@@ -132,9 +126,7 @@ final class VereditorDoContrato implements Closeable {
 			return;
 		}
 
-		String culpado = embrulhado && texto.length() >= 2 + 8 + 64
-				? texto.substring(2 + 8 + 24, 2 + 8 + 64)
-				: null;
+		String culpado = embrulhado && texto.length() >= 2 + 8 + 64 ? texto.substring(2 + 8 + 24, 2 + 8 + 64) : null;
 		int condenadas = 0;
 
 		for (Salto salto : rota) {
@@ -157,8 +149,7 @@ final class VereditorDoContrato implements Closeable {
 		int total = condenadas;
 		if (total > 0) {
 			LOG.warning(() -> "vereditor: token não se move em rota por gerente — " + total
-					+ " pool(s) de gerente em quarentena"
-					+ (culpado != null ? " (token 0x" + culpado + ")" : ""));
+					+ " pool(s) de gerente em quarentena" + (culpado != null ? " (token 0x" + culpado + ")" : ""));
 		}
 	}
 

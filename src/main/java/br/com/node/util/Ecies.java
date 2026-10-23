@@ -86,8 +86,6 @@ public final class Ecies {
 		return aesCtr(false, chaveAes(k), iv, cifrado);
 	}
 
-	// --- derivação ------------------------------------------------------------
-
 	private static byte[] concatKdf(byte[] z) {
 
 		SHA256Digest digest = new SHA256Digest();
@@ -132,8 +130,6 @@ public final class Ecies {
 
 		return saida;
 	}
-
-	// --- primitivas -----------------------------------------------------------
 
 	private static byte[] aesCtr(boolean cifrando, byte[] chave, byte[] iv, byte[] dados) {
 

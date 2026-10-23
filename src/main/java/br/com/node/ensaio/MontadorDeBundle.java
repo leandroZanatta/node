@@ -92,9 +92,8 @@ final class MontadorDeBundle {
 		}
 	}
 
-	Pacote empacotar(byte[] cruaPendente, long alturaProximoBloco, byte[] parentHash,
-			BigInteger prioridade, BigInteger maxTaxa, long gasFinal,
-			BigInteger gasDaCauda, byte[] calldata, BigInteger pagamentoBnb) {
+	Pacote empacotar(byte[] cruaPendente, long alturaProximoBloco, byte[] parentHash, BigInteger prioridade,
+			BigInteger maxTaxa, long gasFinal, BigInteger gasDaCauda, byte[] calldata, BigInteger pagamentoBnb) {
 
 		long nonceOperador = nonce;
 		long nonceAtualizado = nonceAtualizadoEmMs;
@@ -111,17 +110,15 @@ final class MontadorDeBundle {
 		bundleTxsBytes.add(arbRaw);
 
 		BigInteger gasFee = gasDaCauda.multiply(prioridade);
-		byte[] payBidTxBytes = paga
-				? AssinadorDeTransacao.assinar(nonceOperador + 1, prioridade, maxTaxa,
-						CustoDeGas.GAS_TX_PAGAMENTO_BUILDER, RelayPrivado.COLATERAL_48CLUB_BID,
-						pagamentoBnb, new byte[0], privada.get())
-				: new byte[0];
+		byte[] payBidTxBytes = paga ? AssinadorDeTransacao.assinar(nonceOperador + 1, prioridade, maxTaxa,
+				CustoDeGas.GAS_TX_PAGAMENTO_BUILDER, RelayPrivado.COLATERAL_48CLUB_BID, pagamentoBnb, new byte[0],
+				privada.get()) : new byte[0];
 
 		var txsRlp = bundleTxsBytes.stream().map(Rlp::bytes).toList();
 		var unrevRlp = bundleTxsBytes.stream().map(tx -> Rlp.bytes(Keccak.hash(tx))).toList();
-		byte[] rawBidEncoded = Rlp.codificar(Rlp.lista(Rlp.inteiro(alturaProximoBloco),
-				Rlp.bytes(parentHash), Rlp.lista(txsRlp), Rlp.lista(unrevRlp), Rlp.inteiro(gasDaCauda),
-				Rlp.inteiro(gasFee), Rlp.inteiro(pagamentoBnb)));
+		byte[] rawBidEncoded = Rlp
+				.codificar(Rlp.lista(Rlp.inteiro(alturaProximoBloco), Rlp.bytes(parentHash), Rlp.lista(txsRlp),
+						Rlp.lista(unrevRlp), Rlp.inteiro(gasDaCauda), Rlp.inteiro(gasFee), Rlp.inteiro(pagamentoBnb)));
 		byte[] assinatura = Secp256k1.assinar(Keccak.hash(rawBidEncoded), privada.get(), Secp256k1.id(privada.get()));
 
 		RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(alturaProximoBloco, parentHash, bundleTxsBytes,
@@ -137,9 +134,10 @@ final class MontadorDeBundle {
 			}
 			bundle.add(arbRawHex);
 			if (paga) {
-				bundle.add("0x" + HexFormat.of().formatHex(AssinadorDeTransacao.assinar(
-						nonceOperador + 1, prioridade, maxTaxa, CustoDeGas.GAS_TX_PAGAMENTO_BUILDER,
-						destino, pagamentoBnb, new byte[0], privada.get())));
+				bundle.add("0x" + HexFormat.of()
+						.formatHex(AssinadorDeTransacao.assinar(nonceOperador + 1, prioridade, maxTaxa,
+								CustoDeGas.GAS_TX_PAGAMENTO_BUILDER, destino, pagamentoBnb, new byte[0],
+								privada.get())));
 			}
 			return bundle;
 		};

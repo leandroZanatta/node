@@ -5,12 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Conta, por categoria, o que bateu com o contrato, o que divergiu e o que ficou sem resposta.
-//
-// "Sem resposta" é contado à parte e nunca vira divergência: nó público que já podou a altura não
-// diz nada sobre o node. Um instrumento que confunde pergunta sem resposta com resposta negativa
-// é pior que nenhum, porque conclui — cicatriz do projeto anterior, em que 528 de 550 conferências
-// de cotação perguntavam ao roteador errado e eram lidas como "a rota não serve".
 public final class Placar {
 
 	private static final int EXEMPLOS = 8;

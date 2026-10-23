@@ -12,12 +12,8 @@ import br.com.node.util.Secp256k1;
 
 public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, byte[] entrada) {
 
-	private static final long CADEIA = 56; // BSC
+	private static final long CADEIA = 56;
 
-	// O REMETENTE da tx, recuperado da assinatura — quem o eth_simulateV1 usa como `from` do swap
-	// pendente, pra a EVM aplicá-lo com o saldo e o allowance REAIS dele no `latest`, sem forjar
-	// nada. Caro (recuperação ECDSA), então é sob demanda: só se chama para a tx que abriu fenda,
-	// nunca para o fluxo inteiro da mempool. Vazio quando a assinatura não fecha (tx estranha).
 	public static Optional<byte[]> remetente(byte[] crua) {
 
 		if (crua == null || crua.length == 0) {
@@ -28,8 +24,6 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 
 			int tipo = crua[0] & 0xff;
 
-			// Tipo 4 (EIP-7702) é tipado como o 2, com a lista de autorizações antes da assinatura. Antes caía no
-			// legado e devolvia um endereço qualquer, calado.
 			if (tipo == 1 || tipo == 2 || tipo == 4) {
 				return remetenteTipado(tipo, Arrays.copyOfRange(crua, 1, crua.length));
 			}
@@ -46,8 +40,6 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 		}
 	}
 
-	// Legado: [nonce, gasPrice, gas, to, value, data, v, r, s]. O hash de assinatura é EIP-155
-	// (com chainId e dois zeros) quando v >= 35; senão o pré-155 (só os seis primeiros campos).
 	private static Optional<byte[]> remetenteLegado(byte[] rlp) {
 
 		List<RlpItem> c = Rlp.paraLista(Rlp.decodificar(rlp));
@@ -75,13 +67,10 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 		return endereco(Keccak.hash(Rlp.codificar(Rlp.lista(assinar))), r, s, recuperacao);
 	}
 
-	// Tipada: tipo 2 assina os 9 primeiros campos (até a accessList), tipo 1 os 8; o hash leva o
-	// byte do tipo na frente, e o yParity JÁ é o recovery id.
 	private static Optional<byte[]> remetenteTipado(int tipo, byte[] semTipo) {
 
 		List<RlpItem> c = Rlp.paraLista(Rlp.decodificar(semTipo));
 
-		// Campos antes de (yParity, r, s): tipo 1 = 8; tipo 2 = 9; tipo 4 = 10 (+ authorizationList).
 		int corte = switch (tipo) {
 		case 1 -> 8;
 		case 2 -> 9;
@@ -145,7 +134,6 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 				return typed(hash, Arrays.copyOfRange(crua, 1, crua.length), 4);
 			}
 
-			// 2 (EIP-1559) e 4 (EIP-7702) têm DOIS campos de preço onde o 1 tem um: tudo anda uma posição.
 			if (tipo == 2 || tipo == 4) {
 				return typed(hash, Arrays.copyOfRange(crua, 1, crua.length), 5);
 			}
@@ -162,9 +150,6 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 		}
 	}
 
-	// O PREÇO POR GÁS que o bloco vê desta tx, em wei. Legado e tipo 1: o `gasPrice`. Tipos 2 e 4: a gorjeta
-	// limitada ao `maxFee` — na BSC a taxa base é zero (medido em 25/09: `baseFeePerGas` = 0 em 12 de 12 blocos),
-	// então o efetivo É a gorjeta. É o número que o builder usa para ordenar, e o que o lance tem de bater.
 	public static Optional<BigInteger> precoPorGas(byte[] crua) {
 
 		if (crua == null || crua.length == 0) {
@@ -175,7 +160,8 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 			int tipo = crua[0] & 0xff;
 
 			if (tipo == 1) {
-				return Optional.of(inteiroGrande(Rlp.paraLista(Rlp.decodificar(Arrays.copyOfRange(crua, 1, crua.length))).get(2)));
+				return Optional.of(
+						inteiroGrande(Rlp.paraLista(Rlp.decodificar(Arrays.copyOfRange(crua, 1, crua.length))).get(2)));
 			}
 
 			if (tipo == 2 || tipo == 4) {
@@ -203,14 +189,10 @@ public record TransacaoPendente(byte[] hash, byte[] destino, BigInteger valor, b
 			return Optional.empty();
 		}
 
-		return Optional.of(new TransacaoPendente(hash, Rlp.paraBytes(campos.get(3)),
-				inteiroGrande(campos.get(4)), Rlp.paraBytes(campos.get(5))));
+		return Optional.of(new TransacaoPendente(hash, Rlp.paraBytes(campos.get(3)), inteiroGrande(campos.get(4)),
+				Rlp.paraBytes(campos.get(5))));
 	}
 
-	// `destino` é a posição do `to`; `value` e `data` vêm logo depois. CICATRIZ: o tipo 2 era lido com as
-	// posições do tipo 1 — o `gasLimit` virava destino e o `value` virava calldata. Toda tx EIP-1559 da
-	// mempool saía ilegível (swap nunca decodificado) e o destino de 2–3 bytes derrubava o peer com
-	// "destino não é endereço de 20 bytes": 270 quedas numa corrida de 55 min.
 	private static Optional<TransacaoPendente> typed(byte[] hash, byte[] rlpSemTipo, int destino) {
 
 		List<RlpItem> campos = Rlp.paraLista(Rlp.decodificar(rlpSemTipo));

@@ -11,11 +11,11 @@ import br.com.node.exception.PeerException;
 import br.com.node.rlp.Rlp;
 import br.com.node.rlp.RlpItem;
 import br.com.node.rlp.RlpLista;
+import br.com.node.vo.Endpoint;
 import br.com.node.vo.EnrRequest;
 import br.com.node.vo.EnrResponse;
-import br.com.node.vo.Endpoint;
-import br.com.node.vo.ForkId;
 import br.com.node.vo.FindNode;
+import br.com.node.vo.ForkId;
 import br.com.node.vo.MensagemDiscovery;
 import br.com.node.vo.Neighbors;
 import br.com.node.vo.NoRemoto;
@@ -61,13 +61,7 @@ public final class Discv4 {
 
 		case EnrRequest pedido -> Rlp.lista(Rlp.inteiro(pedido.expiracao()));
 
-		// Responder isto exige publicar um registro nosso, assinado, com sequência
-		// versionada — e hoje nada consome esse registro. O custo de não responder é
-		// real e está medido: o par que nos pergunta não descobre que rede falamos,
-		// e alguns clientes usam isso para priorizar quem manter. Entra quando tiver
-		// chamador, não antes.
-		case EnrResponse ignorado ->
-			throw new PeerException("O node ainda não publica registro próprio (EIP-868)");
+		case EnrResponse ignorado -> throw new PeerException("O node ainda não publica registro próprio (EIP-868)");
 		};
 	}
 
@@ -85,8 +79,7 @@ public final class Discv4 {
 
 		case MensagemDiscovery.PONG -> {
 			exigir(campos, 3, "Pong");
-			yield new Pong(endpointDeRlp(campos.get(0)), Rlp.paraBytes(campos.get(1)),
-					Rlp.paraInteiro(campos.get(2)));
+			yield new Pong(endpointDeRlp(campos.get(0)), Rlp.paraBytes(campos.get(1)), Rlp.paraInteiro(campos.get(2)));
 		}
 
 		case MensagemDiscovery.FIND_NODE -> {
@@ -129,9 +122,6 @@ public final class Discv4 {
 				return Optional.empty();
 			}
 
-			// Clientes divergem: uns embrulham o fork id numa lista de fork ids,
-			// outros põem os dois campos direto. Aceitar as duas formas custa três
-			// linhas; recusar uma delas custa metade da rede.
 			List<RlpItem> forkId = valor.get(0) instanceof RlpLista ? Rlp.paraLista(valor.get(0)) : valor;
 
 			if (forkId.size() < 2) {

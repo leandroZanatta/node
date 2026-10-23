@@ -12,15 +12,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// O acesso de leitura à cadeia por RPC público, com o ritmo adaptativo e rodízio de nós.
-//
-// É o implementador de produção da `Cadeia`. Só leitura (`eth_call`, `eth_getStorageAt`,
-// `eth_blockNumber`); nada aqui envia transação. E existe SÓ para o enriquecimento — a decisão não o
-// chama, lê o que a sondagem guardou (P2).
-//
-// O ritmo é medido, não configurado (ver `Ritmo`): o old apanhou 403 de 13 nós por volume. Uma recusa
-// espaça as próximas; um período limpo acelera devagar. Rodízio porque um nó que cai não pode virar
-// "sem resposta" definitivo.
 public final class Rpc implements Cadeia {
 
 	private static final List<String> NOS = List.of("https://bsc-dataseed.bnbchain.org",
@@ -29,7 +20,6 @@ public final class Rpc implements Cadeia {
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 	private final Ritmo ritmo = new Ritmo();
 
-	// Rodízio de nós: por que próximo nó, por chamada, para espalhar a carga entre os três.
 	private int proximo;
 
 	@Override
@@ -65,8 +55,6 @@ public final class Rpc implements Cadeia {
 				.orElseThrow(() -> new IllegalStateException("nenhum nó público respondeu a cabeça"));
 	}
 
-	// Tenta os nós em rodízio, respeitando o ritmo. Devolve o corpo do primeiro que responder JSON, ou
-	// vazio. Recusa (429/403/"limit") corta o ritmo; corpo com "result" ou "error" é resposta e passa.
 	private Optional<String> pedido(String metodo, JsonArray parametros) {
 
 		JsonObject corpo = new JsonObject();
@@ -86,9 +74,11 @@ public final class Rpc implements Cadeia {
 
 			try {
 
-				HttpResponse<String> resposta = http.send(HttpRequest.newBuilder(URI.create(no))
-						.timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json")
-						.POST(HttpRequest.BodyPublishers.ofString(texto)).build(), HttpResponse.BodyHandlers.ofString());
+				HttpResponse<String> resposta = http.send(
+						HttpRequest.newBuilder(URI.create(no)).timeout(Duration.ofSeconds(20))
+								.header("Content-Type", "application/json")
+								.POST(HttpRequest.BodyPublishers.ofString(texto)).build(),
+						HttpResponse.BodyHandlers.ofString());
 
 				if (recusa(resposta)) {
 					ritmo.recusou(agora);
@@ -100,7 +90,7 @@ public final class Rpc implements Cadeia {
 				return Optional.of(resposta.body());
 
 			} catch (Exception naoRespondeu) {
-				// próximo nó; não é recusa de ritmo, é transporte
+
 			}
 		}
 

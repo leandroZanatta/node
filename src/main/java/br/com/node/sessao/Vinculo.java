@@ -11,8 +11,6 @@ public final class Vinculo {
 	private volatile byte[] hashDoPing;
 	private volatile Instant provado;
 
-	// Ida e volta do ping UDP da descoberta, em ms (-1 = nunca medido). É a distância ao nó ANTES de abrir
-	// TCP — o que permite a lotação preferir os perto. O ping já acontecia; só não se guardava o tempo.
 	private volatile long enviadoEmNanos;
 	private volatile long rttMs = -1;
 

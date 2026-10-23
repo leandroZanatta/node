@@ -19,12 +19,6 @@ import java.util.logging.Logger;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-// Lê, em cada bloco fechado, quanto BNB foi enviado às builders e por quem. A transação que ganhou o
-// leilão está no bloco: o pagamento dela ao endereço da builder é o lance real, sem estimativa.
-//
-// Registra TODA transação que manda BNB a um dos endereços-alvo (inclusive as nossas), com o minerador
-// do bloco — o minerador diz qual builder montou o bloco. Grava uma linha JSON por pagamento em `arquivo`.
-// Roda numa thread própria, fora do cursor: uma leitura de bloco lenta não pode atrasar a fila de blocos.
 public final class PagamentosDeBloco implements AutoCloseable {
 
 	private static final Logger LOG = Logger.getLogger(PagamentosDeBloco.class.getName());
@@ -82,7 +76,6 @@ public final class PagamentosDeBloco implements AutoCloseable {
 		}
 	}
 
-	// Função pura: o bloco com transações completas, e o conjunto de endereços (sem 0x, minúsculos).
 	static List<Pagamento> interpretar(JsonObject bloco, Set<String> alvos) {
 
 		List<Pagamento> achados = new ArrayList<>();
@@ -113,8 +106,6 @@ public final class PagamentosDeBloco implements AutoCloseable {
 		return achados;
 	}
 
-	// O pagamento ao builder da transação que ocupa `posArb` (ou perto dela, mesmo remetente): BNB enviado a um
-	// dos alvos. Exige o destinatário — a versão anterior aceitava qualquer transferência do remetente.
 	public static Optional<BigInteger> pagamentoAoBuilder(JsonObject bloco, int posArb, Set<String> alvos) {
 
 		JsonElement txs = bloco.get("transactions");
@@ -143,8 +134,7 @@ public final class PagamentosDeBloco implements AutoCloseable {
 	}
 
 	public static Set<String> enderecosPadrao() {
-		return Set.of(
-				HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB),
+		return Set.of(HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB),
 				HexFormat.of().formatHex(RelayPrivado.COLATERAL_48CLUB_BID),
 				HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_BLOCKRAZOR));
 	}

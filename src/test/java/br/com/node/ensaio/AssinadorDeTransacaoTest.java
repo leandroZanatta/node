@@ -15,12 +15,10 @@ import br.com.node.mempool.TransacaoPendente;
 import br.com.node.util.Keccak;
 import br.com.node.util.Secp256k1;
 
-// A assinatura se prova pelo INVERSO já validado: assina uma tx e recupera o remetente com o mesmo
-// `TransacaoPendente.remetente` que bate com o `from` do nó em transações reais. Se o recuperado é
-// o endereço da chave que assinou, a assinatura EIP-1559 está correta — sem enviar nada.
 class AssinadorDeTransacaoTest {
 
-	// Chave de TESTE (não é a do operador). Só para provar o ida-e-volta assinar→recuperar.
+	
+	
 	private static final BigInteger PRIVADA = new BigInteger(
 			"4c0be6b1a2f3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081920304050", 16);
 

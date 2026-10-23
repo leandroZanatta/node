@@ -12,16 +12,6 @@ import br.com.node.catalogo.Eventos;
 import br.com.node.nucleo.Par;
 import br.com.node.vo.Log;
 
-// Junta o que foi ANUNCIADO com o que o BLOCO mostrou, pelo id da transação.
-//
-// É o que transforma o bloco fechado em gabarito de graça: X = a calldata que vimos na mempool, Y = os
-// tokens e o montante que a cadeia provou. Sem esse par não há aprendizado supervisionado — e não é
-// preciso anotar nada à mão, porque o pareamento é por hash e o rótulo é a própria cadeia.
-//
-// Três vazios diferentes, e os três descartam o exemplo INTEIRO em vez de produzir rótulo duvidoso:
-// anunciada que não entrou (não há Y), incluída que não vimos anunciada (não há X) e pool que o catálogo
-// não conhece (o token não se inventa). Aprender com rótulo duvidoso é pior que não aprender: a regra
-// errada sobrevive ao exemplo que a desmentiu.
 public final class Pareador {
 
 	private Pareador() {
@@ -62,8 +52,6 @@ public final class Pareador {
 				juntar(tokens, par.get().token0());
 				juntar(tokens, par.get().token1());
 
-				// A entrada da TRANSAÇÃO é a da primeira troca; as seguintes são a saída da anterior —
-				// por isso só a primeira é lida, e ela é lida uma vez.
 				if (entrada.signum() <= 0) {
 					entrada = entradaDaTroca(log, v2);
 				}
@@ -79,9 +67,6 @@ public final class Pareador {
 		return List.copyOf(exemplos);
 	}
 
-	// As trocas da tx EM ORDEM, com a direção de cada uma: no V2 entrou o token cujo `amountIn` é
-	// positivo; no V3, o de montante positivo. Troca em pool sem par conhecido, ou com direção ambígua,
-	// ESVAZIA o resultado — caminho com buraco no meio não é caminho, e ensinaria posição errada.
 	public static List<br.com.node.nucleo.Perna> pernas(List<Log> logs, Function<byte[], Optional<Par>> parDaPool) {
 
 		List<br.com.node.nucleo.Perna> pernas = new ArrayList<>();
@@ -125,8 +110,6 @@ public final class Pareador {
 		return List.copyOf(pernas);
 	}
 
-	// O que ENTROU na pool. No V2 o evento dá quatro montantes sem sinal e um dos dois `in` é zero; no
-	// V3 são dois com sinal, e o positivo é o que entrou (negativo é o que saiu).
 	private static BigInteger entradaDaTroca(Log log, boolean v2) {
 
 		if (v2) {
@@ -142,8 +125,6 @@ public final class Pareador {
 
 		BigInteger montante1 = Eventos.palavraComSinalGrande(log, 1);
 
-		// Dois negativos não descrevem uma troca: devolver zero descarta o exemplo em vez de escolher um
-		// lado por conta própria.
 		return montante1.signum() > 0 ? montante1 : BigInteger.ZERO;
 	}
 

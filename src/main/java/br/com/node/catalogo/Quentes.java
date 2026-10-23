@@ -22,24 +22,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// O CONJUNTO QUENTE: as pools com histórico de arbitragem, as únicas que o garimpo RÁPIDO olha a cada bloco.
-//
-// Medido em 27/09 com as corridas do dia contra a noite: o grafo inteiro tinha 13.799 pools e a busca levava
-// 158 ms (mediana) — mas as pools com 3 ou mais arbitragens no histórico eram ~4,2 mil e cobriam 57 das 75
-// fendas reais que despachamos na noite. O resto não fica perdido: o organizador (`Cauda`, thread fria) varre o
-// grafo inteiro sem prazo e PROMOVE para cá toda pool de ciclo com lucro — e toda pool que aparece em
-// arbitragem confirmada pela LIMIAR-ésima vez. Guardado em `quentes.json` (lido na subida, gravado de tempos em
-// tempos), para o reinício não recomeçar frio.
 public final class Quentes {
 
 	private static final Logger LOG = Logger.getLogger(Quentes.class.getName());
 
-	// Na terceira arbitragem confirmada a pool vira quente (medido em 27/09: ≥2 cobria 59 de 75 fendas reais com
-	// 5,7 mil pools; ≥3, 57 com 4,2 mil — 27% menos pools por 2 fendas).
 	static final int LIMIAR = 3;
 
-	// Quente que passa ESQUECIMENTO sem aparecer em arbitragem nem ser promovida pelo organizador esfria: sem isso
-	// o conjunto só cresceria até virar o grafo inteiro (o histórico de um dia já dava 7,7 mil pools com ≥2).
 	static final long ESQUECIMENTO_MS = 24 * 3_600_000L;
 
 	private final Path arquivo;
@@ -52,7 +40,6 @@ public final class Quentes {
 	private final AtomicLong porArbitragem = new AtomicLong();
 	private final AtomicLong peloOrganizador = new AtomicLong();
 
-	// `arquivo` nulo: só em memória (testes).
 	public Quentes(Path arquivo) {
 		this.arquivo = arquivo;
 		if (arquivo != null) {
@@ -68,7 +55,6 @@ public final class Quentes {
 		return quentes.size();
 	}
 
-	// Pools de um ciclo com lucro que o organizador achou fora do quente: entram direto.
 	public int promover(Collection<String> pools) {
 		int entraram = 0;
 		long agora = System.currentTimeMillis();
@@ -83,7 +69,6 @@ public final class Quentes {
 		return entraram;
 	}
 
-	// As pools de uma arbitragem confirmada (nossa ou de rival): entram na LIMIAR-ésima vez.
 	public void vistaEmArbitragem(Collection<String> pools) {
 		long agora = System.currentTimeMillis();
 		for (String pool : pools) {
@@ -95,7 +80,6 @@ public final class Quentes {
 		}
 	}
 
-	// As promovidas desde a última chamada — o grafo quente as liga sem se remontar inteiro.
 	public List<String> drenarNovas() {
 		List<String> lista = new ArrayList<>();
 		for (String pool; (pool = novas.poll()) != null;) {
@@ -107,20 +91,24 @@ public final class Quentes {
 	private void carregar() {
 
 		if (!Files.exists(arquivo)) {
-			LOG.info(() -> "quentes: " + arquivo + " não existe — começa vazio e aquece pelo organizador e pelas arbitragens");
+			LOG.info(() -> "quentes: " + arquivo
+					+ " não existe — começa vazio e aquece pelo organizador e pelas arbitragens");
 			return;
 		}
 
 		try {
-			JsonObject raiz = JsonParser.parseString(Files.readString(arquivo, StandardCharsets.UTF_8)).getAsJsonObject();
+			JsonObject raiz = JsonParser.parseString(Files.readString(arquivo, StandardCharsets.UTF_8))
+					.getAsJsonObject();
 			raiz.getAsJsonArray("quentes").forEach(p -> quentes.add(p.getAsString()));
 			raiz.getAsJsonObject("vistas").entrySet().forEach(e -> vistas.put(e.getKey(), e.getValue().getAsInt()));
-			raiz.getAsJsonObject("ultima_vez").entrySet().forEach(e -> ultimaVez.put(e.getKey(), e.getValue().getAsLong()));
-			LOG.info(() -> "quentes: " + quentes.size() + " pools quentes e " + vistas.size() + " contagens carregadas de "
-					+ arquivo);
+			raiz.getAsJsonObject("ultima_vez").entrySet()
+					.forEach(e -> ultimaVez.put(e.getKey(), e.getValue().getAsLong()));
+			LOG.info(() -> "quentes: " + quentes.size() + " pools quentes e " + vistas.size()
+					+ " contagens carregadas de " + arquivo);
 		} catch (IOException | RuntimeException e) {
-			// Estado perdido não vira "começa do zero" calado: a subida tem de saber.
-			throw new IllegalStateException("quentes: " + arquivo + " ilegível — apague-o de propósito para recomeçar", e);
+
+			throw new IllegalStateException("quentes: " + arquivo + " ilegível — apague-o de propósito para recomeçar",
+					e);
 		}
 	}
 
@@ -152,7 +140,6 @@ public final class Quentes {
 		}
 	}
 
-	// Tira do quente (e esquece a contagem) quem não aparece há ESQUECIMENTO_MS. Chamado ao salvar.
 	void esfriar(long agora) {
 		for (Map.Entry<String, Long> e : ultimaVez.entrySet()) {
 			if (agora - e.getValue() > ESQUECIMENTO_MS) {

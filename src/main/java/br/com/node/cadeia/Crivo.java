@@ -5,14 +5,6 @@ import java.util.Set;
 
 import br.com.node.vo.ForkId;
 
-// Um conjunto de cortes de fork aceitos. Quem escolhe o conjunto é a fábrica, e
-// são duas perguntas diferentes sobre o mesmo dado:
-//
-//   bsc()          — "é da BSC?"        para catalogar par
-//   corteDeHoje()  — "vai conversar?"   para abrir conversa
-//
-// Confundir as duas custou uma rodada: um par num corte anterior é BSC e recusa a
-// conversa, porque não conhece o nosso hash. E bootnode é BSC e não fala eth.
 public final class Crivo {
 
 	private final Set<Long> aceitos;
@@ -36,8 +28,6 @@ public final class Crivo {
 		return hash.length == 4 && aceitos.contains(valorDe(declarado));
 	}
 
-	// Só o hash entra na comparação. O campo `proximo` varia entre pares no mesmo
-	// corte e compará-lo recusaria quem é compatível.
 	private static long valorDe(ForkId fork) {
 
 		byte[] hash = fork.hash();

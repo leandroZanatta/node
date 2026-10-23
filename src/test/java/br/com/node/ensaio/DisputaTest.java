@@ -20,8 +20,9 @@ class DisputaTest {
 	}
 
 	private static JsonObject pagamento(long altura, int posicao, String de, String valor) {
-		return JsonParser.parseString("{\"altura\":" + altura + ",\"posicao\":" + posicao + ",\"de\":\"" + de
-				+ "\",\"para\":\"4848489f0b2bedd788c696e2d79b6b69d7484848\",\"valor_wei\":\"" + valor + "\"}")
+		return JsonParser
+				.parseString("{\"altura\":" + altura + ",\"posicao\":" + posicao + ",\"de\":\"" + de
+						+ "\",\"para\":\"4848489f0b2bedd788c696e2d79b6b69d7484848\",\"valor_wei\":\"" + valor + "\"}")
 				.getAsJsonObject();
 	}
 
@@ -48,7 +49,7 @@ class DisputaTest {
 	@Test
 	void pagamentoDeOutroRemetenteCaiPorPosicaoEMarcaisso() {
 		JsonObject t = tentativa("rival_n2", "aaaa", 5, "2000", "100000");
-		// rival_n2: o vencedor está no bloco 102, não no 101.
+		
 		var r = Disputa.analisar(t, List.of(pagamento(102, 4, "bbbb", "7000")));
 		assertEquals("posicao", r.get("casamento_do_pagamento"));
 		assertTrue(((String) r.get("veredito")).contains("casado por posição"));

@@ -10,23 +10,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// A aritmética de arbitragem, medida contra a aritmética dos contratos.
-//
-// Este teste não precisa de rede, e não é por conveniência: a cadeia viva quase nunca tem
-// oportunidade aberta — medido, a maior arbitragem executada em 48 blocos rendia 19 vezes
-// MENOS que o próprio gas. Um teste que só olhasse a cadeia não teria como provar que o
-// ótimo é ótimo, porque não haveria caso em que ele aparece. Então o desequilíbrio é
-// construído, com números do tamanho dos reais, e as perguntas são as três que decidem se
-// dá para arbitrar:
-//
-//   1. A `Curva` é a MESMA função que a pool aplica? (para V2, wei a wei)
-//   2. `entradaOtima` é de fato o máximo do lucro?
-//   3. O `Avaliador` recusa o que não rende, em vez de forçar um número?
 class ArbitragemTest {
 
 	private static final BigInteger UM_TOKEN = BigInteger.TEN.pow(18);
 
-	// 0,25% — a taxa da Pancake V2, que é a maioria do livro na BSC.
+	
 	private static final int TAXA = 2500;
 
 	private final Avaliador avaliador = new Avaliador();
@@ -51,9 +39,11 @@ class ArbitragemTest {
 		}
 	}
 
-	// O V3 não fecha wei a wei e isso é esperado: o contrato arredonda a TAXA para cima e a
-	// curva a trata como linear. O que não pode é a diferença ser relevante — se fosse, o
-	// tamanho ótimo sairia do lugar.
+	
+	
+	
+	
+	
 	@Test
 	@DisplayName("a curva do V3 acompanha a pool dentro de um wei de taxa")
 	void curvaDoV3AcompanhaAPool() {
@@ -80,8 +70,8 @@ class ArbitragemTest {
 				BigInteger daCurva = curva.aplicar(entrada);
 				BigInteger erro = daPool.subtract(daCurva).abs();
 
-				// Um milionésimo da saída é folga generosa para um wei de taxa; medir o erro
-				// relativo é o que impede a asserção de passar por acaso em pool pequena.
+				
+				
 				assertTrue(erro.multiply(BigInteger.valueOf(1_000_000)).compareTo(daPool) <= 0,
 						"curva V3 erra " + erro + " de " + daPool + " em " + direcao);
 			}
@@ -133,8 +123,9 @@ class ArbitragemTest {
 		assertTrue(avaliador.melhor(ciclo).isEmpty(), "avaliador achou oportunidade onde só há taxa a pagar");
 	}
 
-	// Mesmo par, preços diferentes: 620 numa, 600 na outra. Vende-se onde o token vale mais
-	// e recompra-se onde vale menos — 3,3% de fenda contra 0,5% de taxa somada.
+	
+	
+	
 	private List<Travessia> cicloComDesequilibrio() {
 
 		PoolV2 caro = new PoolV2(mil(1_000), mil(620_000), TAXA);

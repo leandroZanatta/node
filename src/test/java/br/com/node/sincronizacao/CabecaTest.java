@@ -16,28 +16,21 @@ import br.com.node.catalogo.Catalogo;
 import br.com.node.sessao.Lotacao;
 import br.com.node.util.Resources;
 
-// Segue a cabeça e mede as duas coisas que decidem se operar na cabeça é possível:
-//
-//   1. LATÊNCIA — do primeiro anúncio de um bloco até o recibo dele aplicado, com o pedido da
-//      cabeça em leque de 1 e de 4 pares. É o terceiro número que o projeto nunca entregou, e o
-//      anterior mostrou por que ele manda: recibo em 276 ms, decisão em 4.281 ms, bloco de 750.
-//   2. POR QUE O POOL NÃO ENCHE — cada queda, por fase e motivo, e o pool ao longo do tempo.
-//      É a medição que precisa existir antes de mexer no `Status`.
-//
-// As duas saem da mesma corrida porque cada corrida de rede custa minutos.
 class CabecaTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
 	private static final int ESPERA_ANUNCIO = 60;
 
-	// Um par por trabalhador: com menos, a medição mede o pool e não a cabeça.
+	
 	private static final int POOL_MINIMO = Resources.inteiro("sincronizacao.pedidos.em.voo");
 	private static final int EM_VOO = Resources.inteiro("sincronizacao.pedidos.em.voo");
 
 	private static final int POR_LOTE = 16;
 
-	// Parte alguns blocos atrás da cabeça: o suficiente para passar pelo catch-up curto e
-	// chegar nela em segundos, pouco o bastante para as fases medirem cabeça e não catch-up.
+	
+	
+	
+	
 	private static final int AQUECIMENTO = 8;
 
 	private static final int SEGUNDOS_POR_FASE = 90;
@@ -80,8 +73,7 @@ class CabecaTest {
 				"com leque " + leque + " o cursor não alcançou a cabeça nenhuma vez"));
 	}
 
-	private List<Long> fase(NodeDeTeste node, Lotacao lotacao, Cabeca cabeca, int leque)
-			throws InterruptedException {
+	private List<Long> fase(NodeDeTeste node, Lotacao lotacao, Cabeca cabeca, int leque) throws InterruptedException {
 
 		int antes = cabeca.latenciasEmMilis().size();
 
@@ -93,7 +85,8 @@ class CabecaTest {
 
 			long partida = cabeca.alvo() - AQUECIMENTO;
 
-			Thread seguidor = new Thread(() -> cursor.seguir(partida, cabeca, POR_LOTE, leque), "cursor-leque-" + leque);
+			Thread seguidor = new Thread(() -> cursor.seguir(partida, cabeca, POR_LOTE, leque),
+					"cursor-leque-" + leque);
 
 			seguidor.start();
 
@@ -129,7 +122,8 @@ class CabecaTest {
 		List<Long> ordenadas = new ArrayList<>(amostras);
 		ordenadas.sort(null);
 
-		System.out.printf("leque %d: %d blocos da cabeça · anúncio→recibo aplicado: mediana %d ms · p90 %d ms · máx %d ms%n",
+		System.out.printf(
+				"leque %d: %d blocos da cabeça · anúncio→recibo aplicado: mediana %d ms · p90 %d ms · máx %d ms%n",
 				leque, ordenadas.size(), percentil(ordenadas, 50), percentil(ordenadas, 90),
 				ordenadas.get(ordenadas.size() - 1));
 		System.out.println("   entregues " + frente.entregues() + " · reatribuídas " + frente.reatribuidas() + " "

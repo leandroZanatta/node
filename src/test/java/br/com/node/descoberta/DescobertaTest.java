@@ -16,11 +16,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.NodeDeTeste;
 import br.com.node.vo.NoRemoto;
 
-// Nenhuma parte isolada deste módulo estava errada no projeto anterior: o envelope
-// assinava certo, o RLP fechava round-trip, a tabela ordenava bem — e o node não
-// achava um peer sequer, porque descartava o datagrama de quem não estava num mapa
-// e nunca respondia FindNode. Teste de unidade passa inteiro num node invisível na
-// DHT. Só a rede real reprova isso.
 class DescobertaTest {
 
 	private static final int ESPERA_SEGUNDOS = 60;

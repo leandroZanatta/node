@@ -15,11 +15,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import br.com.node.NodeDeTeste;
 import br.com.node.cadeia.Crivo;
@@ -36,14 +36,6 @@ import br.com.node.sondagem.Rpc;
 import br.com.node.sondagem.Sondagem;
 import br.com.node.util.Resources;
 
-// Diagnóstico do "0 corretas" no ensaio de N+1: a fenda some por ANCORAGEM (detectamos sobre a
-// nossa reserva, que segue atrás da cabeça, mas simulamos no `latest` do nó) ou porque é
-// microscópica de verdade?
-//
-// Mede direto: para cada pool que projetamos, compara a NOSSA reserva0 com a que o nó devolve no
-// `latest`. Se a divergência for grande e frequente, o estado que detectamos não é o que a EVM
-// simula — e a fenda é ilusão de reserva defasada, não oportunidade. Se as reservas baterem, o 0
-// corretas é fenda micro (o mercado já é eficiente nesses pares), não ancoragem.
 class EstadoNaProjecaoTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
@@ -115,8 +107,10 @@ class EstadoNaProjecaoTest {
 		relatar();
 	}
 
-	// Para uma pool projetada: compara a nossa reserva0 com a do nó no latest, e guarda a
-	// divergência relativa. Uma vez por pool, com teto — não é o foco medir a mesma pool mil vezes.
+	
+	
+	
+	
 	private void conferir(String pool, Catalogo catalogo) {
 
 		if (vistas.size() >= TETO_AMOSTRA || !vistas.add(pool)) {
@@ -167,7 +161,7 @@ class EstadoNaProjecaoTest {
 				return new BigInteger(1, Arrays.copyOfRange(bytes, 0, 32));
 
 			} catch (Exception transporte) {
-				// próximo nó
+				
 			}
 		}
 
@@ -182,16 +176,17 @@ class EstadoNaProjecaoTest {
 			ordenadas = divergencias.stream().sorted().toList();
 		}
 
-		long batem = ordenadas.stream().filter(d -> d < 0.0005).count();      // < 0,05%
-		long proximas = ordenadas.stream().filter(d -> d < 0.005).count();    // < 0,5%
-		long longe = ordenadas.stream().filter(d -> d >= 0.05).count();       // >= 5%
+		long batem = ordenadas.stream().filter(d -> d < 0.0005).count(); 
+		long proximas = ordenadas.stream().filter(d -> d < 0.005).count(); 
+		long longe = ordenadas.stream().filter(d -> d >= 0.05).count(); 
 		double mediana = ordenadas.isEmpty() ? 0 : ordenadas.get(ordenadas.size() / 2);
 
 		System.out.println();
 		System.out.println("==== ANCORAGEM: nossa reserva vs. o nó no latest ====");
 		System.out.println("pools conferidas: " + ordenadas.size());
 		System.out.println("  divergência mediana: " + Math.round(mediana * 1_000_000) / 10_000.0 + "%");
-		System.out.println("  batem (<0,05%): " + batem + " · próximas (<0,5%): " + proximas + " · longe (>=5%): " + longe);
+		System.out.println(
+				"  batem (<0,05%): " + batem + " · próximas (<0,5%): " + proximas + " · longe (>=5%): " + longe);
 		System.out.println();
 		System.out.println(batem * 2 >= ordenadas.size()
 				? "MAIORIA BATE -> a fenda de N+1 não some por ancoragem; o 0 corretas é fenda micro."

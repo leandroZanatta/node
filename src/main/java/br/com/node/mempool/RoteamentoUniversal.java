@@ -22,12 +22,12 @@ public final class RoteamentoUniversal {
 
 	private static final HexFormat HEX = HexFormat.of();
 	private static final String SELETOR = "24856bc3";
-	// execute(bytes,bytes[],uint256) — variante com deadline; layout dos dois primeiros parâmetros é idêntico.
+
 	private static final String SELETOR_COM_DEADLINE = "3593564c";
 	private static final int V3_SWAP_EXACT_IN = 0x00;
-	// V2_SWAP_EXACT_IN: input = abi.encode(address recipient, uint256 amountIn, uint256 amountOutMin, address[] path, bool payerIsUser)
+
 	private static final int V2_SWAP_EXACT_IN = 0x08;
-	private static final int MASCARA_COMANDO = 0x3f; // tira os flags (ex.: ALLOW_REVERT = 0x80)
+	private static final int MASCARA_COMANDO = 0x3f;
 	private static final int PALAVRA = 32;
 
 	public record SwapV3(BigInteger entra, List<byte[]> tokens, List<Integer> fees) {
@@ -59,7 +59,7 @@ public final class RoteamentoUniversal {
 
 			Par par = catalogo.par(pool.get()).orElseThrow();
 			EstadoV3 estado = catalogo.estado(pool.get()).orElseThrow();
-			// Sem espaçamento não há pool V3 a simular: zero dividiria o tick por zero mais adiante.
+
 			java.util.OptionalInt esp = espacamento.apply(pool.get());
 			if (esp.isEmpty()) {
 				return Map.of();
@@ -83,10 +83,6 @@ public final class RoteamentoUniversal {
 	private static Optional<byte[]> poolV3(Catalogo catalogo,
 			java.util.function.Function<byte[], Optional<Integer>> taxa, byte[] a, byte[] b, int fee) {
 
-		// Só pool V3 de ENDEREÇO: a do roteador universal é identificada pela factory e pela taxa, e uma pool
-		// de gerente do mesmo par e da mesma taxa não é a que ele toca.
-		// Pelo índice par → pools (antes: varredura do catálogo inteiro, com o tarifário pool a pool, por perna
-		// de cada swap pendente).
 		return catalogo.poolsDoPar(a, b).stream().filter(p -> catalogo.estado(p).isPresent())
 				.filter(p -> taxa.apply(p).map(t -> t == fee).orElse(false))
 				.filter(p -> catalogo.par(p).map(par -> pareia(par, a, b)).orElse(false)).findFirst();
@@ -98,7 +94,8 @@ public final class RoteamentoUniversal {
 	}
 
 	static boolean ehUniversalRouter(byte[] calldata) {
-		if (calldata == null || calldata.length < 4) return false;
+		if (calldata == null || calldata.length < 4)
+			return false;
 		String sel = HEX.formatHex(calldata, 0, 4);
 		return SELETOR.equals(sel) || SELETOR_COM_DEADLINE.equals(sel);
 	}
@@ -135,7 +132,6 @@ public final class RoteamentoUniversal {
 		return Optional.empty();
 	}
 
-	// V2_SWAP_EXACT_IN (comando 0x08) dentro do Universal Router: retorna SwapPendente para o caminho V2 existente.
 	public static Optional<SwapPendente> decodificarComoV2(byte[] calldata) {
 
 		if (calldata == null || calldata.length < 4 + PALAVRA * 2) {
@@ -168,10 +164,8 @@ public final class RoteamentoUniversal {
 		return Optional.empty();
 	}
 
-	// ABI: (address recipient, uint256 amountIn, uint256 amountOutMin, address[] path, bool payerIsUser)
 	private static Optional<SwapPendente> entradaV2(byte[] entrada) {
 
-		// slot 0: recipient, slot 1: amountIn, slot 2: amountOutMin, slot 3: offset to path, slot 4: payerIsUser
 		if (entrada.length < PALAVRA * 5) {
 			return Optional.empty();
 		}
@@ -191,7 +185,7 @@ public final class RoteamentoUniversal {
 		List<byte[]> caminho = new ArrayList<>();
 		int base = offPath + PALAVRA;
 		for (int i = 0; i < count; i++) {
-			// address padded to 32 bytes: take the last 20
+
 			int slot = base + i * PALAVRA;
 			caminho.add(Arrays.copyOfRange(entrada, slot + 12, slot + 32));
 		}
@@ -205,8 +199,8 @@ public final class RoteamentoUniversal {
 			return Optional.empty();
 		}
 
-		BigInteger entra = palavra(entrada, 0, 1); // amountIn está na palavra 1
-		int offPath = inteiro(palavra(entrada, 0, 3)); // palavra 3 = offset do path
+		BigInteger entra = palavra(entrada, 0, 1);
+		int offPath = inteiro(palavra(entrada, 0, 3));
 
 		return caminhoV3(entrada, offPath).filter(c -> c.tokens().size() >= 2)
 				.map(c -> new SwapV3(entra, c.tokens(), c.fees()));

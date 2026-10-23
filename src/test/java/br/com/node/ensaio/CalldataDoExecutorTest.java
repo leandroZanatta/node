@@ -10,16 +10,6 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// A chamada de `executar` do Executor, conferida contra o `cast` do Foundry.
-//
-// A âncora é EXTERNA de propósito. Codificação de ABI errada não dá erro: produz bytes bem
-// formados que o contrato lê a partir do lugar errado, e ele reverte sem dizer por quê —
-// indistinguível de "a rota não era lucrativa". Conferir o codificador contra o meu próprio
-// entendimento provaria só que sou coerente comigo mesmo.
-//
-// Referência gerada por:
-//   cast calldata "executar((address,address,address,uint8,uint16)[],uint256,uint256)" \
-//       "[(0x1111…,0x2222…,0x3333…,0,25),(0x4444…,0x3333…,0x2222…,1,30)]" 1000000000000000000 5000
 class CalldataDoExecutorTest {
 
 	private static final String P1 = "11".repeat(20);
@@ -108,7 +98,8 @@ class CalldataDoExecutorTest {
 	@Test
 	@DisplayName("rota vazia não vira chamada")
 	void rotaVaziaNaoVira() {
-		assertThrows(IllegalArgumentException.class, () -> AbiDoExecutor.executar(List.of(), BigInteger.ONE, BigInteger.ZERO));
+		assertThrows(IllegalArgumentException.class,
+				() -> AbiDoExecutor.executar(List.of(), BigInteger.ONE, BigInteger.ZERO));
 	}
 
 	@Test
@@ -129,10 +120,16 @@ class CalldataDoExecutorTest {
 		assertThrows(IllegalArgumentException.class, () -> new Salto(P1, A, B, false, -1));
 		assertThrows(IllegalArgumentException.class, () -> new Salto(P1, A, A, false, 25));
 	}
-	// A VERSÃO 2 (com `bytes chave`), também contra o `cast`: a rota real do node — empréstimo no par V2
-	// WBNB/USDT e volta pela pool Infinity de BNB nativo/USDT (taxa 67, espaçamento 1, sem hook). Gerada por
-	//   cast calldata "executarComEmprestimo((address,address,address,uint8,uint16,bytes)[],uint256,uint256)" \
-	//     "[(par,WBNB,USDT,0,25,0x),(gerenteInfinity,USDT,WBNB,3,0,<abi da chave>)]" 1e18 12345
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	private static final String REFERENCIA_V2 = "8478b251"
 			+ "0000000000000000000000000000000000000000000000000000000000000060"
 			+ "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
@@ -176,7 +173,8 @@ class CalldataDoExecutorTest {
 		String wbnb = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 		String usdt = "55d398326f99059ff775485246999027b3197955";
 		List<Salto> rota = List.of(new Salto("16b9a82891338f9ba80e2d6970fdda79d1eb0dae", wbnb, usdt, false, 25),
-				new Salto("a0ffb9c1ce1fe56963b0321b32e7a0302114058b", usdt, wbnb, Salto.TIPO_INFINITY_CL, 0, chave.abi()));
+				new Salto("a0ffb9c1ce1fe56963b0321b32e7a0302114058b", usdt, wbnb, Salto.TIPO_INFINITY_CL, 0,
+						chave.abi()));
 
 		byte[] nossa = AbiDoExecutor.executarComEmprestimoV2(rota, new BigInteger("1000000000000000000"),
 				BigInteger.valueOf(12_345));

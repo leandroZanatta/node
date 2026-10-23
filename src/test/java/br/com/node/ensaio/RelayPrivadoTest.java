@@ -7,14 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.HexFormat;
 import java.util.List;
 
-import com.google.gson.JsonObject;
-
 import org.junit.jupiter.api.Test;
+
+import com.google.gson.JsonObject;
 
 class RelayPrivadoTest {
 
-	// A recusa real do primeiro bundle N+1 (23/09 20:55): o alvo já tinha sido minerado. Normalizada,
-	// toda corrida perdida vira a MESMA chave e pode ser contada.
+	
+	
+	
 	@Test
 	void recusaViraChaveContavel() {
 		assertEquals("nonce too low: address …, tx: N state: N", RelayPrivado.normalizar(
@@ -64,13 +65,14 @@ class RelayPrivadoTest {
 		assertEquals(8_192, grande.respostaBruta().length());
 	}
 
-	// A v2 (puissant-builder) chama a lista de revert de `revertingTxHashes`; a 1ª geração, de
-	// `acceptReverting`. Vazia nas duas: só entra se tudo suceder.
+	
+	
+	
 	@Test
 	void corpoDaV2EDaAntiga() {
 
-		JsonObject v2 = RelayPrivado.corpo("eth_sendBundle", List.of("aa", "0xbb"), 123).getAsJsonArray("params")
-				.get(0).getAsJsonObject();
+		JsonObject v2 = RelayPrivado.corpo("eth_sendBundle", List.of("aa", "0xbb"), 123).getAsJsonArray("params").get(0)
+				.getAsJsonObject();
 
 		assertEquals("0xaa", v2.getAsJsonArray("txs").get(0).getAsString());
 		assertEquals(2, v2.getAsJsonArray("txs").size());
@@ -83,10 +85,12 @@ class RelayPrivadoTest {
 		assertTrue(antiga.has("acceptReverting") && !antiga.has("revertingTxHashes"));
 	}
 
-	// Builders eth_sendBundle recebem o pagamento via `montar(destino)` — um por builder, cada um ao seu endereço.
+	
+	
 	@Test
 	void cadaBuilderEthSendBundleRecebeOSeuPagamento() {
-		// Dois builders com eth_sendBundle (mevSendBid=false): pagamento vai dentro do bundle.
+		
+		
 		RelayPrivado relay = new RelayPrivado(List.of(
 				new RelayPrivado.Builder("a", "http://127.0.0.1:1/", "eth_sendBundle", java.util.Optional.empty(),
 						RelayPrivado.PAGAMENTO_48CLUB, false, false, null, null),
@@ -94,7 +98,7 @@ class RelayPrivadoTest {
 						RelayPrivado.PAGAMENTO_BLOCKRAZOR, false, false, null, null)));
 		java.util.List<String> destinos = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
-		// bid=null: sem builders mevSendBid, o parâmetro é ignorado.
+		
 		RelayPrivado.Envio envio = relay.enviar(null, destino -> {
 			destinos.add(java.util.HexFormat.of().formatHex(destino));
 			return List.of("0xaa");
@@ -103,23 +107,24 @@ class RelayPrivadoTest {
 		assertEquals(List.of(HexFormat.of().formatHex(RelayPrivado.PAGAMENTO_48CLUB),
 				"1266c6be60392a8ff346e8d5eccd3e69dd9c5f20"), destinos);
 		assertEquals(List.of("a", "b"), List.copyOf(envio.porBuilder().keySet()));
-		assertTrue(envio.porBuilder().values().stream().allMatch(r -> !r.aceito() && r.motivo().startsWith("transporte")),
+		assertTrue(
+				envio.porBuilder().values().stream().allMatch(r -> !r.aceito() && r.motivo().startsWith("transporte")),
 				"porta fechada: recusa por transporte em cada um, sem derrubar o envio");
-		String hash = "0x" + HexFormat.of().formatHex(
-				br.com.node.util.Keccak.hash(HexFormat.of().parseHex("aa")));
+		String hash = "0x" + HexFormat.of().formatHex(br.com.node.util.Keccak.hash(HexFormat.of().parseHex("aa")));
 		assertTrue(envio.porBuilder().values().stream().allMatch(r -> r.hashesTransacoes().equals(List.of(hash))),
 				"até a falha de transporte conserva os hashes calculados para o bundle tentado");
 	}
 
-	// Builder mevSendBid=true usa mev_sendBid com BidArgsUpgrade; mevSendBid=false usa eth_sendBundle.
+	
+	
 	@Test
 	void builderMevSendBidUsaProtocolo48Club() {
 		java.math.BigInteger zero = java.math.BigInteger.ZERO;
 		byte[] tx = HexFormat.of().parseHex("abcd");
-		RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(100L, new byte[32], List.of(tx),
-				21_000L, zero, zero, new byte[65], new byte[0], zero);
+		RelayPrivado.BidArgs bid = new RelayPrivado.BidArgs(100L, new byte[32], List.of(tx), 21_000L, zero, zero,
+				new byte[65], new byte[0], zero);
 
-		// Valida a estrutura JSON do corpo do mev_sendBid.
+		
 		com.google.gson.JsonObject corpo = RelayPrivado.corpo48Club(bid, "mev_sendBid");
 		assertEquals("mev_sendBid", corpo.get("method").getAsString());
 		com.google.gson.JsonObject args = corpo.getAsJsonArray("params").get(0).getAsJsonObject();
@@ -141,9 +146,9 @@ class RelayPrivadoTest {
 
 	@Test
 	void latenciaAteAceiteUsaOPrimeiroBuilderQueRespondeuSim() {
-		RelayPrivado.Envio envio = new RelayPrivado.Envio(java.util.Map.of(
-				"lento", new RelayPrivado.Resposta(true, null, "bundle-lento", 90),
-				"rapido", new RelayPrivado.Resposta(true, null, "bundle-rapido", 25)));
+		RelayPrivado.Envio envio = new RelayPrivado.Envio(
+				java.util.Map.of("lento", new RelayPrivado.Resposta(true, null, "bundle-lento", 90), "rapido",
+						new RelayPrivado.Resposta(true, null, "bundle-rapido", 25)));
 
 		assertEquals(25, envio.latenciaAtePrimeiraAceitacaoMs());
 	}
@@ -153,9 +158,10 @@ class RelayPrivadoTest {
 	void posicaoPelaPrioridade() {
 		com.google.gson.JsonObject com = RelayPrivado.corpo("eth_sendBundle", java.util.List.of("0x01"), 1L, true);
 		com.google.gson.JsonObject sem = RelayPrivado.corpo("eth_sendBundle", java.util.List.of("0x01"), 1L, false);
-		org.junit.jupiter.api.Assertions.assertTrue(
-				com.getAsJsonArray("params").get(0).getAsJsonObject().get("positionFirst").getAsBoolean());
-		org.junit.jupiter.api.Assertions.assertFalse(sem.getAsJsonArray("params").get(0).getAsJsonObject().has("positionFirst"));
+		org.junit.jupiter.api.Assertions
+				.assertTrue(com.getAsJsonArray("params").get(0).getAsJsonObject().get("positionFirst").getAsBoolean());
+		org.junit.jupiter.api.Assertions
+				.assertFalse(sem.getAsJsonArray("params").get(0).getAsJsonObject().has("positionFirst"));
 	}
 
 	private static String erroComTexto(String frase) {

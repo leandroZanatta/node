@@ -16,19 +16,22 @@ import br.com.node.nucleo.Arbitragem;
 
 class GatilhosTest {
 
-	// A etapa é a MAIS ADIANTADA que o hash alcançou: projetado vence swap, que vence corpo.
+	
+	
 	@Test
 	void etapaMaisAdiantadaVence() {
 		assertEquals("nunca anunciado", Gatilhos.etapa(0));
 		assertEquals("anunciado sem corpo", Gatilhos.etapa(ObservatorioMempool.ANUNCIADO));
-		assertEquals("pulado por tamanho", Gatilhos.etapa(ObservatorioMempool.ANUNCIADO | ObservatorioMempool.PULADO_PEQUENO));
+		assertEquals("pulado por tamanho",
+				Gatilhos.etapa(ObservatorioMempool.ANUNCIADO | ObservatorioMempool.PULADO_PEQUENO));
 		assertEquals("corpo sem swap", Gatilhos.etapa(ObservatorioMempool.ANUNCIADO | ObservatorioMempool.CORPO));
 		assertEquals("corpo sem swap", Gatilhos.etapa(ObservatorioMempool.CORPO));
-		assertEquals("projetado", Gatilhos.etapa(ObservatorioMempool.CORPO | ObservatorioMempool.SWAP
-				| ObservatorioMempool.PROJETADO));
+		assertEquals("projetado",
+				Gatilhos.etapa(ObservatorioMempool.CORPO | ObservatorioMempool.SWAP | ObservatorioMempool.PROJETADO));
 	}
 
-	// Contra a BSC: o bloco vem com as txs completas — é daí que sai o hash do gatilho pela posição.
+	
+	
 	@Test
 	void blocoTrazAsTransacoesCompletas() {
 
@@ -40,7 +43,8 @@ class GatilhosTest {
 		assertTrue(tx.has("hash") && tx.has("input"), "tx sem hash/input: veio só o hash?");
 	}
 
-	// O instante do bloco na BSC: segundos do `timestamp` + o milissegundo guardado no `mixHash` (0–999).
+	
+	
 	@Test
 	void instanteDoBlocoLeOMilissegundoDoMixHash() {
 		JsonObject bloco = new JsonObject();
@@ -72,8 +76,8 @@ class GatilhosTest {
 		gatilhos.investigar(new Arbitragem(List.of(), usdt, BigInteger.TEN, 0, 0), 1, 0, -1);
 
 		assertEquals(1L, gatilhos.resumo().get("sem_cotacao"));
-		assertTrue(((java.util.Map<?, ?>) gatilhos.resumo().get("gatilho_por_etapa")).containsKey(
-				"sem gatilho no bloco (fenda de bloco anterior)"));
+		assertTrue(((java.util.Map<?, ?>) gatilhos.resumo().get("gatilho_por_etapa"))
+				.containsKey("sem gatilho no bloco (fenda de bloco anterior)"));
 		gatilhos.close();
 	}
 }

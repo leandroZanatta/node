@@ -18,9 +18,11 @@ class VencedorDoLeilaoTest {
 
 	private static JsonObject bloco() {
 		return JsonParser.parseString("{\"number\":\"0x7c5a3f0\",\"miner\":\"0x" + BUILDER + "\",\"transactions\":["
-				+ "{\"hash\":\"0x01\",\"from\":\"0x" + VENCEDOR + "\",\"to\":\"0xdd00000000000000000000000000000000000004\",\"value\":\"0x0\",\"gasPrice\":\"0x2faf080\",\"transactionIndex\":\"0x0\"},"
-				+ "{\"hash\":\"0x02\",\"from\":\"0x" + VENCEDOR + "\",\"to\":\"0x" + BUILDER + "\",\"value\":\"0x1\",\"gasPrice\":\"0x2faf080\",\"transactionIndex\":\"0x1\"}"
-				+ "]}").getAsJsonObject();
+				+ "{\"hash\":\"0x01\",\"from\":\"0x" + VENCEDOR
+				+ "\",\"to\":\"0xdd00000000000000000000000000000000000004\",\"value\":\"0x0\",\"gasPrice\":\"0x2faf080\",\"transactionIndex\":\"0x0\"},"
+				+ "{\"hash\":\"0x02\",\"from\":\"0x" + VENCEDOR + "\",\"to\":\"0x" + BUILDER
+				+ "\",\"value\":\"0x1\",\"gasPrice\":\"0x2faf080\",\"transactionIndex\":\"0x1\"}" + "]}")
+				.getAsJsonObject();
 	}
 
 	@Test
@@ -34,26 +36,31 @@ class VencedorDoLeilaoTest {
 		assertEquals(1, v.getAsJsonArray("pagamentos_a_builder_no_bloco").size());
 		assertEquals("1", v.get("pagamento_48club_bnb_wei").getAsString());
 		assertEquals(1, v.getAsJsonArray("pagamentos_48club_no_bloco").size());
-		// O pagamento do vencedor está na tx vizinha (posição 1, mesmo remetente), não na própria arbitragem.
+		
+		
 		assertEquals("1", v.get("pagamento_do_vencedor_wei").getAsString());
-		// A lista completa traz as duas transferências de valor do bloco (posições 1 e a da builder).
+		
+		
 		assertEquals(1, v.getAsJsonArray("transferencias_de_valor_no_bloco").size());
 	}
 
 	@Test
 	void somaPagamentoInternoAoEOA48ClubSemDuplicarTransferenciaDeTopo() {
-		JsonObject v = JsonParser.parseString("""
-				{
-				  "de": "aa00000000000000000000000000000000000001",
-				  "pagamento_48club_bnb_wei": "5",
-				  "sucesso_vencedor": true,
-				  "fonte_transferencias_internas": "trace do RPC",
-				  "transferencias_internas": [
-				    {"de":"aa00000000000000000000000000000000000001","para":"4848489f0b2bedd788c696e2d79b6b69d7484848","valor_wei":"5"},
-				    {"de":"bb00000000000000000000000000000000000002","para":"4848489f0b2bedd788c696e2d79b6b69d7484848","valor_wei":"7"}
-				  ]
-				}
-				""").getAsJsonObject();
+		JsonObject v = JsonParser
+				.parseString(
+						"""
+								{
+								  "de": "aa00000000000000000000000000000000000001",
+								  "pagamento_48club_bnb_wei": "5",
+								  "sucesso_vencedor": true,
+								  "fonte_transferencias_internas": "trace do RPC",
+								  "transferencias_internas": [
+								    {"de":"aa00000000000000000000000000000000000001","para":"4848489f0b2bedd788c696e2d79b6b69d7484848","valor_wei":"5"},
+								    {"de":"bb00000000000000000000000000000000000002","para":"4848489f0b2bedd788c696e2d79b6b69d7484848","valor_wei":"7"}
+								  ]
+								}
+								""")
+				.getAsJsonObject();
 
 		VencedorDoLeilao.medirPagamento48Club(v);
 
@@ -63,10 +70,11 @@ class VencedorDoLeilaoTest {
 
 	@Test
 	void pagamentoDeOutroRemetenteNaoEContaDoVencedor() {
-		JsonObject b = JsonParser.parseString("{\"number\":\"0x7c5a3f0\",\"miner\":\"0x" + BUILDER + "\",\"transactions\":["
-				+ "{\"hash\":\"0x01\",\"from\":\"0x" + VENCEDOR + "\",\"to\":\"0xdd00000000000000000000000000000000000004\",\"value\":\"0x0\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x0\"},"
-				+ "{\"hash\":\"0x02\",\"from\":\"0xbb00000000000000000000000000000000000002\",\"to\":\"0x" + BUILDER + "\",\"value\":\"0x5\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x1\"}"
-				+ "]}").getAsJsonObject();
+		JsonObject b = JsonParser.parseString("{\"number\":\"0x7c5a3f0\",\"miner\":\"0x" + BUILDER
+				+ "\",\"transactions\":[" + "{\"hash\":\"0x01\",\"from\":\"0x" + VENCEDOR
+				+ "\",\"to\":\"0xdd00000000000000000000000000000000000004\",\"value\":\"0x0\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x0\"},"
+				+ "{\"hash\":\"0x02\",\"from\":\"0xbb00000000000000000000000000000000000002\",\"to\":\"0x" + BUILDER
+				+ "\",\"value\":\"0x5\",\"gasPrice\":\"0x1\",\"transactionIndex\":\"0x1\"}" + "]}").getAsJsonObject();
 		JsonObject v = VencedorDoLeilao.extrair("0xnossa", "rival_n1", 101, 0, b, Set.of(BUILDER));
 		assertEquals("0", v.get("pagamento_do_vencedor_wei").getAsString());
 		assertEquals("nao_detectado", v.get("pagamento_direto_builder_status").getAsString());

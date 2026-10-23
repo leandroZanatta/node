@@ -10,28 +10,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-// Descobre o layout de um contrato a partir de exemplos que o BLOCO rotulou.
-//
-// Por que existe: medido na BSC, o fluxo pendente é dominado por contrato PRIVADO de bot — seletor que
-// não existe em nenhuma base pública e calldata empacotada, sem ABI. Escrever decodificador para cada
-// um não escala (a perda medida são 31 contratos distintos para 46 transações), mas esses contratos
-// REPETEM o mesmo formato milhões de vezes. Então não se escreve o decodificador: ele é APRENDIDO, com
-// o próprio bloco como gabarito.
-//
-// Como: janela deslizante de 20 bytes (os formatos de bot são empacotados, sem alinhamento de palavra)
-// para achar ONDE os tokens movidos apareceram; e a palavra de 32 bytes do montante observado, para
-// achar onde ele apareceu. O que não se repete na maioria das amostras é ruído, não layout.
-//
-// O que NÃO faz, e é deliberado: não aprende sozinho o que já é dado. Contrato de ABI pública
-// (Universal Router, 1inch, Pancake V3) ganha decodificador escrito à mão, que é mais barato e não
-// precisa de amostra. Aprender é para o OPACO.
 public final class AprendizDeLayout {
 
 	private AprendizDeLayout() {
 	}
 
-	// `minimo` é o consenso: um deslocamento só vira layout se aparecer em pelo menos tantas amostras.
-	// Com ele em 1, um único exemplo com acidente de formatação viraria regra para o mundo.
 	public static Optional<LayoutAprendido> aprender(List<ExemploDeMovimento> exemplos, int minimo) {
 
 		if (exemplos == null || minimo < 1 || exemplos.size() < minimo) {
@@ -41,9 +24,6 @@ public final class AprendizDeLayout {
 		byte[] destino = exemplos.get(0).anunciada().destino();
 		String seletor = exemplos.get(0).anunciada().seletor();
 
-		// Um layout é de UM contrato e UM método. Misturar é aprender o formato de dois — e o resultado
-		// não lê nenhum dos dois. Foi por isso que o mesmo bot com dois command ids (`0x00000001`,
-		// `0x00000002`) precisa de dois layouts, e não de um médio.
 		for (ExemploDeMovimento exemplo : exemplos) {
 
 			if (!Arrays.equals(exemplo.anunciada().destino(), destino)
@@ -52,7 +32,6 @@ public final class AprendizDeLayout {
 			}
 		}
 
-		// Com as trocas EM ORDEM, aprende-se caminho com direção e pool; é o único layout que o node usa.
 		if (exemplos.stream().allMatch(e -> !e.pernas().isEmpty())) {
 			return aprenderOrdenado(exemplos, minimo, destino, seletor);
 		}
@@ -91,20 +70,11 @@ public final class AprendizDeLayout {
 				confirmados(provisorio, exemplos)));
 	}
 
-	// O CAMINHO na ordem da troca — t0 = o que entra na primeira perna, t(i+1) = o que sai da perna i — e
-	// a posição de cada um por consenso; a pool de cada perna, onde aparecer; e o par → pool dos exemplos.
-	//
-	// CICATRIZ de 24/09: o aprendiz antigo votava em TODA posição onde QUALQUER token movido aparecia e lia
-	// na ordem da calldata. Resultado medido: token repetido virava caminho de ida e volta (WBNB→X→WBNB), e
-	// o contrato que escreve a saída antes da entrada era projetado ao contrário. A conferência comparava
-	// conjuntos e não via nenhum dos dois — o "1 em 3 errado" do placar era o PISO do erro.
 	private static Optional<LayoutAprendido> aprenderOrdenado(List<ExemploDeMovimento> exemplos, int minimo,
 			byte[] destino, String seletor) {
 
 		int pernas = exemplos.get(0).pernas().size();
 
-		// Número diferente de trocas é outro caminho: o contrato roteia diferente conforme o valor, e a
-		// mesma posição não significa a mesma coisa. Fica sem layout.
 		if (exemplos.stream().anyMatch(e -> e.pernas().size() != pernas)) {
 			return Optional.empty();
 		}
@@ -153,8 +123,6 @@ public final class AprendizDeLayout {
 			pools.add(escolhida.get());
 		}
 
-		// Par → pool, só onde todos os exemplos concordam: o mesmo par por duas pools é contrato que
-		// escolhe a pool em tempo de execução, e aí o mapa não pode afirmar qual.
 		Map<String, String> poolPorPar = new java.util.HashMap<>();
 		java.util.Set<String> ambiguos = new java.util.HashSet<>();
 
@@ -196,8 +164,6 @@ public final class AprendizDeLayout {
 				pools, poolPorPar));
 	}
 
-	// O layout lê desta calldata o MESMO caminho, na mesma ordem, e as mesmas pools que a cadeia fez?
-	// Pools só contam quando o layout as sabe; não sabê-las não é errar — o mapeador então não chuta.
 	static boolean reproduz(LayoutAprendido layout, byte[] calldata, List<br.com.node.nucleo.Perna> reais) {
 
 		Optional<List<byte[]>> lido = layout.tokensLidos(calldata);
@@ -241,7 +207,6 @@ public final class AprendizDeLayout {
 		return achados;
 	}
 
-	// A posição com mais votos (≥ mínimo), fora das já tomadas por outro item; empate vai para a primeira.
 	private static Optional<Integer> maisVotada(Map<Integer, Integer> votos, int minimo, List<Integer> tomadas) {
 		return votos.entrySet().stream().filter(v -> v.getValue() >= minimo && !tomadas.contains(v.getKey()))
 				.max((a, b) -> a.getValue().equals(b.getValue()) ? Integer.compare(b.getKey(), a.getKey())
@@ -249,9 +214,6 @@ public final class AprendizDeLayout {
 				.map(Map.Entry::getKey);
 	}
 
-	// Quantas amostras a regra reproduz. Compara CONJUNTO de tokens, não ordem: a ordem que o leitor
-	// devolve é a da calldata, e quem valida se ela é um caminho possível é o mapa de pools adiante —
-	// não o aprendiz.
 	private static int confirmados(LayoutAprendido layout, List<ExemploDeMovimento> exemplos) {
 
 		int reproduz = 0;
@@ -260,8 +222,8 @@ public final class AprendizDeLayout {
 
 			Optional<List<byte[]>> lidos = layout.tokensLidos(exemplo.anunciada().calldata());
 
-			if (lidos.isPresent()
-					&& new LinkedHashSet<>(hex(lidos.get())).equals(new LinkedHashSet<>(hex(exemplo.tokensMovidos())))) {
+			if (lidos.isPresent() && new LinkedHashSet<>(hex(lidos.get()))
+					.equals(new LinkedHashSet<>(hex(exemplo.tokensMovidos())))) {
 				reproduz++;
 			}
 		}
@@ -269,7 +231,6 @@ public final class AprendizDeLayout {
 		return reproduz;
 	}
 
-	// Todos os deslocamentos onde ALGUM token movido aparece, byte a byte.
 	private static List<Integer> deslocamentosDosTokens(byte[] calldata, List<byte[]> tokens) {
 
 		List<Integer> achados = new ArrayList<>();
@@ -288,11 +249,6 @@ public final class AprendizDeLayout {
 		return achados;
 	}
 
-	// O primeiro deslocamento cuja palavra de 32 bytes é EXATAMENTE o montante observado, ou -1.
-	//
-	// V1 só aprende palavra de 32 bytes — o montante no formato ABI. O empacotado de tamanho variável
-	// precisaria do delimitador do campo, e adivinhar tamanho é projetar torto; esses contratos ficam
-	// sem montante e vão para a simulação, que é o honesto.
 	private static int deslocamentoDoMontante(byte[] calldata, BigInteger montante) {
 
 		byte[] alvo = palavra(montante);

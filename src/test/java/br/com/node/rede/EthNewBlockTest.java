@@ -21,10 +21,6 @@ import br.com.node.vo.Cabecalho;
 import br.com.node.vo.MensagemEth;
 import br.com.node.vo.NewBlock;
 
-// O eth 0x07 é o 0x17 no fio — o `Rlpx.ler` soma OFFSET_ETH (0x10) aos códigos eth. Até o
-// codec ganhar este case, cada um desses quadros virava `Desconhecida(23)`, e a lotação contava
-// "não tratados: {23=N}" sem dizer o que era. Este teste prova o codec do lado eth; o
-// deslocamento é o mesmo que os outros códigos já usam.
 class EthNewBlockTest {
 
 	private static final long ALTURA = 12_345_678L;
@@ -59,8 +55,10 @@ class EthNewBlockTest {
 		assertArrayEquals(tx2, bloco.transacoes().get(1));
 	}
 
-	// A FORMA DO FIO: `[bloco, dificuldade total, (sidecars da BSC)]`. Era esta que caía em
-	// `Desconhecida(23)` — o teste de cima monta o bloco solto, e por isso não pegava.
+	
+	
+	
+	
 	@Test
 	@DisplayName("decodifica o NewBlock como vem do par: [bloco, dificuldade total, sidecars]")
 	void formaDoFio() {
@@ -117,7 +115,7 @@ class EthNewBlockTest {
 		assertEquals(1, bloco.transacoes().size());
 	}
 
-	// A header tem 15 campos na BSC; o dissector só lê o 0 (pai) e o 8 (altura).
+	
 	private static RlpItem cabecalho(long numero, byte[] pai) {
 
 		RlpItem[] campos = new RlpItem[15];

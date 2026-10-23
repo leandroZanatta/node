@@ -26,21 +26,6 @@ import com.google.gson.JsonParser;
 import br.com.node.catalogo.Eventos;
 import br.com.node.vo.Log;
 
-// Dá ao caderno de layouts o RÓTULO que faltava: o efeito da tx que nenhum decodificador leu.
-//
-// O caderno aprende, por contrato+seletor, onde a calldata guarda valor e tokens — a partir de pares
-// (calldata, efeito na cadeia). Quem trazia o efeito era o `blocoFechado`, e ninguém o chamava: os
-// recibos que o cursor aplica não trazem o hash da tx. MEDIDO em 23/09: 367 gatilhos de arbitragens
-// alheias chegaram inteiros até nós e não foram lidos, e o caderno nunca aprendeu nada.
-//
-// Aqui o efeito vem da SIMULAÇÃO (`eth_simulateV1`, no estado mais recente, como o próprio remetente):
-// os logs de Sync/Swap que ela emitiria. Conferido na cadeia em 23/09: nas txs simuladas no estado certo,
-// as pools e o estado final bateram com o recibo real. A ~640 ms por chamada é lento demais para a
-// corrida — por isso isto APRENDE, fora do caminho quente, e a próxima tx do mesmo contrato+seletor é
-// lida local pelo caderno.
-//
-// Contido de propósito: RITMO simulações por segundo no total, até POR_ASSINATURA por contrato+seletor
-// a cada JANELA_MS, e nunca os métodos de token (transfer/approve/transferFrom) — não são swap.
 public final class Simulador implements Closeable {
 
 	private static final Logger LOG = Logger.getLogger(Simulador.class.getName());
@@ -229,8 +214,7 @@ public final class Simulador implements Closeable {
 			return;
 		}
 
-		boolean mexeuEmPool = logs.get().stream().anyMatch(log ->
-				log.assinadoPor(Eventos.SYNC_V2) || ehSwapV3(log));
+		boolean mexeuEmPool = logs.get().stream().anyMatch(log -> log.assinadoPor(Eventos.SYNC_V2) || ehSwapV3(log));
 
 		if (!mexeuEmPool) {
 			semEfeito.incrementAndGet();
@@ -245,8 +229,6 @@ public final class Simulador implements Closeable {
 		return br.com.node.catalogo.Eventos.ehSwapV3(log);
 	}
 
-	// Os logs da primeira chamada do primeiro bloco simulado; vazio se a chamada reverteu ou a resposta
-	// não é a esperada. Separado para o teste prová-lo com uma resposta real.
 	static Optional<List<Log>> logs(String corpo) {
 
 		JsonObject json = JsonParser.parseString(corpo).getAsJsonObject();

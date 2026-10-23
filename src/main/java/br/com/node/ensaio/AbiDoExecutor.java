@@ -14,9 +14,6 @@ public final class AbiDoExecutor {
 	public static final byte[] EXECUTAR_COM_EMPRESTIMO = seletor(
 			"executarComEmprestimo((address,address,address,uint8,uint16)[],uint256,uint256)");
 
-	// A versão 2 do Executor (`versao() == 2`): cada travessia ganha `bytes chave`, o `PoolKey` das pools de
-	// gerente. A struct fica DINÂMICA, então a codificação muda inteira — offsets por travessia —, e por
-	// isso as duas convivem: o node só usa esta depois de perguntar ao contrato publicado a versão dele.
 	public static final byte[] EXECUTAR_V2 = seletor(
 			"executar((address,address,address,uint8,uint16,bytes)[],uint256,uint256)");
 
@@ -36,10 +33,6 @@ public final class AbiDoExecutor {
 		return encaixarV2(EXECUTAR_COM_EMPRESTIMO_V2, rota, montante, lucroMinimo);
 	}
 
-	// ABI de `T[]` com `T` dinâmico: comprimento, depois UM offset por elemento (contado do início da área
-	// dos offsets), depois os elementos. Cada elemento: as 5 palavras fixas, o offset do `bytes` (sempre
-	// 6 palavras, logo depois da cabeça), o comprimento e os dados alinhados em 32. Conferido byte a byte
-	// contra o `cast calldata` do Foundry no `CalldataDoExecutorTest`.
 	private static byte[] encaixarV2(byte[] seletor, List<Salto> rota, BigInteger montante, BigInteger lucroMinimo) {
 
 		if (rota.isEmpty()) {

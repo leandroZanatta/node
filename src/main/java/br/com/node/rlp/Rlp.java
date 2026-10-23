@@ -37,9 +37,6 @@ public final class Rlp {
 		return new RlpBytes(Arrays.copyOfRange(temporario, i, 8));
 	}
 
-	// Escalar em RLP é SEM zeros à esquerda, e o zero é a string vazia — nunca um
-	// byte zero. `BigInteger.ZERO.toByteArray()` devolve [0x00], e mandar isso é
-	// RLP não-canônico: o par responde com Disconnect "quebra de protocolo".
 	public static RlpItem inteiro(java.math.BigInteger valor) {
 
 		byte[] bytes = valor.toByteArray();
@@ -207,8 +204,6 @@ public final class Rlp {
 
 		return onde + 1 + bytes;
 	}
-
-	// --- decodificação --------------------------------------------------------
 
 	public static RlpItem decodificar(byte[] dados) {
 

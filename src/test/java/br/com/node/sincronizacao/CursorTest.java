@@ -19,37 +19,28 @@ import br.com.node.catalogo.Eventos;
 import br.com.node.catalogo.Transicao;
 import br.com.node.nucleo.Direcao;
 import br.com.node.nucleo.Grafo;
-import br.com.node.nucleo.TickMath;
 import br.com.node.nucleo.Pool;
 import br.com.node.nucleo.PoolV2;
 import br.com.node.nucleo.ReservasV2;
+import br.com.node.nucleo.TickMath;
 import br.com.node.util.Resources;
 
-// O cursor tem duas obrigações, e o teste mede as duas:
-//
-//   1. CONTINUIDADE — avança o que pediu, ou para. Nunca pula.
-//   2. ESTADO CERTO — e a prova disto é indireta e dura: com estado certo, a taxa
-//      recuperada de cada pool de produto constante é um número REDONDO. Estado errado
-//      produz taxa quebrada, porque a taxa absorve o erro do estado.
-//
-// A medição anterior, feita sem cursor, deu 70% das pools em "invariante violada" e
-// taxas como 2440, 2140, 1728. A suspeita é que eu pedia cabeçalhos com reverso=true e
-// processava os logs em ordem DESCENDENTE de bloco — o que faz o "Sync anterior" ser o
-// estado posterior. Se for isso, aqui a taxa volta a ser redonda.
 class CursorTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
 
-	// UM PAR POR TRABALHADOR, derivado e não escolhido: a frente abre
-	// `sincronizacao.pedidos.em.voo` threads, e cada uma arrenda uma sessão. Com menos par que
-	// trabalhador, sobra trabalhador e o pior par volta a ditar o ritmo. Medido: com 4 ativas o
-	// `AnalisadorTest` parava com zero blocos de forma intermitente.
+	
+	
+	
+	
+	
+	
 	private static final int POOL_MINIMO = Resources.inteiro("sincronizacao.pedidos.em.voo");
 	private static final int BLOCOS = 128;
 	private static final int POR_LOTE = 16;
 	private static final int EM_VOO = Resources.inteiro("sincronizacao.pedidos.em.voo");
 
-	// Recuar do topo evita pedir o bloco que o par ainda está propagando.
+	
 	private static final int RECUO = 40;
 
 	@Test
@@ -69,14 +60,15 @@ class CursorTest {
 
 			node.iniciar();
 
-			// A lotação é obrigatória, não conveniência de teste: `pedir` correlaciona
-			// dentro do LEITOR, e o leitor é dela. Sem pool, a frente pagaria um aperto de
-			// mão por faixa — foi o que deu 3,3 blocos/s.
+			
+			
+			
 			node.lotar(Crivo.corteDeHoje()::aceita);
 
-			// Não basta o par aceitar o Hello: ele tem de RESPONDER. Vários aceitam e
-			// derrubam no primeiro pedido com "peers demais", e depender de um só sobreviver
-			// é a mesma fragilidade que o cursor não pode ter.
+			
+			
+			
+			
 			long ativas = node.esperarPool(POOL_MINIMO, ESPERA_DESCOBERTA);
 
 			System.out.println("pool: " + ativas + " sessões ativas");
@@ -98,8 +90,8 @@ class CursorTest {
 
 				double segundos = (System.nanoTime() - comecou) / 1e9;
 
-				System.out.println("cursor: partiu de " + partida + ", avançou " + avancados + " blocos até "
-						+ cursor.altura());
+				System.out.println(
+						"cursor: partiu de " + partida + ", avançou " + avancados + " blocos até " + cursor.altura());
 				System.out.printf("vazão: %.1f blocos/s com %d pedidos em voo (%d entregues, %d reatribuídas)%n",
 						avancados / segundos, EM_VOO, frente.entregues(), frente.reatribuidas());
 				System.out.println("   motivos de reatribuição: " + frente.motivos());
@@ -128,10 +120,13 @@ class CursorTest {
 		provarTickMath(transicoes);
 	}
 
-	// A TickMath é 20 constantes mágicas que não se confere lendo: constante errada dá
-	// preço plausível e errado, em silêncio. Mas todo `Swap` do V3 carrega `sqrtPriceX96`
-	// E `tick`, e o contrato garante `paraSqrt(tick) <= sqrt < paraSqrt(tick+1)` — então
-	// cada swap real é uma asserção sobre a tabela.
+	
+	
+	
+	
+	
+	
+	
 	private void provarTickMath(List<Transicao> transicoes) {
 
 		int conferidos = 0;
@@ -163,9 +158,10 @@ class CursorTest {
 		assertTrue(fora == 0, "a TickMath discorda do contrato em " + fora + " de " + conferidos);
 	}
 
-	// O grafo, montado do que o cursor aprendeu, e a pergunta que a autópsia deixou:
-	// ele ALCANÇA ciclo de três pernas? No projeto anterior foram 200.000 rotas
-	// enumeradas e o triângulo com 46% do dinheiro real não estava entre elas.
+	
+	
+	
+	
 	private void montarGrafo(Catalogo catalogo, List<Transicao> transicoes) {
 
 		Grafo grafo = new Grafo();
@@ -187,15 +183,15 @@ class CursorTest {
 		System.out.println("grafo: " + ligadas.size() + " pools ligadas, " + grafo.tokens() + " tokens, de "
 				+ catalogo.paresConhecidos() + " pares aprendidos");
 
-		// O numerário é o endereço, nunca o símbolo: há cerca de 180 tokens chamados
-		// "USDT" no catálogo antigo, e um só é o real.
+		
+		
 		Map<String, byte[]> numerarios = Map.of("WBNB",
 				HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"), "USDT",
 				HexFormat.of().parseHex("55d398326f99059ff775485246999027b3197955"));
 
 		int total = 0;
 
-        for (Map.Entry<String, byte[]> numerario : numerarios.entrySet()) {
+		for (Map.Entry<String, byte[]> numerario : numerarios.entrySet()) {
 
 			List<br.com.node.nucleo.Ciclo> ciclos = grafo.ciclos(numerario.getValue(), 3);
 
@@ -211,10 +207,11 @@ class CursorTest {
 		assertTrue(total > 0, "o grafo não achou ciclo nenhum a partir dos numerários");
 	}
 
-	// Catálogo que não se lê é inútil, e ler dele é ler COM A ALTURA: todo valor carrega
-	// a altura em que vale, e essa altura tem de estar dentro da faixa percorrida.
-	// Sem isso, "o estado vale na cabeça" seria afirmação sem verificação — que é
-	// exatamente o que o projeto anterior não conseguia sustentar.
+	
+	
+	
+	
+	
 	private void conferirLegibilidade(Catalogo catalogo, List<Transicao> transicoes, long partida, int avancados) {
 
 		int lidasV2 = 0;
@@ -244,7 +241,7 @@ class CursorTest {
 		System.out.println("legibilidade: " + lidasV2 + " leituras V2 e " + lidasV3 + " V3, todas com altura na faixa");
 	}
 
-	// A altura de cada transição só cresce, e cobre a faixa inteira sem pular.
+	
 	private void conferirContinuidade(List<Transicao> transicoes, long partida, int avancados) {
 
 		long anterior = 0;
@@ -261,9 +258,10 @@ class CursorTest {
 		System.out.println("continuidade: ok, alturas de " + partida + " a " + (partida + avancados - 1));
 	}
 
-	// Taxa redonda é múltiplo de 100 milionésimos, isto é, de um ponto-base: 2500 da
-	// Pancake, 1000 da Biswap, 3000 de fork padrão. Taxa quebrada é o estado errado
-	// sendo absorvido pela taxa.
+	
+	
+	
+	
 	private void provarTaxas(List<Transicao> transicoes) {
 
 		Map<String, ReservasV2> antesDoSwap = new HashMap<>();
@@ -276,8 +274,8 @@ class CursorTest {
 
 			String pool = HexFormat.of().formatHex(t.log().endereco());
 
-			// O `Sync` de um swap é emitido antes do `Swap`, no mesmo tx: o estado ANTES
-			// dele é o estado antes do swap. É por isso que a transição carrega o anterior.
+			
+			
 			if (t.log().assinadoPor(Eventos.SYNC_V2)) {
 				t.antes().ifPresent(reservas -> antesDoSwap.put(pool, reservas));
 				continue;
@@ -321,8 +319,7 @@ class CursorTest {
 			}
 		}
 
-		int redondos = taxas.entrySet().stream().filter(e -> e.getKey() % 100 == 0)
-				.mapToInt(Map.Entry::getValue).sum();
+		int redondos = taxas.entrySet().stream().filter(e -> e.getKey() % 100 == 0).mapToInt(Map.Entry::getValue).sum();
 		int quebrados = taxas.entrySet().stream().filter(e -> e.getKey() % 100 != 0).mapToInt(Map.Entry::getValue)
 				.sum();
 

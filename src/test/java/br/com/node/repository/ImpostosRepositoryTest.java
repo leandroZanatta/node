@@ -14,12 +14,6 @@ import br.com.node.exception.BancoException;
 import br.com.node.repository.postgres.Postgres;
 import br.com.node.vo.ProvaDeImposto;
 
-// A prova de imposto que sobrevive ao restart, contra o Postgres de verdade — as regras que o BANCO
-// impõe não se provam com banco de mentira.
-//
-//   1. o que se grava por (pool, token) volta igual, e o honeypot (-1) também;
-//   2. a mesma (pool, token) regravada reafirma o valor, não duplica (imposto é imutável);
-//   3. o banco recusa bps fora da faixa, e o lote recusado VOLTA para a memória em vez de sumir.
 class ImpostosRepositoryTest {
 
 	private final SecureRandom sorteio = new SecureRandom();
@@ -47,12 +41,13 @@ class ImpostosRepositoryTest {
 				assertEquals(1300, bps(repo, pool, taxado), "o imposto medido não voltou igual");
 				assertEquals(-1, bps(repo, pool, honeypot), "o honeypot (-1) não persistiu");
 
-				// regravar a mesma (pool, token): reafirma, não duplica
+				
 				repo.anotar(new ProvaDeImposto(pool, taxado, 1300, false));
 				assertEquals(1, repo.descarregar(), "regravar devia ser um upsert, não uma linha nova");
 				assertEquals(1300, bps(repo, pool, taxado), "o valor mudou ao regravar");
 
-				// a COMPRA do mesmo (pool, token) é outra prova, noutra tabela, e não apaga a venda
+				
+				
 				repo.anotar(new ProvaDeImposto(pool, taxado, 300, true));
 				assertEquals(1, repo.descarregar(), "a compra tinha de gravar");
 				assertEquals(300, bps(repo, pool, taxado, true), "a compra não voltou igual");
@@ -95,7 +90,8 @@ class ImpostosRepositoryTest {
 		banco.executar(conexao -> {
 
 			for (String tabela : new String[] { "impostos_provados", "impostos_de_compra" }) {
-				try (PreparedStatement comando = conexao.prepareStatement("delete from " + tabela + " where pool = ?")) {
+				try (PreparedStatement comando = conexao
+						.prepareStatement("delete from " + tabela + " where pool = ?")) {
 					comando.setBytes(1, pool);
 					comando.executeUpdate();
 				}

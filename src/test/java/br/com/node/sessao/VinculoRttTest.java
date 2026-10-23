@@ -8,7 +8,6 @@ import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
 
-// O ping UDP da descoberta já acontecia; o tempo dele é a distância ao nó ANTES de abrir TCP.
 class VinculoRttTest {
 
 	@Test

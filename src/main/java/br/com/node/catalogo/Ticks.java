@@ -24,27 +24,10 @@ import java.util.logging.Logger;
 import br.com.node.nucleo.MapaDeTicks;
 import br.com.node.util.Keccak;
 
-// Os MAPAS DE TICKS das pools de liquidez concentrada (V3 de endereço, Uniswap V4, PancakeSwap Infinity CL): a
-// foto tirada do contrato e mantida viva pelos eventos de liquidez.
-//
-// A FOTO é uma leitura em lote (Multicall3 `tryBlockAndAggregate`), em duas voltas: as palavras do bitmap em
-// volta do preço — com o NÚMERO DO BLOCO da leitura — e depois o `liquidityNet` de cada tick inicializado NO
-// MESMO BLOCO. Três fontes, a mesma forma: a própria pool (V3: `tickBitmap`/`ticks`), o `StateView` da V4
-// (`getTickBitmap`/`getTickLiquidity`) e o gerente do Infinity (`getPoolBitmapInfo`/`getPoolTickInfo`) — todas
-// conferidas na cadeia em 26/09. A matemática que usa o mapa foi provada contra 6 swaps reais que cruzaram de 1
-// a 62 ticks (`TravessiaDeTicksTest`): saída ao wei.
-//
-// VIVA pelos eventos: cada `Mint`/`Burn`/`ModifyLiquidity` depois do bloco da foto soma no `liquidityNet` das duas
-// pontas. Os que chegam enquanto a foto está em voo ficam num anel e são reaplicados sobre ela ao instalar; a
-// SEQUÊNCIA de cada evento impede aplicar o mesmo duas vezes (dois no mesmo bloco são dois eventos, não um).
-//
-// Fora do caminho do bloco: a foto roda numa thread própria, com fila curta que descarta. Sem mapa, a pool cota
-// como sempre cotou — até o primeiro tick.
 public final class Ticks {
 
 	private static final Logger LOG = Logger.getLogger(Ticks.class.getName());
 
-	// eth_call cru: (para, dados, bloco) → o resultado em hex, sem 0x. `bloco` nulo = "latest".
 	@FunctionalInterface
 	public interface Chamada {
 		Optional<String> chamar(String para, String dados, String bloco);
@@ -61,8 +44,6 @@ public final class Ticks {
 	private static final byte[] INF_BITMAP = seletor("getPoolBitmapInfo(bytes32,int16)");
 	private static final byte[] INF_TICK = seletor("getPoolTickInfo(bytes32,int24)");
 
-	// Palavras do bitmap de cada lado do preço: 2 → 5 palavras, ±512 ticks comprimidos (±5% de preço num
-	// espaçamento 1, ±40% num de 10). É muito mais do que um ciclo de arbitragem desloca.
 	private static final int PALAVRAS_DE_CADA_LADO = 2;
 	private static final int TICKS_POR_LOTE = 250;
 	private static final int ANEL = 8_192;
@@ -96,8 +77,6 @@ public final class Ticks {
 		return Optional.ofNullable(vivos.get(hex(pool))).map(Vivo::mapa);
 	}
 
-	// Pede a foto se não há mapa, ou se o preço chegou a uma palavra da borda da faixa conhecida.
-	// `gerente` nulo = V3 de endereço; senão, o gerente da pool (V4 ou Infinity CL).
 	public void garantir(byte[] pool, int tickCorrente, int espacamento, byte[] gerente) {
 
 		if (espacamento <= 0) {
@@ -127,7 +106,6 @@ public final class Ticks {
 		}
 	}
 
-	// Thread do cursor: um evento de liquidez de [inferior, superior) com `delta` (com sinal).
 	public void aoMudarLiquidez(byte[] pool, int inferior, int superior, BigInteger delta, long altura) {
 
 		String chave = hex(pool);
@@ -153,8 +131,8 @@ public final class Ticks {
 		fotografar(pool, tickCorrente, espacamento, gerente, null);
 	}
 
-	// Síncrono, num bloco dado (nulo = o mais recente): para o teste conferir a foto contra a cadeia.
-	Optional<MapaDeTicks> fotografarAgora(byte[] pool, int tickCorrente, int espacamento, byte[] gerente, String bloco) {
+	Optional<MapaDeTicks> fotografarAgora(byte[] pool, int tickCorrente, int espacamento, byte[] gerente,
+			String bloco) {
 		fotografar(pool, tickCorrente, espacamento, gerente, bloco);
 		return mapa(pool);
 	}
@@ -225,7 +203,7 @@ public final class Ticks {
 					falhas.incrementAndGet();
 					return;
 				}
-				// Nos três contratos o `liquidityNet` é a SEGUNDA palavra da resposta (int128 com sinal).
+
 				liquidas.put(lote.get(i), new BigInteger(Arrays.copyOfRange(dado, 32, 64)));
 			}
 		}
@@ -235,8 +213,6 @@ public final class Ticks {
 		MapaDeTicks foto = MapaDeTicks.de(liquidas, tickMinimo, tickMaximo, bloco);
 		String chave = hex(pool);
 
-		// Instala e reaplica, no mesmo passo atômico da chave, os eventos posteriores à foto que chegaram
-		// enquanto ela estava em voo.
 		vivos.compute(chave, (k, velho) -> {
 			Vivo vivo = new Vivo(foto, bloco, 0);
 			List<Delta> depois = new ArrayList<>();
@@ -248,7 +224,8 @@ public final class Ticks {
 				}
 			}
 			for (Delta d : depois) {
-				vivo = new Vivo(vivo.mapa().com(d.inferior(), d.superior(), d.delta(), d.altura()), bloco, d.sequencia());
+				vivo = new Vivo(vivo.mapa().com(d.inferior(), d.superior(), d.delta(), d.altura()), bloco,
+						d.sequencia());
 			}
 			return vivo;
 		});
@@ -259,8 +236,6 @@ public final class Ticks {
 	private record Resposta(long bloco, List<byte[]> dados) {
 	}
 
-	// `tryBlockAndAggregate(false, calls)`: (bloco, hash, [(sucesso, dados)]). Chamada que falha vem com
-	// dados nulos — quem lê recusa a foto inteira.
 	private Optional<Resposta> multicall(String alvo, List<byte[]> dados, String bloco) {
 
 		byte[] calldata = codificarMulticall(alvo, dados);
@@ -268,7 +243,8 @@ public final class Ticks {
 
 		return resultado.flatMap(r -> {
 			try {
-				return Optional.of(decodificarMulticall(HexFormat.of().parseHex(r.startsWith("0x") ? r.substring(2) : r)));
+				return Optional
+						.of(decodificarMulticall(HexFormat.of().parseHex(r.startsWith("0x") ? r.substring(2) : r)));
 			} catch (RuntimeException e) {
 				br.com.node.util.Falhas.anotar("resposta do multicall de ticks", e);
 				return Optional.empty();
@@ -357,7 +333,6 @@ public final class Ticks {
 		return p;
 	}
 
-	// Inteiro com sinal numa palavra: extensão de sinal com 0xff para negativo (int16 e int24 no ABI).
 	private static byte[] palavraComSinal(int valor) {
 		byte[] p = new byte[32];
 		if (valor < 0) {

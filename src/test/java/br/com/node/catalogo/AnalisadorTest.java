@@ -22,29 +22,24 @@ import br.com.node.sincronizacao.Frente;
 import br.com.node.util.Resources;
 import br.com.node.vo.Log;
 
-// O QUE VALE A PENA ANALISAR — medido, não opinado.
-//
-// Em vez de escolher onde procurar, este instrumento olha quem JÁ ARBITRA na cadeia,
-// agora, e caracteriza: quantas por bloco, quantas pernas, V2 ou V3, em que token sobra,
-// quanto sobra, e quais pools repetem. O analisador deve focar onde a arbitragem
-// acontece, e isso é observável.
-//
-// É a resposta que a autópsia não deu: o projeto anterior observou 63.433 arbitragens
-// alheias e capturou zero. Saber a FORMA delas é o que diz onde pôr esforço.
 class AnalisadorTest {
 
 	private static final int ESPERA_DESCOBERTA = 120;
 
-	// UM PAR POR TRABALHADOR, derivado e não escolhido: a frente abre
-	// `sincronizacao.pedidos.em.voo` threads, e cada uma arrenda uma sessão. Com menos par que
-	// trabalhador, sobra trabalhador e o pior par volta a ditar o ritmo. Medido: com 4 ativas o
-	// `AnalisadorTest` parava com zero blocos de forma intermitente.
+	
+	
+	
+	
+	
+	
 	private static final int POOL_MINIMO = Resources.inteiro("sincronizacao.pedidos.em.voo");
 	private static final int BLOCOS = 48;
 	private static final int POR_LOTE = 16;
-	// 400, não 60. Com a frente, uma faixa é servida por QUALQUER par, e par atrás da cabeça
-	// devolve cabeçalho vazio para altura recente: com poucos ativos, todos podem estar
-	// atrás e a faixa nunca fecha. Recuar mais é pedir o que todo mundo já tem.
+	
+	
+	
+	
+	
 	private static final int RECUO = 400;
 
 	private static final String WBNB = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
@@ -62,9 +57,9 @@ class AnalisadorTest {
 		Catalogo catalogo = new Catalogo();
 		Detector detector = new Detector(catalogo);
 
-		// Uma passada só não serve: o par de cada pool é aprendido dos `Transfer`, e na
-		// primeira vez que a pool aparece o par ainda não está montado. Guarda-se a
-		// transação e julga-se no fim, com o catálogo completo.
+		
+		
+		
 		Map<String, List<Log>> porTransacao = new java.util.LinkedHashMap<>();
 
 		int avancados = 0;
@@ -73,9 +68,9 @@ class AnalisadorTest {
 
 			node.iniciar();
 
-			// A lotação é obrigatória, não conveniência de teste: `pedir` correlaciona
-			// dentro do LEITOR, e o leitor é dela. Sem pool, a frente pagaria um aperto de
-			// mão por faixa — foi o que deu 3,3 blocos/s.
+			
+			
+			
 			node.lotar(Crivo.corteDeHoje()::aceita);
 
 			long ativas = node.esperarPool(POOL_MINIMO, ESPERA_DESCOBERTA);
@@ -87,9 +82,8 @@ class AnalisadorTest {
 			assertTrue(cabeca > 0, "nenhum par da BSC respondeu");
 
 			try (Frente frente = new Frente(node.sessoes, POR_LOTE);
-					Cursor cursor = new Cursor(frente, catalogo,
-							t -> porTransacao.computeIfAbsent(t.altura() + ":" + t.transacao(), k -> new ArrayList<>())
-									.add(t.log()))) {
+					Cursor cursor = new Cursor(frente, catalogo, t -> porTransacao
+							.computeIfAbsent(t.altura() + ":" + t.transacao(), k -> new ArrayList<>()).add(t.log()))) {
 
 				frente.abrir(cursor::montar, Resources.inteiro("sincronizacao.pedidos.em.voo"));
 
@@ -110,11 +104,12 @@ class AnalisadorTest {
 
 		relatar(avancados, porTransacao.size(), catalogo, arbitragens);
 
-		// O detector estrito é a produção; isto é o instrumento. Ele caracteriza a
-		// POPULAÇÃO de transações com mais de um swap, porque é ela que diz onde há
-		// oportunidade — e o detector estrito, por exigir intermediário exatamente zero,
-		// descarta todo ciclo por token com imposto, que é onde o dinheiro da autópsia
-		// estava.
+		
+		
+		
+		
+		
+		
 		caracterizarPopulacao(catalogo, porTransacao);
 
 		assertTrue(avancados >= BLOCOS / 2, "o cursor não percorreu a faixa");
@@ -255,9 +250,9 @@ class AnalisadorTest {
 					ganhador = entrada.getKey();
 				} else if (sinal < 0) {
 
-					// Perda pequena diante do que atravessou aquele token é imposto de
-					// transferência, não gasto: cinco por cento cobre os tokens taxados que
-					// apareceram na autópsia (100 a 200 bps, com folga).
+					
+					
+					
 					BigInteger limite = bruto.get(entrada.getKey()).divide(BigInteger.valueOf(20));
 
 					if (entrada.getValue().abs().compareTo(limite) <= 0) {
@@ -321,8 +316,9 @@ class AnalisadorTest {
 		return WBNB.equals(token) || USDT.equals(token) || BUSD.equals(token) || USDC.equals(token);
 	}
 
-	// Nome só para o relatório, e por ENDEREÇO: há cerca de 180 tokens chamados "USDT"
-	// no catálogo antigo, e um só é o real.
+	
+	
+	
 	private static String nome(String token) {
 
 		if (WBNB.equals(token)) {

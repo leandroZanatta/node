@@ -13,13 +13,6 @@ import org.bouncycastle.crypto.generators.SCrypt;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// Guarda um segredo (a chave privada do operador) CIFRADO com senha, para ele não ficar em texto
-// puro no disco. A senha nunca é gravada — entra em runtime (variável de ambiente) e some com o
-// processo.
-//
-// scrypt (memória-dura, cara de forçar) deriva a chave de cifra da senha; AES-GCM cifra E autentica
-// — senha errada falha na verificação do tag, não devolve lixo silencioso. Cada peça (sal, iv) é
-// aleatória por keystore, então dois keystores da mesma chave+senha não se parecem.
 public final class Keystore {
 
 	private static final int N = 1 << 15;
@@ -53,8 +46,6 @@ public final class Keystore {
 		return json.toString();
 	}
 
-	// Decifra, ou lança se a senha estiver errada (o tag do GCM não fecha) — nunca devolve chave
-	// corrompida em silêncio.
 	public static byte[] decifrar(String json, char[] senha) {
 
 		JsonObject o = JsonParser.parseString(json).getAsJsonObject();

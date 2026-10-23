@@ -15,13 +15,6 @@ import br.com.node.exception.BancoException;
 import br.com.node.repository.postgres.Postgres;
 import br.com.node.vo.ProvaDeTaxa;
 
-// A evidência de taxa, contra o Postgres de verdade: são regras que o BANCO impõe, e regra de banco
-// não se prova com banco de mentira.
-//
-//   1. gravar SOMA fechamentos, nunca substitui — em lote e entre lotes;
-//   2. o chamador é parte da chave: a mesma taxa por dois chamadores são duas evidências;
-//   3. o que se grava volta igual;
-//   4. o banco recusa taxa quebrada, e o lote recusado VOLTA para a memória em vez de sumir.
 class ProvasDeTaxaRepositoryTest {
 
 	private final SecureRandom sorteio = new SecureRandom();
@@ -76,9 +69,8 @@ class ProvasDeTaxaRepositoryTest {
 
 	private long fechamentos(ProvasDeTaxaRepository provas, byte[] pool, int taxa, String chamador) {
 
-		return provas.carregar().stream()
-				.filter(prova -> Arrays.equals(prova.pool(), pool) && prova.taxa() == taxa
-						&& prova.chamador().equals(chamador))
+		return provas.carregar().stream().filter(
+				prova -> Arrays.equals(prova.pool(), pool) && prova.taxa() == taxa && prova.chamador().equals(chamador))
 				.mapToLong(ProvaDeTaxa::fechamentos).sum();
 	}
 

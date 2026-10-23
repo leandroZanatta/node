@@ -9,18 +9,9 @@ import br.com.node.rlp.RlpItem;
 import br.com.node.util.Keccak;
 import br.com.node.util.Secp256k1;
 
-// Assina uma transação EIP-1559 (tipo 0x02) da BSC, pronta para `eth_sendRawTransaction`.
-//
-// É o inverso exato da recuperação de remetente (que já se provou contra transações reais da
-// cadeia): lá se lia a assinatura para achar o `from`; aqui se produz a assinatura a partir da
-// chave. O hash de assinatura é keccak(0x02 ++ rlp[chainId, nonce, maxPrio, maxFee, gas, to, value,
-// data, accessList]); a assinatura entra como (yParity, r, s) no fim; o `recId` que a `Secp256k1`
-// devolve É o yParity. AccessList vazia — as nossas rotas não a usam.
-//
-// Nada aqui envia — só produz os bytes. Quem envia (e decide SE envia) é o `Disparo`, com as travas.
 public final class AssinadorDeTransacao {
 
-	private static final long CADEIA = 56; // BSC
+	private static final long CADEIA = 56;
 	private static final byte TIPO_1559 = 0x02;
 
 	private AssinadorDeTransacao() {
@@ -29,9 +20,9 @@ public final class AssinadorDeTransacao {
 	public static byte[] assinar(long nonce, BigInteger maxPrioridade, BigInteger maxTaxa, long gas, byte[] para,
 			BigInteger valor, byte[] dados, BigInteger privada) {
 
-		List<RlpItem> campos = new ArrayList<>(List.of(Rlp.inteiro(CADEIA), Rlp.inteiro(nonce),
-				Rlp.inteiro(maxPrioridade), Rlp.inteiro(maxTaxa), Rlp.inteiro(gas), Rlp.bytes(para), Rlp.inteiro(valor),
-				Rlp.bytes(dados), Rlp.lista(List.of())));
+		List<RlpItem> campos = new ArrayList<>(
+				List.of(Rlp.inteiro(CADEIA), Rlp.inteiro(nonce), Rlp.inteiro(maxPrioridade), Rlp.inteiro(maxTaxa),
+						Rlp.inteiro(gas), Rlp.bytes(para), Rlp.inteiro(valor), Rlp.bytes(dados), Rlp.lista(List.of())));
 
 		byte[] hash = Keccak.hash(comTipo(Rlp.codificar(Rlp.lista(campos))));
 

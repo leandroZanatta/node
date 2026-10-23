@@ -4,14 +4,14 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 
+import br.com.node.exception.PeerException;
+import br.com.node.rlp.Rlp;
+import br.com.node.rlp.RlpItem;
+import br.com.node.rlp.RlpLeitor;
 import br.com.node.util.Ecies;
 import br.com.node.util.Keccak;
 import br.com.node.util.NodeKey;
 import br.com.node.util.Secp256k1;
-import br.com.node.exception.PeerException;
-import br.com.node.rlp.Rlp;
-import br.com.node.rlp.RlpLeitor;
-import br.com.node.rlp.RlpItem;
 
 public final class Aperto {
 
@@ -107,11 +107,10 @@ public final class Aperto {
 
 		return new Segredos(segredoEfemero, nonce, nonceRemoto, true, authEnviado, ack);
 	}
+
 	byte[] nonce() {
 		return nonce.clone();
 	}
-
-	// --- apoio ----------------------------------------------------------------
 
 	private static RlpItem decodificarTolerante(byte[] corpo) {
 

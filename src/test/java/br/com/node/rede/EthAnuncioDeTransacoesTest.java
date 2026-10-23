@@ -9,8 +9,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.rlp.Rlp;
 import br.com.node.vo.NewPooledTransactionHashes;
 
-// O anúncio eth/68 é [types, sizes, hashes]. O tamanho decide se vale pedir o corpo (transferência e
-// approve ficam abaixo de 200 bytes; swap, acima) — então ele tem de sair na ordem dos hashes.
 class EthAnuncioDeTransacoesTest {
 
 	@Test

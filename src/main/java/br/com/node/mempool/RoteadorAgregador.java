@@ -9,25 +9,6 @@ import java.util.Optional;
 
 import br.com.node.vo.SwapPendente;
 
-// Decodifica swaps do roteador agregador multi-hop — seletor 27772d13, proxy d36b6d64 na BSC.
-// Cada transação percorre N rotas (N ≥ 1); cada rota é uma perna num par de tokens via um pool.
-//
-// Layout do calldata (após seletor de 4 bytes):
-//   byte  4..35  = 0x20          → offset ao struct principal (sempre 0x20)
-//   byte 36..67  = srcToken      (0xeee…eee = BNB nativo → convertido a WBNB)
-//   byte 68..99  = dstToken
-//   byte 100..131 = srcAmount
-//   byte 132..163 = minReturn
-//   byte 164..483 = outros campos do struct (flags, recipient, offsets para dois arrays vazios)
-//   byte 484..515 = N (número de rotas)
-//   byte 516..    = offsets de cada rota[i], relativos ao byte 516
-//   — body da rota[i] a partir do byte 516 + offset[i] —
-//     word 0 = pool (endereço, últimos 20 bytes)
-//     word 1 = fromToken
-//     word 2 = toToken
-//     ...
-//
-// Caminhos com pool zero em qualquer rota retornam SwapPendente sem pools (caída no fallback de lookup).
 public final class RoteadorAgregador {
 
 	static final String SELETOR = "27772d13";
@@ -39,13 +20,13 @@ public final class RoteadorAgregador {
 	private static final int W = 32;
 	private static final int SEL = 4;
 
-	// Byte offsets absolutos no calldata:
-	private static final int OFF_SRC_TOKEN  = SEL + 1 * W;       // palavra 1 dos params
-	private static final int OFF_SRC_AMOUNT = SEL + 3 * W;       // palavra 3
-	private static final int OFF_ROUTES_LEN = SEL + 15 * W;      // palavra 15
-	private static final int OFF_ROUTES_BASE = SEL + 16 * W;     // 516 — base dos offsets de rota
+	private static final int OFF_SRC_TOKEN = SEL + 1 * W;
+	private static final int OFF_SRC_AMOUNT = SEL + 3 * W;
+	private static final int OFF_ROUTES_LEN = SEL + 15 * W;
+	private static final int OFF_ROUTES_BASE = SEL + 16 * W;
 
-	private RoteadorAgregador() {}
+	private RoteadorAgregador() {
+	}
 
 	public static Optional<SwapPendente> decodificar(byte[] calldata) {
 
@@ -86,8 +67,8 @@ public final class RoteadorAgregador {
 				return Optional.empty();
 			}
 
-			byte[] pool    = addrAt(calldata, routeStart);           // word[0] da rota
-			byte[] toToken = addrAt(calldata, routeStart + 2 * W);   // word[2] da rota
+			byte[] pool = addrAt(calldata, routeStart);
+			byte[] toToken = addrAt(calldata, routeStart + 2 * W);
 
 			caminho.add(toToken);
 			pools.add(pool);
@@ -99,8 +80,6 @@ public final class RoteadorAgregador {
 		return Optional.of(new SwapPendente(srcAmount, caminho, poolsOk ? pools : List.of()));
 	}
 
-	// Endereço de 20 bytes: últimos 20 bytes da palavra ABI (a palavra é right-aligned para
-	// endereço, i.e. zeros nos 12 bytes superiores, endereço nos 20 inferiores).
 	private static byte[] addrAt(byte[] calldata, int byteOffset) {
 		return Arrays.copyOfRange(calldata, byteOffset + 12, byteOffset + W);
 	}
@@ -111,7 +90,8 @@ public final class RoteadorAgregador {
 
 	private static boolean allZero(byte[] addr) {
 		for (byte b : addr) {
-			if (b != 0) return false;
+			if (b != 0)
+				return false;
 		}
 		return true;
 	}

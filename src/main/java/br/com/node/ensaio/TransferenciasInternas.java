@@ -16,12 +16,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-// QUEM RECEBEU BNB DENTRO de uma transação. A transferência feita por um contrato durante a execução
-// (um `coinbase.transfer`, por exemplo) não aparece na transação de topo nem nos logs: só o trace mostra.
-//
-// Três fontes, na ordem: o trace do próprio RPC (`debug_traceTransaction`, callTracer); se o RPC não tiver
-// trace, `nr_getAssetTransfers` do NodeReal (free tier, requer `NODEREAL_API_URL`); por último, a API de
-// transações internas do BscScan (precisa de `BSCSCAN_API_KEY`). Se as três faltarem, o registro diz isso.
 public final class TransferenciasInternas {
 
 	public record Transferencia(String de, String para, BigInteger valorWei) {
@@ -36,20 +30,15 @@ public final class TransferenciasInternas {
 	public record ResultadoNodeReal(Optional<List<Transferencia>> transferencias, String erro) {
 	}
 
-	// O endereço antigo do BscScan responde 301 (redirecionado). O cliente padrão do Java NÃO segue redirecionamento,
-	// e isso fazia a consulta falhar em silêncio. Por isso: segue redirecionamento, e a URL é configurável
-	// (BSCSCAN_API_URL), para trocar sem recompilar se o provedor mudar de novo.
 	private static final String API_PADRAO = "https://api.etherscan.io/v2/api?chainid=56";
 	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
 			.followRedirects(HttpClient.Redirect.NORMAL).build();
-	private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(TransferenciasInternas.class.getName());
+	private static final java.util.logging.Logger LOG = java.util.logging.Logger
+			.getLogger(TransferenciasInternas.class.getName());
 
 	private TransferenciasInternas() {
 	}
 
-	// Anexa ao registro do vencedor o campo `transferencias_internas` (lista) ou `transferencias_internas_erro`.
-	// Lê `NODEREAL_API_URL` do ambiente para a segunda fonte; `BSCSCAN_API_KEY` para a terceira.
-	// `linha` precisa ter `altura_do_vencedor` para o fallback NodeReal funcionar.
 	public static void anexar(RpcDoEnsaio rpc, String hash, String chaveBscScan, JsonObject linha) {
 
 		ResultadoTrace trace = consultarTraceDetalhado(rpc, hash);
@@ -63,8 +52,8 @@ public final class TransferenciasInternas {
 			return;
 		}
 
-		String nodeRealUrl = java.util.Optional.ofNullable(System.getenv("NODEREAL_API_URL"))
-				.map(String::trim).filter(u -> !u.isBlank()).orElse(null);
+		String nodeRealUrl = java.util.Optional.ofNullable(System.getenv("NODEREAL_API_URL")).map(String::trim)
+				.filter(u -> !u.isBlank()).orElse(null);
 		if (nodeRealUrl != null && linha.has("altura_do_vencedor")) {
 			long altura = linha.get("altura_do_vencedor").getAsLong();
 			ResultadoNodeReal nodeReal = consultarNodeRealDetalhado(hash, altura, nodeRealUrl);
@@ -92,12 +81,14 @@ public final class TransferenciasInternas {
 			return;
 		}
 
-		linha.addProperty("transferencias_internas_erro", "trace RPC: " + trace.erro()
-				+ (nodeRealUrl != null ? "; NodeReal: " + (linha.has("nodereal_erro") ? linha.get("nodereal_erro").getAsString() : "falha") : "")
-				+ "; BscScan: " + bscscan.erro());
+		linha.addProperty("transferencias_internas_erro",
+				"trace RPC: " + trace.erro()
+						+ (nodeRealUrl != null ? "; NodeReal: "
+								+ (linha.has("nodereal_erro") ? linha.get("nodereal_erro").getAsString() : "falha")
+								: "")
+						+ "; BscScan: " + bscscan.erro());
 	}
 
-	// Trace do RPC com callTracer. Devolve vazio se o método não existir ou der erro (não é "sem transferência").
 	public static Optional<List<Transferencia>> consultarTrace(RpcDoEnsaio rpc, String hash) {
 		return consultarTraceDetalhado(rpc, hash).transferencias();
 	}
@@ -115,8 +106,7 @@ public final class TransferenciasInternas {
 
 		List<RpcDoEnsaio.RespostaRpc> respostas = rpc.chamarComFallback("debug_traceTransaction", parametros);
 		if (respostas.isEmpty()) {
-			return new ResultadoTrace(Optional.empty(),
-					"nenhum endpoint de trace configurado");
+			return new ResultadoTrace(Optional.empty(), "nenhum endpoint de trace configurado");
 		}
 
 		List<String> erros = new ArrayList<>();
@@ -145,20 +135,17 @@ public final class TransferenciasInternas {
 				JsonObject erro = corpo.getAsJsonObject("error");
 				String codigo = erro.has("code") ? erro.get("code").getAsString() : "desconhecido";
 				String mensagem = erro.has("message") ? erro.get("message").getAsString() : "sem mensagem";
-				return new ResultadoTrace(Optional.empty(),
-						"JSON-RPC code=" + codigo + ": " + limitar(mensagem, 300));
+				return new ResultadoTrace(Optional.empty(), "JSON-RPC code=" + codigo + ": " + limitar(mensagem, 300));
 			}
 			if (corpo.has("result") && corpo.get("result").isJsonObject()) {
 				return new ResultadoTrace(Optional.of(doTrace(corpo.getAsJsonObject("result"))), null);
 			}
 			return new ResultadoTrace(Optional.empty(), "resposta JSON-RPC sem result de trace nem objeto error");
 		} catch (com.google.gson.JsonParseException | IllegalStateException e) {
-			return new ResultadoTrace(Optional.empty(),
-					"resposta JSON-RPC invalida: " + limitar(e.getMessage(), 300));
+			return new ResultadoTrace(Optional.empty(), "resposta JSON-RPC invalida: " + limitar(e.getMessage(), 300));
 		}
 	}
 
-	// Transações internas pela API do BscScan. Vazio se a chamada falhar.
 	public static Optional<List<Transferencia>> consultarBscScan(String hash, String chave) {
 		return consultarBscScanDetalhado(hash, chave).transferencias();
 	}
@@ -206,9 +193,6 @@ public final class TransferenciasInternas {
 		}
 	}
 
-	// Transferências internas via `nr_getAssetTransfers` (NodeReal, free tier). Filtra por txHash e retorna
-	// apenas as transferências nativas de BNB (category=internal) daquela transação específica.
-	// Requer que o bloco do hash seja conhecido (`alturaDoBloco`) para limitar a busca.
 	public static ResultadoNodeReal consultarNodeRealDetalhado(String hash, long alturaDoBloco, String urlNodeReal) {
 		String blocoHex = "0x" + Long.toHexString(alturaDoBloco);
 		JsonArray categorias = new JsonArray();
@@ -226,11 +210,9 @@ public final class TransferenciasInternas {
 		corpo.addProperty("method", "nr_getAssetTransfers");
 		corpo.add("params", parametros);
 		try {
-			HttpRequest pedido = HttpRequest.newBuilder(URI.create(urlNodeReal))
-					.timeout(Duration.ofSeconds(15))
+			HttpRequest pedido = HttpRequest.newBuilder(URI.create(urlNodeReal)).timeout(Duration.ofSeconds(15))
 					.header("Content-Type", "application/json")
-					.POST(HttpRequest.BodyPublishers.ofString(corpo.toString()))
-					.build();
+					.POST(HttpRequest.BodyPublishers.ofString(corpo.toString())).build();
 			HttpResponse<String> resposta = HTTP.send(pedido, HttpResponse.BodyHandlers.ofString());
 			if (resposta.statusCode() != 200) {
 				return new ResultadoNodeReal(Optional.empty(), "HTTP " + resposta.statusCode());
@@ -253,25 +235,25 @@ public final class TransferenciasInternas {
 			for (JsonElement e : resultado.getAsJsonArray("transfers")) {
 				JsonObject t = e.getAsJsonObject();
 				String txHash = t.has("hash") ? t.get("hash").getAsString().toLowerCase(java.util.Locale.ROOT) : "";
-				if (!hashLower.equals(txHash)) continue;
+				if (!hashLower.equals(txHash))
+					continue;
 				String valorHex = t.has("value") ? t.get("value").getAsString() : null;
-				if (valorHex == null) continue;
+				if (valorHex == null)
+					continue;
 				BigInteger valor = hex(valorHex);
 				if (valor.signum() > 0) {
-					lista.add(new Transferencia(
-							semPrefixo(t.has("from") ? t.get("from").getAsString() : ""),
-							semPrefixo(t.has("to") ? t.get("to").getAsString() : ""),
-							valor));
+					lista.add(new Transferencia(semPrefixo(t.has("from") ? t.get("from").getAsString() : ""),
+							semPrefixo(t.has("to") ? t.get("to").getAsString() : ""), valor));
 				}
 			}
 			return new ResultadoNodeReal(Optional.of(lista), null);
 		} catch (IOException | InterruptedException | RuntimeException e) {
-			if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+			if (e instanceof InterruptedException)
+				Thread.currentThread().interrupt();
 			return new ResultadoNodeReal(Optional.empty(), e.getClass().getSimpleName());
 		}
 	}
 
-	// Função pura: percorre a árvore do callTracer e junta toda chamada com valor positivo.
 	public static List<Transferencia> doTrace(JsonObject chamada) {
 		List<Transferencia> achadas = new ArrayList<>();
 		recolher(chamada, achadas);
@@ -310,7 +292,8 @@ public final class TransferenciasInternas {
 	}
 
 	private static String semPrefixo(String endereco) {
-		return endereco == null ? null : (endereco.startsWith("0x") ? endereco.substring(2) : endereco).toLowerCase(java.util.Locale.ROOT);
+		return endereco == null ? null
+				: (endereco.startsWith("0x") ? endereco.substring(2) : endereco).toLowerCase(java.util.Locale.ROOT);
 	}
 
 	private static String limitar(String texto, int maximo) {

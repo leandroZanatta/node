@@ -17,23 +17,14 @@ import br.com.node.catalogo.Catalogo;
 import br.com.node.vo.Log;
 import br.com.node.vo.SwapPendente;
 
-// Traduce a números determinísticos a pergunta de viabilidade: a decisão cabe na janela do bloco?
-//
-// O `AtrasoTest` mediu na BSC viva a folga que existe entre ANUNCIAR o bloco e nós havelo
-// aplicado: mediana 332 ms (docs/premissas.md). Essa é a janela que a projeção da mempool (P21)
-// tem para calcular o efeito de um swap pendente antes de a fenda fechar — o próprio docs diz:
-// "os 340 ms de folga são o orçamento que a proyeção tem para calcular". Si decodificar +
-// projetar + avaliar estoura essa janela, a execução mais rápida do mundo não salva nada.
-//
-// O que falta para competir (contrato, assinatura, envio) não se prova aqui porque não existe.
-// Se prova a metade que existe: que a decisión cabe holgadamente na janela, a escala real de
-// pools que o AtrasoTest mediu (1902), e que a fronteira do gas decide como decide na corrida.
 class CompetitividadeMempoolTest {
 
 	private static final long JANELA_MS = 340;
 
-	// Generoso de propósito: o código real corre em microsegundos por swap. O limite só caza
-	// uma regresión catastrófica; o número que importa é o que se imprime na corrida.
+	
+	
+	
+	
 	private static final long ORCAMENTO_MS = 2_000;
 
 	private static final byte[] WBNB = hex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c");
@@ -62,7 +53,8 @@ class CompetitividadeMempoolTest {
 	@DisplayName("calldata que não é swapExactTokensForTokens não decodifica: não inventa fenda")
 	void noDecodificaLoQueNãoESwap() {
 
-		// Seletor de `transfer(address,uint256)` — o que mais chega na mempool, sem fenda que projetar.
+		
+		
 		byte[] calldata = new byte[4 + 64];
 		copiar(calldata, 0, hex("a9059cbb"));
 		copiar(calldata, 4, palabra(0));
@@ -70,7 +62,8 @@ class CompetitividadeMempoolTest {
 
 		assertTrue(Roteamento.decodificar(calldata).isEmpty());
 
-		// Calldata truncada: apuntar a um path que não existe deve virar vazio, nunca excepción.
+		
+		
 		byte[] truncada = swapExactTokensParaTokens(500_000, 0, List.of(WBNB, WBNB, WBNB),
 				hex("1111111111111111111111111111111111111111"), 0);
 		byte[] corta = new byte[truncada.length - 8];
@@ -124,14 +117,14 @@ class CompetitividadeMempoolTest {
 		double medianaUs = vezes[quantos / 2] / 1_000.0;
 		double p90Us = vezes[(int) (quantos * 0.9)] / 1_000.0;
 
-		System.out.printf("Competitividade: %d swaps · decodificar+projetar+avaliar: total %d ms · "
-				+ "mediana %.0f µs · p90 %.0f µs · positivas %d · janela medida %d ms%n",
+		System.out.printf(
+				"Competitividade: %d swaps · decodificar+projetar+avaliar: total %d ms · "
+						+ "mediana %.0f µs · p90 %.0f µs · positivas %d · janela medida %d ms%n",
 				quantos, totalMs, medianaUs, p90Us, positivas, JANELA_MS);
 
 		assertTrue(positivas > 0, "no catálogo do teste a projeção tem que dar margem positiva");
-		assertTrue(totalMs < ORCAMENTO_MS,
-				"a decisão estourou o orçamento: " + totalMs + " ms para " + quantos + " swaps (a janela medida é "
-						+ JANELA_MS + " ms)");
+		assertTrue(totalMs < ORCAMENTO_MS, "a decisão estourou o orçamento: " + totalMs + " ms para " + quantos
+				+ " swaps (a janela medida é " + JANELA_MS + " ms)");
 	}
 
 	@Test
@@ -145,8 +138,9 @@ class CompetitividadeMempoolTest {
 
 		SwapPendente swap = new SwapPendente(BigInteger.valueOf(500_000), List.of(usdt, WBNB, busd));
 
-		// A fenda é sempre menor que a entrada (quem decide é a curva); um custo de 100x a
-		// entrada a come inteira, aconteça o que acontecer na curva.
+		
+		
+		
 		MargemDeChegada semCusto = MargemDeChegada.avaliar(swap, catalogo, pool -> Optional.of(2500), BigInteger.ZERO);
 		MargemDeChegada custosa = MargemDeChegada.avaliar(swap, catalogo, pool -> Optional.of(2500),
 				BigInteger.valueOf(500_000).multiply(BigInteger.valueOf(100)));
@@ -155,11 +149,13 @@ class CompetitividadeMempoolTest {
 		assertFalse(custosa.chegaAntes(), "um custo 100x a entrada não pode deixar margem");
 	}
 
-	// --- catálogos ----------------------------------------------------------
+	
 
-	// Escala real: as 1902 pools que o AtrasoTest mediu como conhecidas. O path do teste golpeia
-	// as pools 1000 e 1001, então o barrido de `mapearParaPools` percorre ~mil pools por perna,
-	// como em produção — e a decisão ainda tem que caber na janela.
+	
+	
+	
+	
+	
 	private static Catalogo catalogoEscalaReal() {
 
 		Catalogo catalogo = new Catalogo();
@@ -170,10 +166,10 @@ class CompetitividadeMempoolTest {
 			catalogo.aprenderPar(pool, List.of(token(i), WBNB));
 
 			if (i == 1000) {
-				// Leg 1 entra por token(1000): reserva0 (lado de entrada) pequena, WBNB grande.
+				
 				catalogo.aplicarSync(new Log(pool, List.of(), bytesReservas(1_000, 1_000_000)), 1L);
 			} else if (i == 1001) {
-				// Leg 2 entra por WBNB = token1: reserva1 pequena, token(1001) grande.
+				
 				catalogo.aplicarSync(new Log(pool, List.of(), bytesReservas(1_000_000, 1_000)), 1L);
 			} else {
 				catalogo.aplicarSync(new Log(pool, List.of(), bytesReservas(10_000_000, 10_000_000)), 1L);
@@ -201,10 +197,13 @@ class CompetitividadeMempoolTest {
 		return catalogo;
 	}
 
-	// --- calldata ABI de swapExactTokensForTokens(uint,uint,address[],address,uint) --
-	// seletor 38ed1739 · head de 5 palavras (amountIn, amountOutMin, offset do path, to,
-	// deadline) · cauda: tamanho + endereços. O offset do path é relativo ao início dos
-	// argumentos: 5 palavras = 0xa0.
+	
+	
+	
+	
+	
+	
+	
 	private static byte[] swapExactTokensParaTokens(long entra, long minSai, List<byte[]> caminho, byte[] para,
 			long deadline) {
 

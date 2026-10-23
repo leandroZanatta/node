@@ -2,15 +2,6 @@ package br.com.node.nucleo;
 
 import java.util.Arrays;
 
-// Os dois tokens de uma pool, por ENDEREÇO.
-//
-// Nunca por símbolo: o catálogo do projeto anterior tinha cerca de 180 tokens
-// chamados "USDT", um real e o resto impostor — muitos com endereço terminando em
-// 8888 ou 7777, imposto nulo e zero negociação. Um "USDT" falso pareado contra WBNB
-// real produz arbitragem aparente enorme numa pool de pó, e é assim que se fabrica
-// oportunidade que não existe.
-//
-// token0 é o menor endereço, que é como o par os ordena no construtor.
 public record Par(byte[] token0, byte[] token1) {
 
 	public Par {

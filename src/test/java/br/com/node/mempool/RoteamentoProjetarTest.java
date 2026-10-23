@@ -12,7 +12,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import br.com.node.catalogo.Catalogo;
-import br.com.node.mempool.MargemDeChegada;
 import br.com.node.nucleo.Direcao;
 import br.com.node.nucleo.Passo;
 import br.com.node.nucleo.PoolV2;
@@ -107,8 +106,12 @@ class RoteamentoProjetarTest {
 
 	private static byte[] bytesReservas(long reserva0, long reserva1) {
 		byte[] dados = new byte[64];
-		System.arraycopy(BigInteger.valueOf(reserva0).toByteArray(), 0, dados, 32 - Math.min(32, BigInteger.valueOf(reserva0).toByteArray().length), Math.min(32, BigInteger.valueOf(reserva0).toByteArray().length));
-		System.arraycopy(BigInteger.valueOf(reserva1).toByteArray(), 0, dados, 64 - Math.min(32, BigInteger.valueOf(reserva1).toByteArray().length), Math.min(32, BigInteger.valueOf(reserva1).toByteArray().length));
+		System.arraycopy(BigInteger.valueOf(reserva0).toByteArray(), 0, dados,
+				32 - Math.min(32, BigInteger.valueOf(reserva0).toByteArray().length),
+				Math.min(32, BigInteger.valueOf(reserva0).toByteArray().length));
+		System.arraycopy(BigInteger.valueOf(reserva1).toByteArray(), 0, dados,
+				64 - Math.min(32, BigInteger.valueOf(reserva1).toByteArray().length),
+				Math.min(32, BigInteger.valueOf(reserva1).toByteArray().length));
 		return dados;
 	}
 

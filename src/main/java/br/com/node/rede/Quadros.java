@@ -43,8 +43,6 @@ public final class Quadros {
 		this.aesMac.init(true, new KeyParameter(segredos.mac()));
 	}
 
-	// --- escrita --------------------------------------------------------------
-
 	public synchronized byte[] escrever(byte[] carga) {
 
 		byte[] cabecalho = new byte[CABECALHO];
@@ -82,8 +80,6 @@ public final class Quadros {
 
 		return quadro;
 	}
-
-	// --- leitura --------------------------------------------------------------
 
 	public synchronized byte[] ler(byte[] pedaco) {
 
@@ -167,7 +163,6 @@ public final class Quadros {
 		acumulado.reset();
 		acumulado.write(buffer, quantos, buffer.length - quantos);
 	}
-	// --- MAC ------------------------------------------------------------------
 
 	private byte[] atualizarMac(KeccakDigest digest, byte[] dado) {
 
@@ -187,8 +182,6 @@ public final class Quadros {
 
 		return Arrays.copyOfRange(Segredos.resumo(digest), 0, MAC);
 	}
-
-	// --- apoio ----------------------------------------------------------------
 
 	private static SICBlockCipher fluxo(byte[] chave) {
 

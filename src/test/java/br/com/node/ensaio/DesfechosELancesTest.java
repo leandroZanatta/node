@@ -20,7 +20,6 @@ import org.junit.jupiter.api.io.TempDir;
 import br.com.node.nucleo.Arbitragem;
 import br.com.node.sincronizacao.Cabeca;
 
-// O desfecho de cada envio e a FOLGA até o bloco seguinte, e o lance que aprende com eles — sem rede.
 class DesfechosELancesTest {
 
 	private static final byte[] NOSSO = HexFormat.of().parseHex("65b52a63507fae61382e1bf1e14ffbd2716d0c3e");
@@ -28,10 +27,12 @@ class DesfechosELancesTest {
 	private static final byte[] POOL_A = HexFormat.of().parseHex("aa".repeat(20));
 	private static final byte[] POOL_B = HexFormat.of().parseHex("bb".repeat(20));
 
-	// Fração inicial 30 % (300/1000): valor arbitrário para os testes de aprendizado.
+	
+	
 	private static final int FRACAO = 300;
-	// Lucro de 0,001 BNB em wei (1e15); gasParaOLance de 460k.
-	// Com rival a 1 gwei e 460k gas: rivalPago = 4,6e14 = 46% do lucro → rivalFracao = 460.
+	
+	
+	
 	private static final BigInteger LUCRO_BNB = BigInteger.valueOf(1_000_000_000_000_000L);
 	private static final BigInteger GAS_LANCE = BigInteger.valueOf(460_000);
 
@@ -73,7 +74,7 @@ class DesfechosELancesTest {
 		assertEquals("rival_n1", vistos.get(0).classe());
 		assertEquals(200L, vistos.get(0).folgaMs(), "folga = bloco N+1 (1200) − chegada (1000)");
 		assertEquals(3, vistos.get(0).posicao());
-		// Sem bid do rival: dobra → min(950, 300 × 2) = 600
+		
 		assertEquals(600, lances.fracaoPara("rota"), "no prazo e perdeu sem bid do rival: dobra a fração");
 	}
 
@@ -90,8 +91,9 @@ class DesfechosELancesTest {
 		});
 
 		desfechos.registrar(envio("0x04", 100, 1_000));
-		desfechos.transacao(List.of(), 101); // posição 0: não toca
-		desfechos.transacao(List.of(new br.com.node.vo.Log(POOL_A, List.of(new byte[32]), new byte[0])), 101); // posição 1
+		desfechos.transacao(List.of(), 101); 
+		desfechos.transacao(List.of(new br.com.node.vo.Log(POOL_A, List.of(new byte[32]), new byte[0])), 101); 
+																												
 		desfechos.blocoFechado(108);
 
 		assertEquals("pool_mexida_n1", vistos.get(0).classe());
@@ -105,8 +107,10 @@ class DesfechosELancesTest {
 
 		Lances lances = new Lances(pasta.resolve("lances.json"), FRACAO);
 		Desfechos desfechos = desfechos();
-		// O pagamento que o rival fez ao builder, em BNB (lido on-chain no bloco dele): 4,6e14 wei.
-		// rivalFracao = 4.6e14 × 1000 / 1e18 = 460 (46%); novaFracao = min(950, 460 + 50) = 510.
+		
+		
+		
+		
 		BigInteger pagoPeloRival = new BigInteger("460000000000000");
 		desfechos.aoDecidir(d -> lances.aprender(d, pagoPeloRival));
 
@@ -145,10 +149,8 @@ class DesfechosELancesTest {
 	void perdaLimitadaPorLucroNaoMudaLance() {
 
 		Lances lances = new Lances(pasta.resolve("lances.json"), FRACAO);
-		Desfechos.Envio envio = envioComDetalhes("0x07",
-				Map.of("lance", Map.of("limitado_por_lucro", true)));
-		Desfechos.Desfecho perda = new Desfechos.Desfecho(envio, "rival_n1", 200L, 1, "rival",
-				null, null, null);
+		Desfechos.Envio envio = envioComDetalhes("0x07", Map.of("lance", Map.of("limitado_por_lucro", true)));
+		Desfechos.Desfecho perda = new Desfechos.Desfecho(envio, "rival_n1", 200L, 1, "rival", null, null, null);
 
 		lances.aprender(perda);
 
@@ -184,7 +186,7 @@ class DesfechosELancesTest {
 		desfechos.arbitragem(arbitragem(NOSSO), 101, 1);
 		desfechos.blocoFechado(108);
 
-		// 300 × 9/10 = 270
+		
 		assertEquals(270, lances.fracaoPara("rota"));
 		assertEquals(270, new Lances(arquivo, FRACAO).fracaoPara("rota"), "o lance aprendido se perdeu no reinício");
 	}
@@ -198,23 +200,26 @@ class DesfechosELancesTest {
 	}
 
 	private Desfechos desfechos() {
-		return new Desfechos(NOSSO, altura -> altura == 101 ? Optional.of(new Cabeca.Momentos(1_200, 0, 0)) : Optional.empty(),
+		return new Desfechos(NOSSO,
+				altura -> altura == 101 ? Optional.of(new Cabeca.Momentos(1_200, 0, 0)) : Optional.empty(),
 				pasta.resolve("desfechos.jsonl"));
 	}
 
 	private static Desfechos.Envio envio(String hash, long altura, long chegadaMs) {
-		return new Desfechos.Envio(hash, altura, Set.of(HexFormat.of().formatHex(POOL_A), HexFormat.of().formatHex(POOL_B)),
-				chegadaMs, "cauda", "rota", FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE);
+		return new Desfechos.Envio(hash, altura,
+				Set.of(HexFormat.of().formatHex(POOL_A), HexFormat.of().formatHex(POOL_B)), chegadaMs, "cauda", "rota",
+				FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE);
 	}
 
 	private static Desfechos.Envio envioComDetalhes(String hash, Map<String, Object> detalhes) {
-		return new Desfechos.Envio(hash, 100, Set.of(HexFormat.of().formatHex(POOL_A), HexFormat.of().formatHex(POOL_B)),
-				1_000, "cauda", "rota", FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE, detalhes);
+		return new Desfechos.Envio(hash, 100,
+				Set.of(HexFormat.of().formatHex(POOL_A), HexFormat.of().formatHex(POOL_B)), 1_000, "cauda", "rota",
+				FRACAO, BigInteger.ONE, LUCRO_BNB, GAS_LANCE, detalhes);
 	}
 
 	private static Arbitragem arbitragem(byte[] executor) {
-		return new Arbitragem(List.of(POOL_A, POOL_B), HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"),
-				BigInteger.TEN, 2, 0, executor);
+		return new Arbitragem(List.of(POOL_A, POOL_B),
+				HexFormat.of().parseHex("bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"), BigInteger.TEN, 2, 0, executor);
 	}
 
 }

@@ -31,15 +31,17 @@ public final class HttpApi {
 	private final HttpServer servidor;
 
 	@SuppressWarnings("unchecked")
-	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado,
-			Path arquivoDespachos, Path arquivoPagamentos, Path arquivoVencedores, Path arquivoFendas,
-			Supplier<Map<String, Object>> pools, Quarentena quarentena) throws IOException {
+	public HttpApi(int porta, RelatorioExecucao relatorio, AutopsiaDoMercado mercado, Path arquivoDespachos,
+			Path arquivoPagamentos, Path arquivoVencedores, Path arquivoFendas, Supplier<Map<String, Object>> pools,
+			Quarentena quarentena) throws IOException {
 		servidor = HttpServer.create(new InetSocketAddress(porta), 0);
 		servidor.createContext("/status", troca -> responder(troca, () -> resumo(relatorio)));
 		servidor.createContext("/relatorio", troca -> responder(troca, relatorio::snapshot));
-		servidor.createContext("/mercado", troca -> responder(troca, () -> mercadoFiltrado(mercado, troca.getRequestURI().getQuery())));
+		servidor.createContext("/mercado",
+				troca -> responder(troca, () -> mercadoFiltrado(mercado, troca.getRequestURI().getQuery())));
 		servidor.createContext("/quarentena", troca -> {
-			if ("POST".equals(troca.getRequestMethod()) && "/quarentena/limpar".equals(troca.getRequestURI().getPath())) {
+			if ("POST".equals(troca.getRequestMethod())
+					&& "/quarentena/limpar".equals(troca.getRequestURI().getPath())) {
 				int removidas = quarentena.limparPenas();
 				responder(troca, () -> Map.of("penas_removidas", removidas, "ok", true));
 			} else {
@@ -68,7 +70,8 @@ public final class HttpApi {
 		}));
 		servidor.createContext("/disputa", troca -> responder(troca, () -> {
 			try {
-				return disputa(arquivoDespachos, arquivoPagamentos, arquivoVencedores, troca.getRequestURI().getQuery());
+				return disputa(arquivoDespachos, arquivoPagamentos, arquivoVencedores,
+						troca.getRequestURI().getQuery());
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -125,8 +128,10 @@ public final class HttpApi {
 			for (String par : query.split("&")) {
 				String[] kv = par.split("=", 2);
 				if (kv.length == 2) {
-					if ("n".equals(kv[0])) n = Integer.parseInt(kv[1]);
-					if ("classe".equals(kv[0])) classe = kv[1];
+					if ("n".equals(kv[0]))
+						n = Integer.parseInt(kv[1]);
+					if ("classe".equals(kv[0]))
+						classe = kv[1];
 				}
 			}
 		}
@@ -143,26 +148,25 @@ public final class HttpApi {
 		if (query != null) {
 			for (String par : query.split("&")) {
 				String[] kv = par.split("=", 2);
-				if (kv.length == 2 && "n".equals(kv[0])) n = Integer.parseInt(kv[1]);
+				if (kv.length == 2 && "n".equals(kv[0]))
+					n = Integer.parseInt(kv[1]);
 			}
 		}
-		if (!Files.exists(arquivo)) return Map.of("total", 0, "entradas", List.of());
+		if (!Files.exists(arquivo))
+			return Map.of("total", 0, "entradas", List.of());
 		List<String> linhas = Files.readAllLines(arquivo);
-		List<Map<String, Object>> entradas = linhas.stream()
-				.skip(Math.max(0, linhas.size() - n))
-				.map(l -> (Map<String, Object>) GSON.fromJson(l, Map.class))
-				.toList();
+		List<Map<String, Object>> entradas = linhas.stream().skip(Math.max(0, linhas.size() - n))
+				.map(l -> (Map<String, Object>) GSON.fromJson(l, Map.class)).toList();
 		return Map.of("total", linhas.size(), "entradas", entradas);
 	}
 
-	// A pergunta de cada tentativa: se não levamos, foi por quanto, e quem levou pagou quanto. Cruza o despacho
-	// com os pagamentos medidos no bloco do vencedor (ver `Disputa`).
 	private static Object disputa(Path despachos, Path pagamentos, Path vencedores, String query) throws IOException {
 		int n = 200;
 		if (query != null) {
 			for (String par : query.split("&")) {
 				String[] kv = par.split("=", 2);
-				if (kv.length == 2 && "n".equals(kv[0])) n = Integer.parseInt(kv[1]);
+				if (kv.length == 2 && "n".equals(kv[0]))
+					n = Integer.parseInt(kv[1]);
 			}
 		}
 		if (!Files.exists(despachos)) {
@@ -172,18 +176,19 @@ public final class HttpApi {
 		List<JsonObject> tentativas = linhas.stream().skip(Math.max(0, linhas.size() - n))
 				.map(l -> JsonParser.parseString(l).getAsJsonObject()).toList();
 
-		// Só os blocos que interessam: o do vencedor de cada tentativa (N+1, ou N+2 para `rival_n2`).
 		java.util.Set<Long> alturas = new java.util.HashSet<>();
 		for (JsonObject t : tentativas) {
 			long altura = t.getAsJsonObject("envio").get("altura").getAsBigDecimal().longValue();
 			boolean n2 = t.getAsJsonObject("desfecho").get("classe").getAsString().endsWith("n2");
 			alturas.add(altura + 1);
-			if (n2) alturas.add(altura + 2);
+			if (n2)
+				alturas.add(altura + 2);
 		}
 		Map<Long, List<JsonObject>> pagamentosPorAltura = new java.util.HashMap<>();
 		if (Files.exists(pagamentos)) {
 			for (String linha : Files.readAllLines(pagamentos)) {
-				if (linha.isBlank()) continue;
+				if (linha.isBlank())
+					continue;
 				JsonObject p = JsonParser.parseString(linha).getAsJsonObject();
 				long altura = p.get("altura").getAsLong();
 				if (alturas.contains(altura)) {
@@ -192,11 +197,11 @@ public final class HttpApi {
 			}
 		}
 
-		// Quem ganhou, por hash da nossa tentativa (`vencedores.jsonl`, ver `VencedorDoLeilao`).
 		Map<String, JsonObject> vencedorPorHash = new java.util.HashMap<>();
 		if (Files.exists(vencedores)) {
 			for (String linha : Files.readAllLines(vencedores)) {
-				if (linha.isBlank()) continue;
+				if (linha.isBlank())
+					continue;
 				JsonObject v = JsonParser.parseString(linha).getAsJsonObject();
 				vencedorPorHash.put(v.get("nosso_hash").getAsString(), v);
 			}
@@ -207,7 +212,8 @@ public final class HttpApi {
 			long altura = t.getAsJsonObject("envio").get("altura").getAsBigDecimal().longValue();
 			boolean n2 = t.getAsJsonObject("desfecho").get("classe").getAsString().endsWith("n2");
 			List<JsonObject> doVencedor = new ArrayList<>(pagamentosPorAltura.getOrDefault(altura + 1, List.of()));
-			if (n2) doVencedor.addAll(pagamentosPorAltura.getOrDefault(altura + 2, List.of()));
+			if (n2)
+				doVencedor.addAll(pagamentosPorAltura.getOrDefault(altura + 2, List.of()));
 			JsonObject vencedor = vencedorPorHash.get(t.get("id").getAsString());
 			analises.add(Disputa.analisar(t, doVencedor, vencedor));
 		}
@@ -220,21 +226,21 @@ public final class HttpApi {
 		return r;
 	}
 
-	// Fendas grandes (0,001 BNB ou mais): a abertura foi vista pendente antes do bloco? Resume por etapa.
 	private static Object fendas(Path arquivo, String query) throws IOException {
 		int n = 500;
 		if (query != null) {
 			for (String par : query.split("&")) {
 				String[] kv = par.split("=", 2);
-				if (kv.length == 2 && "n".equals(kv[0])) n = Integer.parseInt(kv[1]);
+				if (kv.length == 2 && "n".equals(kv[0]))
+					n = Integer.parseInt(kv[1]);
 			}
 		}
 		if (!Files.exists(arquivo)) {
 			return Map.of("total", 0, "por_etapa", Map.of(), "entradas", List.of());
 		}
 		List<String> linhas = Files.readAllLines(arquivo);
-		List<JsonObject> entradas = linhas.stream().filter(l -> !l.isBlank())
-				.skip(Math.max(0, linhas.size() - n)).map(l -> JsonParser.parseString(l).getAsJsonObject()).toList();
+		List<JsonObject> entradas = linhas.stream().filter(l -> !l.isBlank()).skip(Math.max(0, linhas.size() - n))
+				.map(l -> JsonParser.parseString(l).getAsJsonObject()).toList();
 		Map<String, Long> porEtapa = new java.util.TreeMap<>();
 		for (JsonObject e : entradas) {
 			porEtapa.merge(e.get("etapa_abertura").getAsString(), 1L, Long::sum);

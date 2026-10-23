@@ -14,23 +14,6 @@ import org.junit.jupiter.api.Test;
 import br.com.node.nucleo.ReservasV2;
 import br.com.node.vo.Log;
 
-// A reserva V2 também DUVIDA: o par guarda cada reserva num `uint112`, logo log com valor acima disso
-// não é estado de par — é contrato alheio emitindo o topic0 do `Sync` com payload inventado (log é
-// dado NÃO-AUTENTICADO).
-//
-// MEDIDO: numa corrida de 9 h os 7 despachos morreram TODOS em `Pancake: OVERFLOW`, e a varredura dos
-// `Sync` reais da BSC não achou reserva acima de 7,1e26 (0,00001% do teto). Sem esta recusa, o payload
-// inventado virava reserva, o otimizador dimensionava a entrada sobre ele e a cadeia estourava o par.
-//
-// O ZERO é o OUTRO lado da mesma dúvida, e ele ENTRA. Recusá-lo ("zero é pool sem lastro") quebrava
-// três testes de rede de uma vez — `ConferenciaNaCadeiaTest`, `CursorTest` e `TaxaSobSuspeitaTest` —
-// porque quando a liquidez é retirada o par emite `Sync(0,0)`, que é o fato mais forte que existe
-// sobre aquela pool. Recusá-lo deixa o catálogo com a reserva velha, a pool sem `conhece(pool)` e o
-// grafo vendo fenda onde não há pool. Quem recusa par sem lastro é a curva (`PoolV2.avaliar` lança
-// "Pool sem reserva não cota", `ligarV2` não liga), no lugar certo.
-//
-// A guarda de TAMANHO é o que sobra disso tudo: `palavra` devolve ZERO para a palavra AUSENTE, então
-// sem ela um `Sync` truncado entraria como `(0,0)` e APAGARIA a reserva boa da pool.
 class CatalogoTest {
 
 	private static final byte[] POOL = HexFormat.of().parseHex("11".repeat(20));
@@ -72,8 +55,9 @@ class CatalogoTest {
 
 		assertTrue(catalogo.aplicarSync(sync(BigInteger.ZERO, BigInteger.ZERO), 1L).isEmpty());
 
-		// O FATO é o zero, não o último valor não-nulo: guardar o valor velho era ver fenda em pool
-		// que não existe mais. Quem recusa par sem lastro é a curva, no lugar certo.
+		
+		
+		
 		assertEquals(BigInteger.ZERO, catalogo.reservas(POOL).orElseThrow().reserva0());
 		assertEquals(0, catalogo.poolsDescartadas(), "zero não é log inventado — não se descarta");
 	}
@@ -106,7 +90,7 @@ class CatalogoTest {
 		assertEquals(1, catalogo.poolsDescartadas());
 	}
 
-	// `Sync(uint112,uint112)`: duas palavras de 32 bytes.
+	
 	private static Log sync(BigInteger r0, BigInteger r1) {
 
 		byte[] dados = new byte[64];

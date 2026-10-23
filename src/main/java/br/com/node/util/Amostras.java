@@ -7,8 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// As últimas N medidas de um tempo, para o relatório dar mediana, p90 e máximo em vez de uma média que
-// esconde a cauda. Janela deslizante: o que interessa é o tempo AGORA, não o do começo da corrida.
 public final class Amostras {
 
 	private final int janela;

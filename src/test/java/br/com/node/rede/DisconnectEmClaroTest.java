@@ -17,18 +17,6 @@ import br.com.node.vo.Disconnect;
 import br.com.node.vo.Hello;
 import br.com.node.vo.MensagemRlpx;
 
-// O "defeito do Snappy" que derrubava aberturas, com as cargas que a rede mandou.
-//
-// Medido na lotação: "Snappy produziu 0 bytes, anunciou 449", "anunciou 705" e "anunciou 1473".
-// Os três números são o varint que o descompressor lê de um Disconnect EM CLARO — o par recusa
-// logo depois do aperto e escreve o motivo antes de ligar a compressão do lado dele:
-//
-//   01 c1 03   →  varint 449   →  Disconnect(peer inútil)
-//   01 c1 05   →  varint 705   →  Disconnect(já conectado)
-//   01 c1 0b   →  varint 1473  →  Disconnect(timeout de leitura)
-//
-// O teste prova as duas metades: que ESSES bytes produzem exatamente as mensagens de erro que
-// foram medidas, e que agora eles viram o motivo da queda em vez de apagá-lo.
 class DisconnectEmClaroTest {
 
 	private static final Map<Integer, Integer> ANUNCIADO_POR_MOTIVO = Map.of(0x03, 449, 0x05, 705, 0x0b, 1473);
@@ -52,8 +40,10 @@ class DisconnectEmClaroTest {
 		});
 	}
 
-	// A tolerância é SÓ do Disconnect. Qualquer outra mensagem em claro depois do aperto continua
-	// sendo quadro que não sabemos ler — aceitá-la seria ler lixo como se fosse protocolo.
+	
+	
+	
+	
 	@Test
 	@DisplayName("outra mensagem em claro depois dos dois Hello continua recusada")
 	void outraMensagemEmClaroContinuaRecusada() {
@@ -61,10 +51,12 @@ class DisconnectEmClaroTest {
 		PeerException recusa = assertThrows(PeerException.class,
 				() -> conversaAberta().ler(new byte[] { 0x02, (byte) 0xc1, 0x03 }));
 
-		assertTrue(recusa.getMessage().startsWith("Snappy"), "a recusa deixou de ser do Snappy: " + recusa.getMessage());
+		assertTrue(recusa.getMessage().startsWith("Snappy"),
+				"a recusa deixou de ser do Snappy: " + recusa.getMessage());
 	}
 
-	// Uma conversa com os dois Hello trocados: é só a partir daí que a compressão vale.
+	
+	
 	private static Rlpx conversaAberta() {
 
 		Hello hello = new Hello(5, "teste", List.of(new Capacidade(Capacidade.ETH, 68)), 30303, new byte[64]);
