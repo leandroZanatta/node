@@ -44,3 +44,6 @@ perfil.jfr
 # Segredos de operação: senha do servidor 155 e endpoint com chave do RPC de logs.
 serverpass
 rpclogs
+
+# logs de execucao do node (runtime, nao versionar)
+logs/
