@@ -320,6 +320,8 @@ public final class Disparo implements Closeable {
 					bundle48Ref[0] = resposta.bundle();
 				}
 				if (!resposta.aceito()) {
+					LOG.info(() -> "disparo: relay " + nome + " recusou (" + String.valueOf(resposta.motivo())
+							+ ") · altura " + achado.altura() + " · rota " + rotaDoLance);
 					metricas.registrarRecusaDoRelay(nome, resposta.motivo());
 					if (VereditorDoContrato.naoSeMove(resposta.motivo())) {
 						vereditor.suspeitarDaRota(rota, resposta.motivo());
@@ -637,8 +639,13 @@ public final class Disparo implements Closeable {
 			tx.put("indice", i);
 			tx.put("papel", i < papeis.size() ? papeis.get(i) : "desconhecido");
 			tx.put("hash", hashes.get(i));
-			tx.put("nonce", "arbitragem_operador".equals(tx.get("papel")) ? nonceOperador
-					: "pagamento_builder".equals(tx.get("papel")) ? nonceOperador + 1 : null);
+			Long nonce = null;
+			if ("arbitragem_operador".equals(tx.get("papel"))) {
+				nonce = nonceOperador;
+			} else if ("pagamento_builder".equals(tx.get("papel"))) {
+				nonce = nonceOperador + 1;
+			}
+			tx.put("nonce", nonce);
 			tx.put("indicada_como_falha_pelo_relay", indiceFalha != null && indiceFalha == i);
 			resultado.add(tx);
 		}
