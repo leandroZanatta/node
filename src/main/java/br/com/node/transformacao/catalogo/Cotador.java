@@ -148,7 +148,7 @@ public final class Cotador {
 
 	private Optional<Travessia> travessia(Perna perna, Map<String, Pool> overlay) {
 
-		if (!quarentena.livre(perna.pool())) {
+		if (!quarentena.livre(perna.pool()) || !quarentena.livre(Quarentena.chaveDoPar(perna.pool(), perna.sai()))) {
 			return Optional.empty();
 		}
 

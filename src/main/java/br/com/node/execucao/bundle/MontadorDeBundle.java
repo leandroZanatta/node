@@ -60,6 +60,10 @@ public final class MontadorDeBundle {
 		return endereco;
 	}
 
+	public String contrato() {
+		return contrato;
+	}
+
 	public long nonce() {
 		return nonce;
 	}

@@ -322,6 +322,9 @@ public final class Disparo implements Closeable {
 				if (!resposta.aceito()) {
 					LOG.info(() -> "disparo: relay " + nome + " recusou (" + String.valueOf(resposta.motivo())
 							+ ") · altura " + achado.altura() + " · rota " + rotaDoLance);
+					if (resposta.motivo() != null && resposta.motivo().contains("TF")) {
+						condenarParesQueNaoTransferem(achado);
+					}
 					metricas.registrarRecusaDoRelay(nome, resposta.motivo());
 					if (VereditorDoContrato.naoSeMove(resposta.motivo())) {
 						vereditor.suspeitarDaRota(rota, resposta.motivo());
@@ -599,6 +602,39 @@ public final class Disparo implements Closeable {
 		metricas.etapa(caminho + ".4_decisao_ate_relay", relayMs);
 		metricas.etapa(caminho + ".5_total_bloco_ate_relay", total);
 		return linha;
+	}
+
+	/**
+	 * Quando o relay recusa com TF, testa a transferência de cada perna (pool
+	 * entrega o token de saída ao executor, 1 wei) e condena só o par pool/token
+	 * que reverte. Pool e token continuam válidos para as outras rotas.
+	 */
+	private void condenarParesQueNaoTransferem(Achado achado) {
+		String executor = montador.contrato();
+		String dados = "a9059cbb" + "0".repeat(24) + executor + "0".repeat(63) + "1";
+		for (var perna : achado.ciclo().pernas()) {
+			byte[] chave = Quarentena.chaveDoPar(perna.pool(), perna.sai());
+			if (!quarentena.livre(chave)) {
+				continue;
+			}
+			String pool = HexFormat.of().formatHex(perna.pool());
+			String token = HexFormat.of().formatHex(perna.sai());
+			try {
+				BigInteger saldo = rpc.saldoErc20(token, pool);
+				if (saldo == null || saldo.signum() <= 0) {
+					continue;
+				}
+				RpcDoEnsaio.Veredicto veredicto = rpc.veredito(pool, token, dados);
+				if ("ok".equals(veredicto.seletor()) || "sem_resposta".equals(veredicto.seletor())) {
+					continue;
+				}
+				String motivo = "transferência de 0x" + token + " da pool 0x" + pool + " reverte (" + veredicto.seletor() + ")";
+				quarentena.condenar(chave, VereditorDeRelay.PENA_DE_PROIBICAO, motivo);
+				LOG.warning(() -> "disparo: par em quarentena — " + motivo);
+			} catch (RuntimeException e) {
+				Falhas.anotar("sonda de transferência", e);
+			}
+		}
 	}
 
 	private static Map<String, Object> detalheBuilder(RelayPrivado.Resposta resposta, long nonceOperador, boolean paga,

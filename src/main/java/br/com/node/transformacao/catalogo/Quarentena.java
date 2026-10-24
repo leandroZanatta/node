@@ -21,6 +21,7 @@ import com.google.gson.JsonParser;
 
 import br.com.node.transformacao.nucleo.Ciclo;
 import br.com.node.transformacao.nucleo.Perna;
+import br.com.node.util.Keccak;
 
 public final class Quarentena {
 
@@ -116,6 +117,11 @@ public final class Quarentena {
 		if (rotas.remove(chave) != null) {
 			salvar();
 		}
+	}
+
+	/** Chave de um par pool/token: a pool pode seguir boa para outros tokens. */
+	public static byte[] chaveDoPar(byte[] pool, byte[] token) {
+		return Keccak.hash(pool, token);
 	}
 
 	public static String chaveRota(Ciclo ciclo) {
