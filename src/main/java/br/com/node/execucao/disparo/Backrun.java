@@ -135,7 +135,13 @@ public final class Backrun implements Closeable {
 		despachados.incrementAndGet();
 		LOG.info(() -> "backrun: despacho lucro " + escolhido.oportunidade().lucro() + " wei, "
 				+ escolhido.ciclo().pernas().size() + " pernas" + (cruaPendente == null ? " (cauda)" : " (n+1)"));
-		envioN1.execute(() -> disparo.disparar(escolhido, cruaPendente));
+		envioN1.execute(() -> {
+			try {
+				disparo.disparar(escolhido, cruaPendente);
+			} catch (RuntimeException e) {
+				br.com.node.util.Falhas.anotar("disparo", e);
+			}
+		});
 	}
 
 	private void anotarRecusa(Achado fenda, BigInteger gas, BigInteger lucro, BigInteger piso) {
