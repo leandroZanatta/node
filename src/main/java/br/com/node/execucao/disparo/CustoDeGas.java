@@ -39,6 +39,11 @@ public final class CustoDeGas {
 			.valueOf(java.util.Optional.ofNullable(System.getenv("TAXA_FLASH_BPS")).map(String::trim)
 					.filter(v -> v.matches("\\d{1,5}")).map(Long::parseLong).orElse(0L));
 
+	/** Gorjeta por gás somada ao eth_gasPrice medido, em wei. Padrão zero. */
+	private static final BigInteger GORJETA_INICIAL = new BigInteger(
+			java.util.Optional.ofNullable(System.getenv("GORJETA_WEI")).map(String::trim)
+					.filter(v -> v.matches("\\d{1,30}")).orElse("0"));
+
 	private volatile BigInteger usdtPorBnb;
 
 	private volatile BigInteger uPorBnb;
@@ -79,7 +84,7 @@ public final class CustoDeGas {
 
 	private volatile BigInteger mercado;
 
-	private volatile BigInteger gorjeta = BigInteger.ZERO;
+	private volatile BigInteger gorjeta = GORJETA_INICIAL;
 
 	public CustoDeGas(RpcDoEnsaio rpc, Catalogo catalogo) {
 		this.rpc = rpc;
